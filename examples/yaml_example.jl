@@ -1,8 +1,7 @@
+# import YAML
 import DataRegistryUtils
 
 ##
-TEST_FILE = "/home/martin/AtomProjects/DataRegistryUtils.jl/examples/yaml_example.jl"
+TEST_FILE = "/home/martin/AtomProjects/DataRegistryUtils.jl/examples/data_config.yaml"
 DATA_OUT = "/home/martin/AtomProjects/DataRegistryUtils.jl/out/"
-d = YAML.load_file(TEST_FILE)
-println(d)
-DataRegistryUtils.proc_yaml(d, DATA_OUT)
+DataRegistryUtils.process_yaml_file(TEST_FILE, DATA_OUT)
