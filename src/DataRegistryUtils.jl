@@ -62,6 +62,7 @@ end
 
 ## download file
 function download_file(storage_info, fp)
+    isdir(dirname(fp)) || mkpath(dirname(fp))
     if storage_info.rt_tp == 1          # HTTP
         url = string(storage_info.s_rt, storage_info.s_fp)
         HTTP.download(url, fp)
@@ -83,8 +84,9 @@ end
 
 ## hash check and download
 function check_file(storage_info, out_dir)
-    isdir(out_dir) || mkpath(out_dir)   # check dir
-    fp = string(out_dir, replace(storage_info.s_fp, "/" => "_"))
+    # isdir(out_dir) || mkpath(out_dir)   # check dir
+    # fp = string(out_dir, replace(storage_info.s_fp, "/" => "_"))
+    fp = string(out_dir, storage_info.s_fp)
     if isfile(fp)   # exists - checksum
         ff = open(fp) do f
             fh = bytes2hex(SHA.sha1(f))
