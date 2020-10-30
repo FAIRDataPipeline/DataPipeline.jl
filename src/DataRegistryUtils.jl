@@ -6,10 +6,15 @@ import JSON
 import FTPClient
 import SHA
 
+### YAML file processing ###
+
 API_ROOT = "https://data.scrc.uk/api/"
 NS_ROOT = string(API_ROOT, "namespace/")
 # SCRC_NS_CD = 2
 DATA_OUT = "./out/"
+
+## file handling:
+include("data_prod_proc.jl")
 
 ## get namespace id (or use default)
 function get_ns_cd(ns_name)
@@ -20,7 +25,7 @@ function get_ns_cd(ns_name)
     ns_cd = replace(replace(ns_url, NS_ROOT => ""), "/" => "")
     return parse(Int, ns_cd)
 end
-
+# - as above
 function get_ns_cd(dpd, df_cd)
     try
         return get_ns_cd(dpd["use"]["namespace"])
@@ -62,11 +67,11 @@ end
 
 ## download file
 function download_file(storage_info, fp)
-    isdir(dirname(fp)) || mkpath(dirname(fp))
-    if storage_info.rt_tp == 1          # HTTP
+    isdir(dirname(fp)) || mkpath(dirname(fp))   # check dir
+    if storage_info.rt_tp == 1                  # HTTP
         url = string(storage_info.s_rt, storage_info.s_fp)
         HTTP.download(url, fp)
-    elseif storage_info.rt_tp == 2      # FTP
+    elseif storage_info.rt_tp == 2              # FTP
         ftp = FTPClient.FTP(storage_info.s_rt)
         download(ftp, storage_info.s_fp, fp)
         close(ftp)
@@ -74,7 +79,7 @@ function download_file(storage_info, fp)
         println("WARNING: unknown storage root type - couldn't download.")
         return false
     end
-    ff = open(fp) do f                  # hash check
+    ff = open(fp) do f                          # hash check
         fh = bytes2hex(SHA.sha1(f))
         fh == storage_info.s_hs || println("WARNING - HASH DISCREPANCY DETECTED:\n server file := ", storage_info.s_fp, "\n hash: ", storage_info.s_hs, "\n downloaded: ", fp, "\n hash: ", fh)
         return (fh == storage_info.s_hs)
@@ -83,9 +88,8 @@ function download_file(storage_info, fp)
 end
 
 ## hash check and download
+# - returns file check and filepath
 function check_file(storage_info, out_dir)
-    # isdir(out_dir) || mkpath(out_dir)   # check dir
-    # fp = string(out_dir, replace(storage_info.s_fp, "/" => "_"))
     fp = string(out_dir, storage_info.s_fp)
     if isfile(fp)   # exists - checksum
         ff = open(fp) do f
@@ -93,9 +97,9 @@ function check_file(storage_info, out_dir)
             fh == storage_info.s_hs || println(" - downloading ", storage_info.s_fp, ", please wait...")
             return (fh == storage_info.s_hs)
         end
-        ff && (return true)
+        ff && (return (true, fp))
     end
-    return download_file(storage_info, fp)
+    return (download_file(storage_info, fp), fp)
 end
 
 ## choose most recent index
@@ -108,44 +112,68 @@ function get_most_recent_index(resp)
     return findmax(v)[2]
 end
 
-## download data
-function download_dp(dp, ns_cd, out_dir, verbose)
+## download data (if out of date)
+function refresh_dp(dp, ns_cd, out_dir, verbose)
     url = string(API_ROOT, "data_product/?name=", dp, "&namespace=", ns_cd)
     r = HTTP.request("GET", url)
     resp = JSON.parse(String(r.body))
     if resp["count"] == 0   # nothing found
         println("WARNING: no results found for ", url)
-        return 1
+        return (1, "na")
     else                    # get storage location of most recent dp
         idx = get_most_recent_index(resp)
         s = get_storage_loc(resp["results"][idx]["object"])
         chk = check_file(s, out_dir)    # [download and] check
         verbose && println(" - ", s.s_fp, " hash check := ", chk)
-        return chk ? 0 : 1
+        return (chk[1] ? 0 : 1, chk[2])
     end
 end
 
 ## process yaml
 # - downloads data
-function process_yaml_file(d, out_dir = DATA_OUT, verbose = false)
-    println("processing ", d)
+# - returns tuple of arrays: data product names and filepaths
+function process_yaml_file(d::String, out_dir::String, verbose::Bool)
+    println("processing config file: ", d)
     data = YAML.load_file(d)
     rd = data["read"]
     df_ns_cd = get_ns_cd(data["namespace"])
     err_cnt = 0
+    fps = String[]
+    dpnms = String[]
     for dp in keys(rd)
         dpd = rd[dp]
-        err_cnt += download_dp(dpd["where"]["data_product"], get_ns_cd(dpd, df_ns_cd), out_dir, verbose)
+        dpn = dpd["where"]["data_product"]
+        verbose && println(" - data product: ", dpn)
+        res = refresh_dp(dpn, get_ns_cd(dpd, df_ns_cd), out_dir, verbose)
+        err_cnt += res[1]
+        push!(dpnms, dpn)
+        push!(fps, res[2])
     end
-    println("finished", err_cnt == 0 ? "." : ", but issues were detected.")
-
+    println(" - data refreshed", err_cnt == 0 ? "." : ", but issues were detected.")
+    return (dpnms, fps)
 end
 
-export process_yaml_file
+## public function
+"""
+    fetch_data_per_yaml(yaml_filepath, out_dir = "./out/", verbose = false)
 
-## ph's for public functions
-# function read_estimate(args)
-#     body
-# end
+Refresh and load data from the SCRC data registry. Checks the file hash for each data product and downloads anew for any that are determined to be out-of-date.
+
+**Parameters**
+- `yaml_filepath`   -- the location of a .yaml file.
+- `out_dir`         -- the local system directory where data will be stored.
+- `verbose`         -- set to `true` to show extra output in the console.
+"""
+function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT, verbose::Bool = false)
+    dp_fps = process_yaml_file(yaml_filepath, out_dir, verbose)
+    output = Dict()
+    for i in eachindex(dp_fps[1])
+        dp = read_data_product(dp_fps[2][i], verbose)
+        output[dp_fps[1][i]] = dp
+    end
+    return output
+end
+
+export fetch_data_per_yaml
 
 end # module
