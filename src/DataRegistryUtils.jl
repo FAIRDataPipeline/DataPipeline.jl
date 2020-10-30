@@ -134,6 +134,7 @@ end
 # - returns tuple of arrays: data product names and filepaths
 function process_yaml_file(d::String, out_dir::String, verbose::Bool)
     println("processing config file: ", d)
+    verbose || println(" - hint: use the 'verbose' option to see more stuff")
     data = YAML.load_file(d)
     rd = data["read"]
     df_ns_cd = get_ns_cd(data["namespace"])

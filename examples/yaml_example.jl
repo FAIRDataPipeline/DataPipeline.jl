@@ -25,7 +25,4 @@ for i in eachindex(data_product_names)
     println(" - components: ", collect(keys(data[data_product_names[i]])))
 end
 # - hint: you can use the same approach to loop through any Dict()
-#           e.g. individual components
-
-# TO DO
-# - readme
+#           e.g. individual components of a data product
