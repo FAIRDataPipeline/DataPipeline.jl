@@ -14,6 +14,11 @@ pkg> add https://github.com/mjb3/DataRegistryUtils.jl
 
 It is recommended to use a .yaml configuration file. An example .yaml is given in the `examples` folder.
 
+```
+julia> using DataRegistryUtils
+julia> ?fetch_data_per_yaml
+```
+
 ### Example: refesh data
 
 ```
