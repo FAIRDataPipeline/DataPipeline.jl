@@ -27,13 +27,14 @@ julia> DATA_OUT = "/home/martin/AtomProjects/DataRegistryUtils.jl/out/"
 julia> data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
 ```
 
-The results referenced by the `data` variable are a `Dict` of data products, indexed by name. They can be accessed thusly:
+The results referenced by the `data` variable are a `Dict` of data products, indexed by data product name, component name, and so on. They can be accessed thusly:
 
 ### Example: access data product by name
 
 ```
 julia> data_product = data["human/infection/SARS-CoV-2/symptom-delay"]
 julia> component = data_product["symptom-delay"]
+julia> component_type = component["type"]
 julia> distribution_name = component["distribution"]
 ```
 
