@@ -158,7 +158,7 @@ end
 """
     fetch_data_per_yaml(yaml_filepath, out_dir = "./out/", verbose = false)
 
-Refresh and load data from the SCRC data registry. Checks the file hash for each data product and downloads anew for any that are determined to be out-of-date.
+Refresh and load data products from the SCRC data registry. Checks the file hash for each data product and downloads anew any that are determined to be out-of-date.
 
 **Parameters**
 - `yaml_filepath`   -- the location of a .yaml file.

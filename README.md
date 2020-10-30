@@ -12,7 +12,7 @@ pkg> add https://github.com/mjb3/DataRegistryUtils.jl
 
 ## Usage
 
-It is recommended to use a .yaml configuration file. An example .yaml is given in the `examples` folder.
+It is recommended to use a .yaml configuration file. An example .yaml is given in the `examples` folder. Refer to https://data.scrc.uk/ for other data products available in the registry.
 
 ```
 julia> using DataRegistryUtils
