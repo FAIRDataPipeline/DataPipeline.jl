@@ -10,10 +10,9 @@ import SHA
 
 API_ROOT = "https://data.scrc.uk/api/"
 NS_ROOT = string(API_ROOT, "namespace/")
-# SCRC_NS_CD = 2
 DATA_OUT = "./out/"
 
-## file handling:
+## dp file handling:
 include("data_prod_proc.jl")
 
 ## get namespace id (or use default)
@@ -66,7 +65,7 @@ function get_storage_loc(obj_url)
 end
 
 ## download file
-function download_file(storage_info, fp)
+function download_file(storage_info, fp::String, fail_on_hash_mismatch::Bool)
     isdir(dirname(fp)) || mkpath(dirname(fp))   # check dir
     if storage_info.rt_tp == 1                  # HTTP
         url = string(storage_info.s_rt, storage_info.s_fp)
@@ -81,7 +80,10 @@ function download_file(storage_info, fp)
     end
     ff = open(fp) do f                          # hash check
         fh = bytes2hex(SHA.sha1(f))
-        fh == storage_info.s_hs || println("WARNING - HASH DISCREPANCY DETECTED:\n server file := ", storage_info.s_fp, "\n hash: ", storage_info.s_hs, "\n downloaded: ", fp, "\n hash: ", fh)
+        if fh != storage_info.s_hs
+            println("WARNING - HASH DISCREPANCY DETECTED:\n server file := ", storage_info.s_fp, "\n hash: ", storage_info.s_hs, "\n downloaded: ", fp, "\n hash: ", fh)
+            fail_on_hash_mismatch && throw("Hash error. Hint: set 'fail_on_hash_mismatch = false' to ignore this error.")
+        end
         return (fh == storage_info.s_hs)
     end
     return ff
@@ -89,7 +91,7 @@ end
 
 ## hash check and download
 # - returns file check and filepath
-function check_file(storage_info, out_dir)
+function check_file(storage_info, out_dir, fail_on_hash_mismatch::Bool)
     fp = string(out_dir, storage_info.s_fp)
     if isfile(fp)   # exists - checksum
         ff = open(fp) do f
@@ -99,7 +101,7 @@ function check_file(storage_info, out_dir)
         end
         ff && (return (true, fp))
     end
-    return (download_file(storage_info, fp), fp)
+    return (download_file(storage_info, fp), fp, fail_on_hash_mismatch)
 end
 
 ## choose most recent index
@@ -113,7 +115,7 @@ function get_most_recent_index(resp)
 end
 
 ## download data (if out of date)
-function refresh_dp(dp, ns_cd, out_dir, verbose)
+function refresh_dp(dp, ns_cd, out_dir::String, verbose::Bool, fail_on_hash_mismatch::Bool)
     url = string(API_ROOT, "data_product/?name=", dp, "&namespace=", ns_cd)
     r = HTTP.request("GET", url)
     resp = JSON.parse(String(r.body))
@@ -123,7 +125,7 @@ function refresh_dp(dp, ns_cd, out_dir, verbose)
     else                    # get storage location of most recent dp
         idx = get_most_recent_index(resp)
         s = get_storage_loc(resp["results"][idx]["object"])
-        chk = check_file(s, out_dir)    # [download and] check
+        chk = check_file(s, out_dir, fail_on_hash_mismatch) # download and check
         verbose && println(" - ", s.s_fp, " hash check := ", chk)
         return (chk[1] ? 0 : 1, chk[2])
     end
@@ -138,6 +140,7 @@ function process_yaml_file(d::String, out_dir::String, verbose::Bool)
     data = YAML.load_file(d)
     rd = data["read"]
     df_ns_cd = get_ns_cd(data["namespace"])
+    fail_on_hash_mismatch = data["fail_on_hash_mismatch"]
     err_cnt = 0
     fps = String[]
     dpnms = String[]
@@ -145,7 +148,7 @@ function process_yaml_file(d::String, out_dir::String, verbose::Bool)
         dpd = rd[dp]
         dpn = dpd["where"]["data_product"]
         verbose && println(" - data product: ", dpn)
-        res = refresh_dp(dpn, get_ns_cd(dpd, df_ns_cd), out_dir, verbose)
+        res = refresh_dp(dpn, get_ns_cd(dpd, df_ns_cd), out_dir, verbose, fail_on_hash_mismatch)
         err_cnt += res[1]
         push!(dpnms, dpn)
         push!(fps, res[2])
@@ -156,25 +159,26 @@ end
 
 ## public function
 """
-    fetch_data_per_yaml(yaml_filepath, out_dir = "./out/", verbose = false)
+    fetch_data_per_yaml(yaml_filepath, out_dir = "./out/"; use_axis_arrays::Bool = false, verbose = false)
 
 Refresh and load data products from the SCRC data registry. Checks the file hash for each data product and downloads anew any that are determined to be out-of-date.
 
 **Parameters**
 - `yaml_filepath`   -- the location of a .yaml file.
 - `out_dir`         -- the local system directory where data will be stored.
+- `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
-function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT, verbose::Bool = false)
+function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool = false, verbose::Bool = false)
     dp_fps = process_yaml_file(yaml_filepath, out_dir, verbose)
     output = Dict()
     for i in eachindex(dp_fps[1])
-        dp = read_data_product(dp_fps[2][i], verbose)
+        dp = read_data_product(dp_fps[2][i]; verbose)
         output[dp_fps[1][i]] = dp
     end
     return output
 end
 
-export fetch_data_per_yaml
+export fetch_data_per_yaml, read_data_product
 
 end # module

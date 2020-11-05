@@ -19,12 +19,14 @@ julia> using DataRegistryUtils
 julia> ?fetch_data_per_yaml
 ```
 
+NB. a complete working example is also given in the `examples` folder.
+
 ### Example: refesh data
 
 ```
 julia> TEST_FILE = "/home/martin/AtomProjects/DataRegistryUtils.jl/examples/data_config.yaml"
 julia> DATA_OUT = "/home/martin/AtomProjects/DataRegistryUtils.jl/out/"
-julia> data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
+julia> data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_axis_arrays=true, verbose=false)
 ```
 
 The results referenced by the `data` variable are a `Dict` of data products, indexed by data product name, component name, and so on. They can be accessed thusly:
@@ -38,4 +40,12 @@ julia> component_type = component["type"]
 julia> distribution_name = component["distribution"]
 ```
 
-NB. a complete working example is also given in the `examples` folder.
+### Example: read individual HDF5 or TOML file
+
+You can also use the package to read in a file that has already been downloaded, as follows:
+
+```
+julia> fp = "/path/to/some/file.h5"
+julia> dp = DataRegistryUtils.read_data_product(fp, use_axis_arrays = true, verbose = false)
+julia> component = dp["/conversiontable/scotland"]
+```

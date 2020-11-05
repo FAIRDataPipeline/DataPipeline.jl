@@ -5,7 +5,7 @@ import DataRegistryUtils
 
 TEST_FILE = "/home/martin/AtomProjects/DataRegistryUtils.jl/examples/data_config.yaml"
 DATA_OUT = "/home/martin/AtomProjects/DataRegistryUtils.jl/out/"
-data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, false)
+data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_axis_arrays=true, verbose = false)
 # - hint: use 'true' for verbose processing output in the console
 
 
