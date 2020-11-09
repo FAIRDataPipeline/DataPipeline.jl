@@ -44,4 +44,4 @@ end
 
 ## run examples
 vanilla_example()
-db_example()
+# db_example()
