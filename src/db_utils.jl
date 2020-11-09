@@ -7,7 +7,7 @@ const DB_TYPE_MAP = Dict(String => "TEXT", Int32 => "INTEGER", Float64 => "REAL"
 ## read sql from file
 function get_sql_stmts(fp::String)
     f = open(fp)
-    sql = replace(read(f, String), "\n" => "")
+    sql = strip(replace(read(f, String), "\n" => " "), ' ')
     close(f)
     return split(rstrip(sql, ';'), ';')
 end
@@ -16,7 +16,6 @@ end
 function proc_sql_file!(cn::SQLite.DB, fp::String)
     sql = get_sql_stmts(fp)
     for i in eachindex(sql)
-        # println(i, " sql: ", sql[i])
         SQLite.execute(cn, sql[i])
     end
 end
@@ -67,15 +66,15 @@ end
 
 ## placeholder
 function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.HDF5File, verbose::Bool)
-    println("*** h5 type: ", typeof(h5))
-    println(" - tablestub := ", tablestub, " gnm := ", gnm)
+    println("*** h5 group type: ", typeof(h5), " - TO BE ADDED ***")
+    # println(" - tablestub := ", tablestub, " gnm := ", gnm)
 end
 
 ## load array as flattened cube
-# - TO DO: optimise via load_table! ***
+# - TO DO: too slow atm, optimise via load_table! function ***
 function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.HDF5Group, verbose::Bool)
     tablename = string(rstrip(string(tablestub, "_", clean_path(gnm)), '_'), "_cube")
-    print(" - loading ", typeof(h5), ": ", gnm, " => ", tablename)
+    verbose && println(" - loading ", gnm, " => ", tablename)
     cube_sql = string("CREATE TABLE ", tablename, "(")
     ins_sql = string("INSERT INTO ", tablename, "(")
     arr = read_h5_array(h5)
@@ -109,7 +108,7 @@ function process_h5_file_group!(cn::SQLite.DB, tablestub::String, h5, verbose::B
     if HDF5.exists(h5, TABLE_OBJ_NAME)
         d = read_h5_table(h5, false)
         load_table!(cn, tablestub, gnm, d, verbose)
-    elseif HDF5.exists(h5, ARRAY_OBJ_NAME)
+    elseif (HDF5.exists(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.HDF5Group)
         flat_load_array!(cn, tablestub, gnm, h5, verbose)
     else
         for g in HDF5.names(h5)     # group - recurse

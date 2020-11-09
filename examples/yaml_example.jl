@@ -1,5 +1,6 @@
 import DataRegistryUtils
-
+import SQLite
+import DataFrames
 
 #### loading data ####
 
@@ -10,7 +11,7 @@ DATA_OUT = "/home/martin/AtomProjects/DataRegistryUtils.jl/out/"
 
 ## default behaviour
 function vanilla_example()
-    data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_axis_arrays=false, verbose=true)
+    data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_axis_arrays=false, verbose=false)
     # access data product by name
     println("\nExample one - access data product / component by name:")
 
@@ -31,7 +32,14 @@ end
 
 ## via SQLite layer (WIP)
 function db_example()
-    db = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, db=true, verbose = false)
+    # custom views (optional)
+    sql_views = "/home/martin/AtomProjects/DataRegistryUtils.jl/examples/views.sql"
+    # connect
+    db = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=true, sql_file=sql_views, verbose=true)
+    # get some data
+    query = "SELECT * FROM toml_view"
+    results = SQLite.DBInterface.execute(db, query) |> DataFrames.DataFrame
+    println(DataFrames.first(results, 6))
 end
 
 ## run examples

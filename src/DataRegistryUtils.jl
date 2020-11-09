@@ -172,14 +172,26 @@ Refresh and load data products from the SCRC data registry. Checks the file hash
 - `yaml_filepath`   -- the location of a .yaml file.
 - `out_dir`         -- the local system directory where data will be stored.
 - `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
+- `use_sql`         -- load SQLite database and return connection.
+- `sql_file`        -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
-function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool = false, verbose::Bool = false, db::Bool = false)
+function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool = false, use_sql::Bool = false, sql_file::String = "", verbose::Bool = false)
     out_dir = string(rstrip(out_dir, '/'), "/")
     dp_fps = process_yaml_file(yaml_filepath, out_dir, verbose)
-    if db
+    if use_sql
         db_path = string(out_dir, basename(yaml_filepath), ".db")
-        return load_data_per_yaml(dp_fps, db_path, verbose)
+        output = load_data_per_yaml(dp_fps, db_path, verbose)
+        if length(sql_file) > 0     # optional sql file
+            println(" - running: ", sql_file)
+            try
+                proc_sql_file!(output, sql_file)
+            catch e
+                println(" -- ERROR: ", e)
+            end
+        end
+        println(" - done.")
+        return output
     else
         output = Dict()
         for i in eachindex(dp_fps[1])
