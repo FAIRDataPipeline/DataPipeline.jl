@@ -9,6 +9,8 @@ const ARRAY_OBJ_NAME = "array"
 const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"
 
+## TBA: md type w/hash
+
 ## does what it says on the tin
 function read_h5_table(obj_grp, use_axis_arrays::Bool)
     obj = HDF5.read(obj_grp[TABLE_OBJ_NAME])
@@ -32,19 +34,36 @@ end
 function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, verbose::Bool)
     gnm = HDF5.name(h5)
     verbose && println(" - processing group: ", gnm)
-    for g in HDF5.names(h5)
-        if HDF5.exists(h5, TABLE_OBJ_NAME)
-            d = read_h5_table(h5, use_axis_arrays)
-            output_dict[gnm] = d
-            break
-        elseif HDF5.exists(h5, ARRAY_OBJ_NAME)
-            d = read_h5_array(h5)
-            output_dict[gnm] = d
-            break
+    if HDF5.exists(h5, TABLE_OBJ_NAME)
+        d = read_h5_table(h5, use_axis_arrays)
+        output_dict[gnm] = d
+    elseif HDF5.exists(h5, ARRAY_OBJ_NAME)
+        d = read_h5_array(h5)
+        output_dict[gnm] = d
+    else    # group - recurse
+        for g in HDF5.names(h5)
+            process_h5_file_group!(output_dict, h5[g], use_axis_arrays, verbose)
         end
-        process_h5_file_group!(output_dict, h5[g], use_axis_arrays, verbose) # group - recurse
     end
 end
+
+## recursively search and read table/array
+# function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, verbose::Bool)
+#     gnm = HDF5.name(h5)
+#     verbose && println(" - processing group: ", gnm)
+#     for g in HDF5.names(h5)
+#         if HDF5.exists(h5, TABLE_OBJ_NAME)
+#             d = read_h5_table(h5, use_axis_arrays)
+#             output_dict[gnm] = d
+#             break
+#         elseif HDF5.exists(h5, ARRAY_OBJ_NAME)
+#             d = read_h5_array(h5)
+#             output_dict[gnm] = d
+#             break
+#         end
+#         process_h5_file_group!(output_dict, h5[g], use_axis_arrays, verbose) # group - recurse
+#     end
+# end
 
 ## wrapper for recursive processing
 function process_h5_file(filepath::String, use_axis_arrays::Bool, verbose::Bool)

@@ -1,0 +1,20 @@
+DROP TABLE IF EXISTS data_product;
+DROP TABLE IF EXISTS toml_component;
+DROP TABLE IF EXISTS toml_keyval;
+
+CREATE TABLE data_product(
+	dp_id	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	dp_name	TEXT NOT NULL,
+	dp_path	TEXT NOT NULL,
+	dp_type	INTEGER NOT NULL
+);
+CREATE TABLE toml_component(
+	comp_id	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	dp_id	INTEGER NOT NULL,
+	comp_name	TEXT
+);
+CREATE TABLE toml_keyval(
+	comp_id	INTEGER NOT NULL,
+	key	TEXT NOT NULL,
+	val	TEXT NOT NULL
+);

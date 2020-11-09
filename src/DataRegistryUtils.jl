@@ -15,6 +15,9 @@ DATA_OUT = "./out/"
 ## dp file handling:
 include("data_prod_proc.jl")
 
+## db output
+include("db_utils.jl")
+
 ## get namespace id (or use default)
 function get_ns_cd(ns_name)
     url = string(API_ROOT, "namespace/?name=", ns_name)
@@ -157,6 +160,8 @@ function process_yaml_file(d::String, out_dir::String, verbose::Bool)
     return (dpnms, fps)
 end
 
+
+
 ## public function
 """
     fetch_data_per_yaml(yaml_filepath, out_dir = "./out/"; use_axis_arrays::Bool = false, verbose = false)
@@ -169,14 +174,20 @@ Refresh and load data products from the SCRC data registry. Checks the file hash
 - `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
-function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool = false, verbose::Bool = false)
+function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool = false, verbose::Bool = false, db::Bool = false)
+    out_dir = string(rstrip(out_dir, '/'), "/")
     dp_fps = process_yaml_file(yaml_filepath, out_dir, verbose)
-    output = Dict()
-    for i in eachindex(dp_fps[1])
-        dp = read_data_product(dp_fps[2][i]; verbose)
-        output[dp_fps[1][i]] = dp
+    if db
+        db_path = string(out_dir, basename(yaml_filepath), ".db")
+        return load_data_per_yaml(dp_fps, db_path, verbose)
+    else
+        output = Dict()
+        for i in eachindex(dp_fps[1])
+            dp = read_data_product(dp_fps[2][i]; verbose)
+            output[dp_fps[1][i]] = dp
+        end
+        return output
     end
-    return output
 end
 
 export fetch_data_per_yaml, read_data_product
