@@ -34,7 +34,7 @@ function db_example()
     # custom views (optional)
     sql_views = "/home/martin/AtomProjects/DataRegistryUtils.jl/examples/views.sql"
     # connect
-    db = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=true, sql_file=sql_views, force_db_refresh=false, verbose=true)
+    db = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=true, sql_file=sql_views, force_db_refresh=false, verbose=false)
     # get some data
     query = "SELECT * FROM toml_view"
     results = SQLite.DBInterface.execute(db, query) |> DataFrames.DataFrame

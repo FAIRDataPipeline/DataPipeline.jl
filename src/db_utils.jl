@@ -149,13 +149,13 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
     println(" - checking database: ", db_path)
     output = init_yaml_db(db_path)
     ## load dp to db
-    sel_stmt = SQLite.Stmt(output, "SELECT * FROM data_product WHERE dp_name = ? AND dp_version = ? AND dp_hash = ?")
+    sel_stmt = SQLite.Stmt(output, "SELECT * FROM data_product WHERE dp_name = ? AND dp_version = ? AND dp_hash = ? AND dp_hash != ?")
     del_stmt = SQLite.Stmt(output, "DELETE FROM data_product WHERE dp_name = ? AND dp_version = ?")
     ins_stmt = SQLite.Stmt(output, "INSERT INTO data_product(dp_name, dp_path, dp_hash, dp_version) VALUES(?, ?, ?, ?)")
     function load_data_product!(name::String, filepath::String, filehash::String, version::String)
         verbose && println(" - processing file: ", filepath)
         if !force_refresh   # check hash (unless forced db refresh)
-            qr = SQLite.DBInterface.execute(sel_stmt, (name, version, filehash)) |> DataFrames.DataFrame
+            qr = SQLite.DBInterface.execute(sel_stmt, (name, version, filehash, NULL_HASH)) |> DataFrames.DataFrame
             verbose && println(" - searching db := found ", DataFrames.nrow(qr), " matching, up-to-date data products.")
             DataFrames.nrow(qr) == 0 || (return false)
         end                 # else load from scratch
@@ -167,7 +167,8 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
         elseif occursin(".toml", filepath)
             process_toml_file!(output, filepath, dp_id)
         else
-            println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
+            filepath == NULL_FILE || println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
+            return false
         end
         return true
     end
@@ -179,6 +180,6 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
     ## clean up
     SQLite.execute(output, "DELETE FROM toml_component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
     SQLite.execute(output, "DELETE FROM toml_keyval WHERE comp_id NOT IN(SELECT DISTINCT comp_id FROM toml_component)")
-    verbose && println(" - finished, ", updated, " data products updated.")
+    println(" - finished, ", updated, " data products were updated.")
     return output
 end

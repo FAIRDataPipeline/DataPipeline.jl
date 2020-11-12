@@ -12,6 +12,7 @@ const API_ROOT = "https://data.scrc.uk/api/"
 const NS_ROOT = string(API_ROOT, "namespace/")
 const DATA_OUT = "./out/"
 const NULL_HASH = "na"
+const NULL_FILE = "no_match"
 const VERSION_LATEST = "latest"
 
 ## file hash check results
@@ -150,7 +151,7 @@ function refresh_dp(dp, ns_cd, version::String, out_dir::String, verbose::Bool, 
     resp = JSON.parse(String(r.body))
     if resp["count"] == 0   # nothing found
         println("WARNING: no results found for ", url)
-        return DPHashCheck(false, "no_match", NULL_HASH)
+        return DPHashCheck(false, NULL_FILE, NULL_HASH)
     else                    # get storage location of most recent dp
         idx = version == VERSION_LATEST ? get_most_recent_index(resp) : get_version_index(resp, version)
         s = get_storage_loc(resp["results"][idx]["object"])
@@ -213,14 +214,14 @@ function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; 
         db_path = string(out_dir, basename(yaml_filepath), ".db")
         output = load_data_per_yaml(md, db_path, force_db_refresh, verbose)
         if length(sql_file) > 0     # optional sql file
-            println(" - running: ", sql_file)
+            print(" - running: ", sql_file)
             try
                 proc_sql_file!(output, sql_file)
+                println(" - done.")
             catch e
-                println(" -- ERROR: ", e)
+                println(" - SQL ERROR:\n -- ", e)
             end
         end
-        println(" - done.")
         return output
     else                            # return data in memory
         output = Dict()
