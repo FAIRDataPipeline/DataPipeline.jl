@@ -8,9 +8,18 @@ import SHA
 
 ### YAML file processing ###
 
-API_ROOT = "https://data.scrc.uk/api/"
-NS_ROOT = string(API_ROOT, "namespace/")
-DATA_OUT = "./out/"
+const API_ROOT = "https://data.scrc.uk/api/"
+const NS_ROOT = string(API_ROOT, "namespace/")
+const DATA_OUT = "./out/"
+const NULL_HASH = "na"
+const VERSION_LATEST = "latest"
+
+## file hash check results
+struct DPHashCheck
+    pass::Bool
+    file_path::String
+    file_hash::String
+end
 
 ## dp file handling:
 include("data_prod_proc.jl")
@@ -79,35 +88,34 @@ function download_file(storage_info, fp::String, fail_on_hash_mismatch::Bool)
         close(ftp)
     else
         println("WARNING: unknown storage root type - couldn't download.")
-        return false
+        return DPHashCheck(false, fp, NULL_HASH)
     end
-    ff = open(fp) do f                          # hash check
+    fhash = open(fp) do f                          # hash check
         fh = bytes2hex(SHA.sha1(f))
         if fh != storage_info.s_hs
             println("WARNING - HASH DISCREPANCY DETECTED:\n server file := ", storage_info.s_fp, "\n hash: ", storage_info.s_hs, "\n downloaded: ", fp, "\n hash: ", fh)
             fail_on_hash_mismatch && throw("Hash error. Hint: set 'fail_on_hash_mismatch = false' to ignore this error.")
         end
-        return (fh == storage_info.s_hs)
+        return fh
     end
-    return ff
+    return DPHashCheck(fhash == storage_info.s_hs, fp, fhash)
 end
 
 ## hash check and download
-# - returns file check and filepath
 function check_file(storage_info, out_dir, fail_on_hash_mismatch::Bool)
     fp = string(out_dir, storage_info.s_fp)
     if isfile(fp)   # exists - checksum
-        ff = open(fp) do f
+        fhash = open(fp) do f
             fh = bytes2hex(SHA.sha1(f))
             fh == storage_info.s_hs || println(" - downloading ", storage_info.s_fp, ", please wait...")
-            return (fh == storage_info.s_hs)
+            return fh
         end
-        ff && (return (true, fp))
+        fhash == storage_info.s_hs && (return DPHashCheck(true, fp, fhash))
     end
-    return (download_file(storage_info, fp), fp, fail_on_hash_mismatch)
+    return download_file(storage_info, fp, fail_on_hash_mismatch)  #, fp, fail_on_hash_mismatch
 end
 
-## choose most recent index
+## get index of most recent version
 function get_most_recent_index(resp)
     resp["count"] == 1 && (return 1)
     v = String[]
@@ -117,26 +125,46 @@ function get_most_recent_index(resp)
     return findmax(v)[2]
 end
 
+## get version index, default to most recent
+function get_version_index(resp, version::String)
+    for i in 1:length(resp["results"])
+        resp["results"][i]["version"] == version && (return i)
+    end
+    return get_most_recent_index(resp)
+end
+
+## try get version label
+function get_version_str(dpd)
+    try
+        return dpd["where"]["version"]
+    catch error
+        isa(error, KeyError) || println("NB. DEFAULTING TO MOST RECENT DP VERSION DUE TO ERROR := ", error)
+        return VERSION_LATEST
+    end
+end
+
 ## download data (if out of date)
-function refresh_dp(dp, ns_cd, out_dir::String, verbose::Bool, fail_on_hash_mismatch::Bool)
+function refresh_dp(dp, ns_cd, version::String, out_dir::String, verbose::Bool, fail_on_hash_mismatch::Bool)
     url = string(API_ROOT, "data_product/?name=", dp, "&namespace=", ns_cd)
     r = HTTP.request("GET", url)
     resp = JSON.parse(String(r.body))
     if resp["count"] == 0   # nothing found
         println("WARNING: no results found for ", url)
-        return (1, "na")
+        return DPHashCheck(false, "no_match", NULL_HASH)
     else                    # get storage location of most recent dp
-        idx = get_most_recent_index(resp)
+        idx = version == VERSION_LATEST ? get_most_recent_index(resp) : get_version_index(resp, version)
         s = get_storage_loc(resp["results"][idx]["object"])
         chk = check_file(s, out_dir, fail_on_hash_mismatch) # download and check
-        verbose && println(" - ", s.s_fp, " hash check := ", chk)
-        return (chk[1] ? 0 : 1, chk[2])
+        verbose && println(" - ", s.s_fp, " hash check := ", chk.pass)
+        return chk
     end
 end
 
 ## process yaml
 # - downloads data
-# - returns tuple of arrays: data product names and filepaths
+# - returns tuple of arrays: data product names, filepaths, hashes
+# - TBA: access log
+# - TBD: add temp file option?
 function process_yaml_file(d::String, out_dir::String, verbose::Bool)
     println("processing config file: ", d)
     verbose || println(" - hint: use the 'verbose' option to see more stuff")
@@ -147,41 +175,43 @@ function process_yaml_file(d::String, out_dir::String, verbose::Bool)
     err_cnt = 0
     fps = String[]
     dpnms = String[]
+    fhs = String[]
+    dp_version = String[]
     for dp in keys(rd)
         dpd = rd[dp]
-        dpn = dpd["where"]["data_product"]
-        verbose && println(" - data product: ", dpn)
-        res = refresh_dp(dpn, get_ns_cd(dpd, df_ns_cd), out_dir, verbose, fail_on_hash_mismatch)
-        err_cnt += res[1]
-        push!(dpnms, dpn)
-        push!(fps, res[2])
+        push!(dpnms, dpd["where"]["data_product"])
+        push!(dp_version, get_version_str(dpd))
+        verbose && println(" - data product: ", dpnms[end], " : version := ", dp_version[end])
+        res = refresh_dp(dpnms[end], get_ns_cd(dpd, df_ns_cd), dp_version[end], out_dir, verbose, fail_on_hash_mismatch)
+        res.pass || (err_cnt += 1)
+        push!(fps, res.file_path)
+        push!(fhs, res.file_hash)
     end
-    println(" - data refreshed", err_cnt == 0 ? "." : ", but issues were detected.")
-    return (dpnms, fps)
+    println(" - files refreshed", err_cnt == 0 ? "." : ", but issues were detected.")
+    return (dp_name=dpnms, dp_file=fps, dp_hash=fhs, dp_version=dp_version)
 end
-
-
 
 ## public function
 """
-    fetch_data_per_yaml(yaml_filepath, out_dir = "./out/"; use_axis_arrays::Bool = false, verbose = false)
+    fetch_data_per_yaml(yaml_filepath, out_dir = "./out/"; use_axis_arrays::Bool = false, verbose = false, ...)
 
 Refresh and load data products from the SCRC data registry. Checks the file hash for each data product and downloads anew any that are determined to be out-of-date.
 
 **Parameters**
-- `yaml_filepath`   -- the location of a .yaml file.
-- `out_dir`         -- the local system directory where data will be stored.
-- `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
-- `use_sql`         -- load SQLite database and return connection.
-- `sql_file`        -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
-- `verbose`         -- set to `true` to show extra output in the console.
+- `yaml_filepath`       -- the location of a .yaml file.
+- `out_dir`             -- the local system directory where data will be stored.
+- `use_axis_arrays`     -- convert the output to AxisArrays, where applicable.
+- `use_sql`             -- load SQLite database and return connection.
+- `sql_file`            -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
+- `force_db_refresh`    -- overide filehash check on database insert.
+- `verbose`             -- set to `true` to show extra output in the console.
 """
-function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool = false, use_sql::Bool = false, sql_file::String = "", verbose::Bool = false)
+function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool=false, use_sql::Bool = false, sql_file::String="", force_db_refresh::Bool=false, verbose::Bool=false)
     out_dir = string(rstrip(out_dir, '/'), "/")
-    dp_fps = process_yaml_file(yaml_filepath, out_dir, verbose)
-    if use_sql
+    md = process_yaml_file(yaml_filepath, out_dir, verbose)
+    if use_sql                      # SQLite connection
         db_path = string(out_dir, basename(yaml_filepath), ".db")
-        output = load_data_per_yaml(dp_fps, db_path, verbose)
+        output = load_data_per_yaml(md, db_path, force_db_refresh, verbose)
         if length(sql_file) > 0     # optional sql file
             println(" - running: ", sql_file)
             try
@@ -192,11 +222,11 @@ function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; 
         end
         println(" - done.")
         return output
-    else
+    else                            # return data in memory
         output = Dict()
-        for i in eachindex(dp_fps[1])
-            dp = read_data_product(dp_fps[2][i]; verbose)
-            output[dp_fps[1][i]] = dp
+        for i in eachindex(md.dp_name)
+            dp = read_data_product(md.dp_file[i]; verbose)
+            output[md.dp_name[i]] = dp
         end
         return output
     end

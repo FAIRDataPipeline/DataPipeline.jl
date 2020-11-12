@@ -52,12 +52,10 @@ julia> component = dp["/conversiontable/scotland"]
 
 ### Example: read data as SQLite connection
 
-Data can be staged using a SQLite database and returned as an active connection to that database for querying and further aggregation. For example:
+Data can be staged using SQLite and returned as an active connection to a file database for querying and aggregation. For example:
 
 ```
 julia> using SQLite, DataFrames
 julia> db = DataRegistryUtils.read_data_product(fp, use_sql = true)
 julia> x = DBInterface.execute(db, "SELECT * FROM data_product") |> DataFrame
 ```
-
-NB. the SQLite functionality is under development and is currently a bit slow to load large array-based data products.

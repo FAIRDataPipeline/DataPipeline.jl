@@ -1,8 +1,11 @@
 import SQLite
-# import DataFrames
+import DataFrames
 
 const DDL_SQL = "db/ddl.sql"
 const DB_TYPE_MAP = Dict(String => "TEXT", Int32 => "INTEGER", Float64 => "REAL")
+const DB_FLAT_ARR_APX = "_arr"
+const DB_H5_TABLE_APX = "_tbl"
+const DB_VAL_COL = "val"
 
 ## read sql from file
 function get_sql_stmts(fp::String)
@@ -43,14 +46,8 @@ function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
     end
 end
 
-## db table labeller
-clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
-
 ## load table from object
-function load_table!(cn::SQLite.DB, tablestub::String, gnm::String, d, verbose::Bool)
-    verbose && println(" - processing group := ", gnm)
-    tablename = rstrip(string(tablestub, "_", clean_path(gnm)), '_')
-    verbose && println(" - loading table := ", tablename)
+function load_table!(cn::SQLite.DB, tablename::String, d)
     SQLite.drop!(cn, tablename, ifexists=true)
     SQLite.load!(d, cn, tablename)
 end
@@ -67,49 +64,71 @@ end
 ## placeholder
 function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.HDF5File, verbose::Bool)
     println("*** h5 group type: ", typeof(h5), " - TO BE ADDED ***")
-    # println(" - tablestub := ", tablestub, " gnm := ", gnm)
 end
 
+## try get dim titles, else give generic column name
+function get_dim_title(h5, d::Int64, verbose::Bool)
+    ttl = string("Dimension_", d, "_title")
+    if HDF5.exists(h5, ttl)
+        return replace(HDF5.read(h5[ttl])[1], " " => "_");
+    else
+        cn = string("col", d)
+        verbose && println(" - nb. no metadata found for ", cn)
+        return cn
+    end
+end
+
+## try get dim labels, else give generic labels
+function get_dim_names(h5, d::Int64, s::Int64)
+    nms = string("Dimension_", d, "_names")
+    if HDF5.exists(h5, nms)
+        return HDF5.read(h5[nms]);
+    else
+        return String[string("grp", i) for i in 1:s]
+    end
+end
+
+## db table labeller
+clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
+
 ## load array as flattened cube
-# - TO DO: too slow atm, optimise via load_table! function ***
-function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.HDF5Group, verbose::Bool)
-    tablename = string(rstrip(string(tablestub, "_", clean_path(gnm)), '_'), "_cube")
-    verbose && println(" - loading ", gnm, " => ", tablename)
-    cube_sql = string("CREATE TABLE ", tablename, "(")
-    ins_sql = string("INSERT INTO ", tablename, "(")
+function flat_load_array!(cn::SQLite.DB, tablename::String, h5::HDF5.HDF5Group, verbose::Bool)
     arr = read_h5_array(h5)
-    nd = ndims(arr)             # process columns
-    dim_names = Array{Array{Any, 1}, 1}(undef, nd)
+    verbose && println(" - loading array : ", size(arr), " => ", tablename)
+    nd = ndims(arr)             # process columns names
+    dim_titles = String[]
     for d in 1:nd
-        dim_names[d] = HDF5.read(h5[string("Dimension_", d, "_names")])
-        col_ttl = replace(HDF5.read(h5[string("Dimension_", d, "_title")])[1], " " => "_")
-        cube_sql = string(cube_sql, col_ttl, " ", DB_TYPE_MAP[typeof(dim_names[d][1])], " NOT NULL,\n")
-        ins_sql = string(ins_sql, col_ttl, ",")
+        push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
     end
-    # ddl
-    SQLite.drop!(cn, tablename, ifexists=true)
-    cube_sql = string(cube_sql, "val ", DB_TYPE_MAP[typeof(arr[1])], ")")
-    SQLite.execute(cn, cube_sql)
-    # dml
-    ins_sql = string(ins_sql, "val) ", get_values_str(nd + 1))
-    ins_stmt = SQLite.Stmt(cn, ins_sql)
-    for i in eachindex(arr)
-        ids = Tuple(CartesianIndices(arr)[i])
-        vals = Any[dim_names[j][ids[j]] for j in eachindex(ids)]
-        push!(vals, arr[i])
-        SQLite.execute(ins_stmt, vals)
+    push!(dim_titles, DB_VAL_COL)
+    # println("** arr cols: ", dim_titles)
+    ## ddl
+    idc = Tuple.(CartesianIndices(arr)[:])
+    dims = Array[]
+    for d in 1:nd
+        dim_names = get_dim_names(h5, d, size(arr)[d])
+        idx = Int64[t[d] for t in idc]
+        nd = dim_names[idx]
+        push!(dims, nd)
     end
-    # load_table!(cn, tablestub, gnm, d, verbose)
+    df = DataFrames.DataFrame(dims)
+    df.val = [arr[i] for i in eachindex(arr)]
+    DataFrames.rename!(df, Symbol.(dim_titles))
+    # println("** array sample:\n", DataFrames.first(df, 3))
+    load_table!(cn, tablename, df)
 end
 
 ## recursively search and load table/array
 function process_h5_file_group!(cn::SQLite.DB, tablestub::String, h5, verbose::Bool)
     gnm = HDF5.name(h5)
     if HDF5.exists(h5, TABLE_OBJ_NAME)
+        tablename = string(rstrip(string(tablestub, "_", clean_path(gnm)), '_'), DB_H5_TABLE_APX)
         d = read_h5_table(h5, false)
-        load_table!(cn, tablestub, gnm, d, verbose)
+        verbose && println(" - loading table := ", tablename)
+        load_table!(cn, tablename, d)
     elseif (HDF5.exists(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.HDF5Group)
-        flat_load_array!(cn, tablestub, gnm, h5, verbose)
+        tablename = string(rstrip(string(tablestub, "_", clean_path(gnm)), '_'), DB_FLAT_ARR_APX)
+        flat_load_array!(cn, tablename, h5, verbose)
     else
         for g in HDF5.names(h5)     # group - recurse
             process_h5_file_group!(cn, tablestub, h5[g], verbose)
@@ -125,30 +144,41 @@ function process_h5_file!(cn::SQLite.DB, name::String, filepath::String, verbose
     HDF5.close(f)
 end
 
-## load dp to db
-function load_data_product!(cn::SQLite.DB, name::String, filepath::String, verbose::Bool)
-    verbose && println(" - processing file: ", filepath)
-    stmt = SQLite.Stmt(cn, "INSERT INTO data_product(dp_name, dp_path, dp_type) VALUES(?, ?, ?)")
-    if occursin(".h5", filepath)
-        SQLite.execute(stmt, (name, filepath, 1))
-        process_h5_file!(cn, name, filepath, verbose)
-    elseif occursin(".toml", filepath)
-        SQLite.execute(stmt, (name, filepath, 2))
-        dp_id = SQLite.last_insert_rowid(cn)
-        process_toml_file!(cn, filepath, dp_id)
-    else
-        println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
-    end
-end
-
 ## load yaml data to sqlite db
-# - TO DO: remove warning when array loader has been optimised
-function load_data_per_yaml(dp_fps, db_path::String, verbose::Bool)
-    println(" - loading data: ", db_path)
-    println(" - NB. this can take a while...")
+function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::Bool)
+    println(" - checking database: ", db_path)
     output = init_yaml_db(db_path)
-    for i in eachindex(dp_fps[1])
-        load_data_product!(output, dp_fps[1][i], dp_fps[2][i], verbose)
+    ## load dp to db
+    sel_stmt = SQLite.Stmt(output, "SELECT * FROM data_product WHERE dp_name = ? AND dp_version = ? AND dp_hash = ?")
+    del_stmt = SQLite.Stmt(output, "DELETE FROM data_product WHERE dp_name = ? AND dp_version = ?")
+    ins_stmt = SQLite.Stmt(output, "INSERT INTO data_product(dp_name, dp_path, dp_hash, dp_version) VALUES(?, ?, ?, ?)")
+    function load_data_product!(name::String, filepath::String, filehash::String, version::String)
+        verbose && println(" - processing file: ", filepath)
+        if !force_refresh   # check hash (unless forced db refresh)
+            qr = SQLite.DBInterface.execute(sel_stmt, (name, version, filehash)) |> DataFrames.DataFrame
+            verbose && println(" - searching db := found ", DataFrames.nrow(qr), " matching, up-to-date data products.")
+            DataFrames.nrow(qr) == 0 || (return false)
+        end                 # else load from scratch
+        SQLite.execute(del_stmt, (name, version))
+        SQLite.execute(ins_stmt, (name, filepath, filehash, version))
+        dp_id = SQLite.last_insert_rowid(output)
+        if occursin(".h5", filepath)
+            process_h5_file!(output, name, filepath, verbose)
+        elseif occursin(".toml", filepath)
+            process_toml_file!(output, filepath, dp_id)
+        else
+            println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
+        end
+        return true
     end
+    ## load
+    updated = 0
+    for i in eachindex(md.dp_name)
+        load_data_product!(md.dp_name[i], md.dp_file[i], md.dp_hash[i], md.dp_version[i]) && (updated += 1)
+    end
+    ## clean up
+    SQLite.execute(output, "DELETE FROM toml_component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
+    SQLite.execute(output, "DELETE FROM toml_keyval WHERE comp_id NOT IN(SELECT DISTINCT comp_id FROM toml_component)")
+    verbose && println(" - finished, ", updated, " data products updated.")
     return output
 end

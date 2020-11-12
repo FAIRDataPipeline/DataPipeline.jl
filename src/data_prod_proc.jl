@@ -47,24 +47,6 @@ function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, ve
     end
 end
 
-## recursively search and read table/array
-# function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, verbose::Bool)
-#     gnm = HDF5.name(h5)
-#     verbose && println(" - processing group: ", gnm)
-#     for g in HDF5.names(h5)
-#         if HDF5.exists(h5, TABLE_OBJ_NAME)
-#             d = read_h5_table(h5, use_axis_arrays)
-#             output_dict[gnm] = d
-#             break
-#         elseif HDF5.exists(h5, ARRAY_OBJ_NAME)
-#             d = read_h5_array(h5)
-#             output_dict[gnm] = d
-#             break
-#         end
-#         process_h5_file_group!(output_dict, h5[g], use_axis_arrays, verbose) # group - recurse
-#     end
-# end
-
 ## wrapper for recursive processing
 function process_h5_file(filepath::String, use_axis_arrays::Bool, verbose::Bool)
     output = Dict()
@@ -100,7 +82,3 @@ end
 # println(typeof(process_h5_file(string(DATA_DIR, "geography/scotland/lookup_table/1.0.1.h5"))))
 # println(read_data_product(string(DATA_DIR, "master/EERA/fixed-parameters/T_hos/0.1.0.toml")))
 # read_data_product(string(DATA_DIR, "human/demographics/population/scotland/1.0.1.h5"))
-
-# QUESTIONS FOR CLAIRE:
-# - I noticed (in Simulation.jl) that you process your data into something called an AxisArray
-# -- is that a general requirement or just something you happen to do one particular case?
