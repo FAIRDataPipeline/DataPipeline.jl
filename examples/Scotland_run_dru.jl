@@ -1,6 +1,5 @@
 using Simulation
-# using SimulationData
-import DataRegistryUtils
+using SimulationData
 using Unitful
 using Unitful.DefaultSymbols
 using Simulation.Units
@@ -13,10 +12,72 @@ using Random
 using DataFrames
 using Plots
 
+import DataRegistryUtils
+import SQLite
+import JLD
+
+## read in sample data
+function read_sample_data()
+    test_data = "examples/Array_example.jld"
+    sd = JLD.load(test_data, "pop_array")
+    println(typeof(sd))
+    # - NB. not sure what a 'DataPipelineArray' is...
+end
+# read_sample_data()
+
+## WIP - new function for DR
+function run_model_dr()
+    ## process yaml, connect to results db
+    yaml_config = "examples/data_config_sim.yaml"
+    data_dir = "out/"
+    view_sql = "examples/simulation_views.sql"
+    db = DataRegistryUtils.fetch_data_per_yaml(yaml_config, data_dir, use_sql=true, sql_file=view_sql, verbose=false)
+
+    ## 1) PREV. LINE 17: scottish population
+    # - "human/demographics/population/scotland" : "grid1km/age/persons"
+    # - nb. view defined by examples/simulation_views.sql
+    stmt = SQLite.Stmt(db, "SELECT age_groups, age_aggr, SUM(val) as val FROM scottish_population_view GROUP BY age_groups")
+    scottish_pop_by_age = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
+    n_age_cats = DataFrames.nrow(scottish_pop_by_age)
+    println("\n1a) get scottish_pop_by_age via custom view: ", n_age_cats, " distinct age cats, e.g. := ", DataFrames.first(scottish_pop_by_age, 4))
+    # - create AxisArray
+    scottish_pop_aa = DataRegistryUtils.get_axis_array(db, ["grid_x", "grid_y", "age_aggr"], "val", "scottish_population_view")
+    print("\n1b) converting to AxisArray := ", typeof(scottish_pop_aa))
+    println(" - of size: ", size(scottish_pop_aa))
+    print("1c) e.g. access scottish_pop_aa[379, 271, 30] := ", scottish_pop_aa[atvalue(379), atvalue(271), atvalue(30)])
+    # - double check data
+    chk = SQLite.Stmt(db, "SELECT sum(val) AS val FROM scottish_population_view WHERE grid_x=? AND grid_y=? AND age_aggr=?")
+    chk_res = SQLite.DBInterface.execute(chk, (379, 271, 30)) |> DataFrames.DataFrame
+    println(" - vs db data check: ", chk_res.val)
+
+    ## 2) PREV. LINE 57: read_estimate()
+    # - specify data_type=Float64
+    symptom_pr = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "symptom-probability", data_type=Float64)
+    println("\n2) read_estimate symptom_pr[1] := ", typeof(symptom_pr[1]), " : ", symptom_pr[1])
+
+    ## 3) PREV. LINE 63: read_table()
+    # - equivalent to SELECT * FROM [.h5 table]
+    cfr_byage = DataRegistryUtils.read_table(db, "prob_hosp_and_cfr/data_for_scotland", "cfr_byage")
+    println("\n3) read_table cfr_byage table := ", DataFrames.first(cfr_byage, 6))
+
+    ## 4) PREV. LINE 79-112: various read_estimate()
+    # - i.e. search: human/infection/SARS-CoV-2/*
+    sars_cov2 = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%")
+    println("\n4) search: human/infection/SARS-CoV-2/* := ", DataFrames.first(sars_cov2, 6))
+
+    ## 5) EXTRA:
+    # - nb. uses custom view defined in simulation_views.sql
+    stmt = SQLite.Stmt(db, "SELECT * FROM pollution_grid_view")
+    pollution_grid = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
+    println("\n5) extra - pollution grid := ", DataFrames.first(pollution_grid, 6))
+
+end
+run_model_dr()
+
+## original pipeline API function
 function run_model(api::DataPipelineAPI, times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time; do_plot::Bool = false, do_download::Bool = true, save::Bool = false, savepath::String = pwd())
     # Download and read in population sizes for Scotland
-    # scotpop = parse_scottish_population(api)
-    # NB. need to confirm output - underlying DP has changed
+    # scotpop = parse_scottish_population(api)  # L17 *** # NB. need to confirm output - underlying DP has changed
 
     # Read number of age categories
     age_categories = size(scotpop, 3)
@@ -56,13 +117,13 @@ function run_model(api::DataPipelineAPI, times::Unitful.Time, interval::Unitful.
     total_pop = shrink_to_active(total_pop);
 
     # Prob of developing symptoms
-    p_s = fill(read_estimate(
+    p_s = fill(read_estimate(       # L57 ***
                api,
                "human/infection/SARS-CoV-2/symptom-probability",
                "symptom-probability"
            ), age_categories)
 
-    param_tab = read_table(api, "prob_hosp_and_cfr/data_for_scotland", "cfr_byage")
+    param_tab = read_table(api, "prob_hosp_and_cfr/data_for_scotland", "cfr_byage") # L63 ***
     # Prob of hospitalisation
     p_h = param_tab.p_h[1:end-1] # remove HCW
     pushfirst!(p_h, p_h[1]) # extend age categories
@@ -77,6 +138,8 @@ function run_model(api::DataPipelineAPI, times::Unitful.Time, interval::Unitful.
 
     @assert length(p_s) == length(p_h) == length(cfr_home)
 
+
+    ### L79 - 112 ###
     # Time exposed
     T_lat = days(read_estimate(
         api,
@@ -112,6 +175,7 @@ function run_model(api::DataPipelineAPI, times::Unitful.Time, interval::Unitful.
         "fixed-parameters/T_rec",
         "T_rec"
     )days
+    ### L79 - 112 END ###
 
     # Exposed -> asymptomatic
     mu_1 = (1 .- p_s) .* 1/T_lat
@@ -224,10 +288,10 @@ function run_model(api::DataPipelineAPI, times::Unitful.Time, interval::Unitful.
     return abuns
 end
 
-config = "data_config.yaml"
-download_data_registry(config)
-
-times = 2months; interval = 1day; timestep = 1day
-abuns = StandardAPI(config, "test_uri", "test_git_sha") do api
-    run_model(api, times, interval, timestep)
-end;
+# config = "data_config.yaml"
+# download_data_registry(config)
+#
+# times = 2months; interval = 1day; timestep = 1day
+# abuns = StandardAPI(config, "test_uri", "test_git_sha") do api
+#     run_model(api, times, interval, timestep)
+# end;

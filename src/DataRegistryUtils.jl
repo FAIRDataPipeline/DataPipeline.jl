@@ -234,5 +234,6 @@ function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; 
 end
 
 export fetch_data_per_yaml, read_data_product
+export read_estimate, read_table
 
 end # module
