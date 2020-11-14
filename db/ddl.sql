@@ -23,7 +23,13 @@ CREATE TABLE IF NOT EXISTS toml_keyval(
 	val	TEXT NOT NULL
 );
 
+DROP VIEW IF EXISTS h5_view;
 DROP VIEW IF EXISTS toml_view;
+
+CREATE VIEW h5_view AS
+SELECT d.dp_name, c.*
+FROM data_product d
+INNER JOIN h5_component c ON(d.dp_id = c.dp_id);
 
 CREATE VIEW toml_view AS
 SELECT d.dp_name, t.*, k.key, k.val

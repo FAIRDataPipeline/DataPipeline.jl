@@ -259,6 +259,16 @@ function read_estimate(cn::SQLite.DB, data_product::String, component::String; d
 end
 
 # - tables
+"""
+    read_table(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
+
+SQLite Data Registry helper function. Search and return HDF5-based table data resources registered in `cn`.
+
+**Parameters**
+- `cn`              -- SQLite.DB object.
+- `data_product`    -- data product search string, e.g. `'human/infection/SARS-CoV-2/%'`.
+- `component`       -- as above, [required] search string for components names.
+"""
 function read_table(cn::SQLite.DB, data_product::String, component::String)
     tablename = get_table_name(data_product, component, DB_H5_TABLE_APX)
     stmt = SQLite.Stmt(cn, string("SELECT * FROM ", tablename))
