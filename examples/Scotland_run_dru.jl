@@ -63,7 +63,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     scotpop = get_3d_km_grid_axis_array(db, ["grid_x", "grid_y", "age_aggr"], "val", "scottish_population_view")
     print("\n1b) converting to AxisArray := ", typeof(scotpop))
     println(" - of size: ", size(scotpop))
-    print("1c) e.g. access scottish_pop_aa[379km, 271km, 30] := ", scotpop[atvalue((379)km), atvalue((271)km), atvalue(30)])
+    print("\n1c) e.g. access scottish_pop_aa[379km, 271km, 30] := ", scotpop[atvalue((379)km), atvalue((271)km), atvalue(30)])
     # - double check data
     chk = SQLite.Stmt(db, "SELECT sum(val) AS val FROM scottish_population_view WHERE grid_x=? AND grid_y=? AND age_aggr=?")
     chk_res = SQLite.DBInterface.execute(chk, (379, 271, 30)) |> DataFrames.DataFrame
@@ -263,14 +263,12 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
             "Recovered" => cat_idx[:, 7],
             "Deaths" => cat_idx[:, 8],
         )
-        plot_dir = string(data_dir, "sim_plots/")
-        println("showing plot one")
+        plot_dir = string(savepath, "sim_plots/")
         display(plot_epidynamics(epi, abuns, category_map = category_map))
-        isdir(dirname(plot_dir)) || mkpath(dirname(plot_dir))   # check dir
-        savefig(string(plot_dir, "one.png"))
-        println("showing plot two")
-        display(plot_epiheatmaps(epi, abuns, steps = [30]))     # NB. this line fails
-        savefig(string(plot_dir, "two.png"))
+        save && (isdir(dirname(plot_dir)) || mkpath(dirname(plot_dir)))   # check dir
+        save && savefig(string(plot_dir, "one.png"))
+        display(plot_epiheatmaps(epi, abuns, compartment="Exposed1", steps = [30]))     # NB. added 'compartment="Exposed1"' ***
+        save && savefig(string(plot_dir, "two.png"))
     end
     println("output abuns := ", typeof(abuns), size(abuns))
     return abuns
