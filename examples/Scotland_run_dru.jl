@@ -264,10 +264,10 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
             "Deaths" => cat_idx[:, 8],
         )
         plot_dir = string(savepath, "sim_plots/")
-        display(plot_epidynamics(epi, abuns, category_map = category_map))
         save && (isdir(dirname(plot_dir)) || mkpath(dirname(plot_dir)))   # check dir
+        display(plot_epidynamics(epi, abuns, category_map = category_map))
         save && savefig(string(plot_dir, "one.png"))
-        display(plot_epiheatmaps(epi, abuns, compartment="Exposed1", steps = [30]))     # NB. added 'compartment="Exposed1"' ***
+        display(plot_epiheatmaps(epi, abuns, compartment="Exposed1", steps = [30])) # NB. added 'compartment="Exposed1"' ***
         save && savefig(string(plot_dir, "two.png"))
     end
     println("output abuns := ", typeof(abuns), size(abuns))
