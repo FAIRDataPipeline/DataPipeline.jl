@@ -104,7 +104,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     ## 2) PREV. LINE 57: read_estimate()
     # - specify data_type=Float64
     symptom_pr = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "symptom-probability", data_type=Float64)
-    println("\n2) read_estimate symptom_pr[1] := ", typeof(symptom_pr[1]), " : ", symptom_pr[1])
+    println("\n2) read_estimate: symptom_pr := ", typeof(symptom_pr[1]), " : ", symptom_pr[1])
 
     ### Simulation.jl code  block B ###
     # Prob of developing symptoms
@@ -113,7 +113,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     ## 3) PREV. LINE 63: read_table()
     # - equivalent to SELECT * FROM [.h5 table]
     param_tab = DataRegistryUtils.read_table(db, "prob_hosp_and_cfr/data_for_scotland", "cfr_byage")
-    println("\n3) read_table cfr_byage table, e.g. := ", DataFrames.first(param_tab, 4))
+    println("\n3) read_table: cfr_byage , e.g. := ", DataFrames.first(param_tab, 4))
 
     ### Simulation.jl code block C ###
     # Prob of hospitalisation
