@@ -218,7 +218,6 @@ function get_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::String, tbl::
     sel_sql = string("SELECT ", sel_sql, " SUM(", msr, ") AS val\nFROM ", tbl, "\nGROUP BY ", rstrip(sel_sql, ','))
     stmt = SQLite.Stmt(cn, sel_sql)
     df = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
-    ## scottish population AxisArray
     axis_size = Tuple(Int64[length(d) for d in dim_ax])
     data = zeros(typeof(df.val[1]), axis_size)
     ## build and populate array

@@ -1,5 +1,4 @@
 using Simulation
-# using SimulationData
 using Unitful
 using Unitful.DefaultSymbols
 using Simulation.Units
@@ -7,23 +6,44 @@ using Simulation.ClimatePref
 using StatsBase
 using Distributions
 using AxisArrays
-# using HTTP
-# using Random
 using DataFrames
 using Plots
 
 import DataRegistryUtils
 import SQLite
-import JLD
+# import JLD
 
 ## read in sample data
-function read_sample_data()
-    test_data = "examples/Array_example.jld"
-    sd = JLD.load(test_data, "pop_array")
-    println(typeof(sd))
-    # - NB. not sure what a 'DataPipelineArray' is...
-end
+# function read_sample_data()
+#     test_data = "examples/Array_example.jld"
+#     sd = JLD.load(test_data, "pop_array")
+#     println(typeof(sd))
+# end
 # read_sample_data()
+
+## produce AxisArray with Unitful km units for the first two dimensions
+function get_3d_km_grid_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::String, tbl::String)
+    sel_sql = ""
+    dim_ax = []
+    for i in eachindex(dims)
+        sel_sql = string(sel_sql, dims[i], ",")
+        dim_st = SQLite.Stmt(cn, string("SELECT DISTINCT ", dims[i], " AS val FROM ", tbl, " ORDER BY ", dims[i]))
+        dim_vals = SQLite.DBInterface.execute(dim_st) |> DataFrames.DataFrame
+        av = i < 3 ? [(v)km for v in dim_vals.val] : dim_vals.val   # unit conversion
+        push!(dim_ax, AxisArrays.Axis{Symbol(dims[i])}(av))
+    end
+    sel_sql = string("SELECT ", sel_sql, " SUM(", msr, ") AS val\nFROM ", tbl, "\nGROUP BY ", rstrip(sel_sql, ','))
+    stmt = SQLite.Stmt(cn, sel_sql)
+    df = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
+    ## scottish population AxisArray
+    axis_size = Tuple(Int64[length(d) for d in dim_ax])
+    data = zeros(typeof(df.val[1]), axis_size)
+    output = AxisArrays.AxisArray(data, Tuple(dim_ax))
+    for row in eachrow(df)
+        output[AxisArrays.atvalue(row[Symbol(dims[1])]km), AxisArrays.atvalue(row[Symbol(dims[2])]km), AxisArrays.atvalue(row[Symbol(dims[3])])] = row.val
+    end
+    return output
+end
 
 ## WIP - new function for DR
 function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time; do_plot::Bool=false, do_download::Bool=true, save::Bool=false, savepath::String=pwd())
@@ -39,12 +59,12 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     stmt = SQLite.Stmt(db, "SELECT age_aggr, age_groups as example, SUM(val) as val FROM scottish_population_view GROUP BY age_aggr")
     scottish_pop_by_age_grp = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
     age_categories = DataFrames.nrow(scottish_pop_by_age_grp)
-    println("\n1a) get scottish_pop_by_age via custom view: ", age_categories, " distinct age cats, e.g. := ", DataFrames.first(scottish_pop_by_age_grp, 4))
+    println("\n1a) aggregate scottish_pop_by_age via custom view: ", age_categories, " distinct age cats, e.g. := ", DataFrames.first(scottish_pop_by_age_grp, 4))
     # - create AxisArray
-    scotpop = DataRegistryUtils.get_axis_array(db, ["grid_x", "grid_y", "age_aggr"], "val", "scottish_population_view")
+    scotpop = get_3d_km_grid_axis_array(db, ["grid_x", "grid_y", "age_aggr"], "val", "scottish_population_view")
     print("\n1b) converting to AxisArray := ", typeof(scotpop))
     println(" - of size: ", size(scotpop))
-    print("1c) e.g. access scottish_pop_aa[379, 271, 30] := ", scotpop[atvalue(379), atvalue(271), atvalue(30)])
+    print("1c) e.g. access scottish_pop_aa[379km, 271km, 30] := ", scotpop[atvalue((379)km), atvalue((271)km), atvalue(30)])
     # - double check data
     chk = SQLite.Stmt(db, "SELECT sum(val) AS val FROM scottish_population_view WHERE grid_x=? AND grid_y=? AND age_aggr=?")
     chk_res = SQLite.DBInterface.execute(chk, (379, 271, 30)) |> DataFrames.DataFrame
@@ -140,6 +160,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     println("\n5) extra - pollution grid := ", DataFrames.first(pollution_grid, 3))
 
     ### Final Simulation.jl code block ###
+    println("\nrunning simulation:")
     # Exposed -> asymptomatic
     mu_1 = (1 .- p_s) .* 1/T_lat
     # Exposed -> Pre-symptomatic
@@ -246,11 +267,18 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
             "Recovered" => cat_idx[:, 7],
             "Deaths" => cat_idx[:, 8],
         )
+        plot_dir = string(data_dir, "sim_plots/")
+        println("showing plot one")
         display(plot_epidynamics(epi, abuns, category_map = category_map))
+        isdir(dirname(plot_dir)) || mkpath(dirname(plot_dir))   # check dir
+        savefig(string(plot_dir, "one.png"))
+        println("showing plot two")
         display(plot_epiheatmaps(epi, abuns, steps = [30]))
+        savefig(string(plot_dir, "two.png"))
     end
+    println("output abuns := ", typeof(abuns), size(abuns))
     return abuns
 end
 ## run
 times = 2months; interval = 1day; timestep = 1day
-run_model_dr(times, interval, timestep)
+run_model_dr(times, interval, timestep, do_plot=true)
