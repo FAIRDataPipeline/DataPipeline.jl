@@ -46,10 +46,9 @@ function get_3d_km_grid_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::St
 end
 
 ## WIP - new function for DR
-function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time; do_plot::Bool=false, do_download::Bool=true, save::Bool=false, savepath::String=pwd())
+function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time; do_plot::Bool=false, do_download::Bool=true, save::Bool=false, data_dir::String = "out/")
     ## process yaml, connect to results db
     yaml_config = "examples/data_config_sim.yaml"
-    data_dir = "out/"
     view_sql = "examples/simulation_views.sql"
     db = DataRegistryUtils.fetch_data_per_yaml(yaml_config, data_dir, use_sql=true, sql_file=view_sql, verbose=false)
 
@@ -153,7 +152,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
 
     ## 5) EXTRA:
     # - nb. uses custom view defined in simulation_views.sql
-    stmt = SQLite.Stmt(db, "SELECT * FROM pollution_grid_view")
+    stmt = SQLite.Stmt(db, "SELECT * FROM pollution_grid_view LIMIT 10")
     pollution_grid = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
     println("\n5) extra - pollution grid, e.g. := ", DataFrames.first(pollution_grid, 3))
 
@@ -245,6 +244,8 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
 
     # Run simulation
     abuns = zeros(UInt32, size(epi.abundances.matrix, 1), N_cells, floor(Int, times/timestep) + 1)
+    savepath = string(data_dir, "sim/")
+    save && (isdir(dirname(savepath)) || mkpath(dirname(savepath)))   # check dir
     @time simulate_record!(abuns, epi, times, interval, timestep, save = save, save_path = savepath)
 
     # Write to pipeline
@@ -276,4 +277,4 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
 end
 ## run
 times = 2months; interval = 1day; timestep = 1day
-run_model_dr(times, interval, timestep, do_plot=true)
+run_model_dr(times, interval, timestep, do_plot=true, save=true)
