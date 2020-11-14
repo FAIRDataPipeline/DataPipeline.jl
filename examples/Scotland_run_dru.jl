@@ -204,10 +204,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     age_mixing = fill(1.0, age_categories, age_categories)
 
     param = (birth = birth_rates, death = death_rates, virus_growth = [virus_growth_asymp virus_growth_presymp virus_growth_symp], virus_decay = virus_decay, beta_force = beta_force, beta_env = beta_env, age_mixing = age_mixing)
-
-    ## NB. this line fails due to typeof(area) := Float64 (expected: Unitful.Area{Float64}?) *****
     epienv = simplehabitatAE(298.0K, size(total_pop), area, Lockdown(20days))
-
     movement_balance = (home = fill(0.5, numclasses * age_categories), work = fill(0.5, numclasses * age_categories))
 
     # Dispersal kernels for virus and disease classes
@@ -273,7 +270,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
         isdir(dirname(plot_dir)) || mkpath(dirname(plot_dir))   # check dir
         savefig(string(plot_dir, "one.png"))
         println("showing plot two")
-        display(plot_epiheatmaps(epi, abuns, steps = [30]))
+        display(plot_epiheatmaps(epi, abuns, steps = [30]))     # NB. this line fails
         savefig(string(plot_dir, "two.png"))
     end
     println("output abuns := ", typeof(abuns), size(abuns))
