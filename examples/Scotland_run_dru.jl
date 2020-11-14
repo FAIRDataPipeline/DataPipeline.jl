@@ -95,14 +95,12 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
         2 * AxisArrays.axes(scotpop, 1)[1]) *
         (AxisArrays.axes(scotpop, 2)[end] + AxisArrays.axes(scotpop, 2)[2] -
         2 * AxisArrays.axes(scotpop, 2)[1]) * 1.0
-    println("* area := ", area, " : ", typeof(area))
     # Sum up age categories and turn into simple matrix
     total_pop = dropdims(sum(Float64.(scotpop), dims=3), dims=3)
     total_pop = AxisArray(total_pop, AxisArrays.axes(scotpop)[1], AxisArrays.axes(scotpop)[2])
     total_pop.data[total_pop .≈ 0.0] .= NaN
     # Shrink to smallest bounding box. The NaNs are inactive.
     total_pop = shrink_to_active(total_pop);
-    println("* total_pop := ", typeof(total_pop), " - ", size(total_pop))
 
     ## 2) PREV. LINE 57: read_estimate()
     # - specify data_type=Float64
@@ -157,7 +155,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     # - nb. uses custom view defined in simulation_views.sql
     stmt = SQLite.Stmt(db, "SELECT * FROM pollution_grid_view")
     pollution_grid = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
-    println("\n5) extra - pollution grid := ", DataFrames.first(pollution_grid, 3))
+    println("\n5) extra - pollution grid, e.g. := ", DataFrames.first(pollution_grid, 3))
 
     ### Final Simulation.jl code block ###
     println("\nrunning simulation:")
