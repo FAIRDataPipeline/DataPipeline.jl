@@ -166,6 +166,7 @@ end
 # - returns tuple of arrays: data product names, filepaths, hashes
 # - TBA: access log
 # - TBD: add temp file option?
+# - TBA: error handling and default yaml properties
 function process_yaml_file(d::String, out_dir::String, verbose::Bool)
     println("processing config file: ", d)
     verbose || println(" - hint: use the 'verbose' option to see more stuff")

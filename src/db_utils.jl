@@ -23,7 +23,7 @@ function proc_sql_file!(cn::SQLite.DB, fp::String)
     end
 end
 
-## initialise from file
+## initialise db from file
 function init_yaml_db(db_path::String)
     output = SQLite.DB(db_path)
     proc_sql_file!(output, DDL_SQL)
@@ -46,7 +46,7 @@ function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
     end
 end
 
-## load table from object
+## load component from [h5] object d
 function load_component!(cn::SQLite.DB, dp_id::Int64, tablename::String, d)
     SQLite.drop!(cn, tablename, ifexists=true)
     SQLite.load!(d, cn, tablename)
@@ -93,29 +93,29 @@ end
 ## db table labeller
 clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
 
-## load array as flattened cube
+## flatten Nd array and load as 2d table
 function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.HDF5Group, verbose::Bool)
     arr = read_h5_array(h5)
     verbose && println(" - loading array : ", size(arr), " => ", tablename)
-    nd = ndims(arr)             # process columns names
+    nd = ndims(arr)                             # fetch columns names
     dim_titles = String[]
     for d in 1:nd
         push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
     end
-    push!(dim_titles, DB_VAL_COL)
+    push!(dim_titles, DB_VAL_COL)               # measure column
     ## ddl / dml
-    idc = Tuple.(CartesianIndices(arr)[:])
-    dims = Array[]              # col name indices
+    idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
+    dims = Array[]                              # fetch named dimensions
     for d in 1:nd
         dim_names = get_dim_names(h5, d, size(arr)[d])
         idx = Int64[t[d] for t in idc]
-        nd = dim_names[idx]
+        nd = dim_names[idx]                     # 'named' dimension d
         push!(dims, nd)
     end
-    df = DataFrames.DataFrame(dims)
-    df.val = [arr[i] for i in eachindex(arr)]
-    DataFrames.rename!(df, Symbol.(dim_titles))
-    load_component!(cn, dp_id, tablename, df)
+    df = DataFrames.DataFrame(dims)             # convert to df
+    df.val = [arr[i] for i in eachindex(arr)]   # add data
+    DataFrames.rename!(df, Symbol.(dim_titles)) # column names
+    load_component!(cn, dp_id, tablename, df)   # load to db
 end
 
 ## format table name
@@ -127,13 +127,11 @@ end
 function process_h5_file_group!(cn::SQLite.DB, tablestub::String, h5, dp_id::Int64, verbose::Bool)
     gnm = HDF5.name(h5)
     if HDF5.exists(h5, TABLE_OBJ_NAME)
-        # tablename = string(rstrip(string(tablestub, "_", clean_path(gnm)), '_'), DB_H5_TABLE_APX)
         tablename = get_table_name(tablestub, gnm, DB_H5_TABLE_APX)
         d = read_h5_table(h5, false)
         verbose && println(" - loading table := ", tablename)
         load_component!(cn, dp_id, tablename, d)
     elseif (HDF5.exists(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.HDF5Group)
-        # tablename = string(rstrip(string(tablestub, "_", clean_path(gnm)), '_'), DB_FLAT_ARR_APX)
         tablename = get_table_name(tablestub, gnm, DB_FLAT_ARR_APX)
         flat_load_array!(cn, dp_id, tablename, h5, verbose)
     else
@@ -154,32 +152,34 @@ end
 ## load yaml data to sqlite db
 function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::Bool)
     println(" - checking database: ", db_path)
-    output = init_yaml_db(db_path)
-    ## load dp to db
+    output = init_yaml_db(db_path)      # initialise db
+    ## for loading dp to db
     sel_stmt = SQLite.Stmt(output, "SELECT * FROM data_product WHERE dp_name = ? AND dp_version = ? AND dp_hash = ? AND dp_hash != ?")
     del_stmt = SQLite.Stmt(output, "DELETE FROM data_product WHERE dp_name = ? AND dp_version = ?")
     ins_stmt = SQLite.Stmt(output, "INSERT INTO data_product(dp_name, dp_path, dp_hash, dp_version) VALUES(?, ?, ?, ?)")
     function load_data_product!(name::String, filepath::String, filehash::String, version::String)
         verbose && println(" - processing file: ", filepath)
-        if !force_refresh   # check hash (unless forced db refresh)
+        function insert_dp()            # function: insert dp and return id
+            SQLite.execute(ins_stmt, (name, filepath, filehash, version))
+            return SQLite.last_insert_rowid(output)
+        end
+        if !force_refresh               # check hash (unless forced db refresh)
             qr = SQLite.DBInterface.execute(sel_stmt, (name, version, filehash, NULL_HASH)) |> DataFrames.DataFrame
             verbose && println(" - searching db := found ", DataFrames.nrow(qr), " matching, up-to-date data products.")
             DataFrames.nrow(qr) == 0 || (return false)
-        end                 # else load from scratch
+        end                             # else load from scratch
         SQLite.execute(del_stmt, (name, version))
-        SQLite.execute(ins_stmt, (name, filepath, filehash, version))
-        dp_id = SQLite.last_insert_rowid(output)
         if occursin(".h5", filepath)
-            process_h5_file!(output, name, filepath, dp_id, verbose)
+            process_h5_file!(output, name, filepath, insert_dp(), verbose)
         elseif occursin(".toml", filepath)
-            process_toml_file!(output, filepath, dp_id)
-        else
+            process_toml_file!(output, filepath, insert_dp())
+        else    # TBA: CSV/TSV? ***
             filepath == NULL_FILE || println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
             return false
         end
         return true
     end
-    ## load
+    ## process file metadata
     updated = 0
     for i in eachindex(md.dp_name)
         load_data_product!(md.dp_name[i], md.dp_file[i], md.dp_hash[i], md.dp_version[i]) && (updated += 1)
@@ -238,13 +238,13 @@ const READ_EST_SQL = "SELECT dp_name, comp_name, val FROM toml_view\nWHERE key='
 """
     read_estimate(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
 
-SQLite Data Registry helper function. Search TOML-based data resources saved to the `cn` SQLite database created by a previous call to `fetch_data_per_yaml`.
+SQLite Data Registry helper function. Search TOML-based data resources stored in `cn`, a SQLite database created previously by a call to `fetch_data_per_yaml`.
 
 **Parameters**
 - `cn`              -- SQLite.DB object.
 - `data_product`    -- data product search string, e.g. `'human/infection/SARS-CoV-2/%'`.
 - `component`       -- as above, optional search string for components names.
-- `data_type`       -- optionally specify to return an array of this type, instead of a DataFrame.
+- `data_type`       -- (optional) specify to return an array of this type, instead of a DataFrame.
 """
 function read_estimate(cn::SQLite.DB, data_product::String; data_type=nothing)
     output = SQLite.DBInterface.execute(cn, READ_EST_SQL, (data_product, )) |> DataFrames.DataFrame
