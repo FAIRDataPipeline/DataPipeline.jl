@@ -42,5 +42,5 @@ function db_example()
 end
 
 ## run examples
-vanilla_example()
+# vanilla_example()
 db_example()

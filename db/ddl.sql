@@ -1,4 +1,4 @@
-
+const DDL_SQL = """
 CREATE TABLE IF NOT EXISTS data_product(
 	dp_id	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 	dp_name	TEXT NOT NULL,
@@ -36,3 +36,4 @@ SELECT d.dp_name, t.*, k.key, k.val
 FROM data_product d
 INNER JOIN toml_component t ON(d.dp_id = t.dp_id)
 INNER JOIN toml_keyval k ON(t.comp_id = k.comp_id);
+"""

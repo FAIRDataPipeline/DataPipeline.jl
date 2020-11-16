@@ -205,14 +205,15 @@ Refresh and load data products from the SCRC data registry. Checks the file hash
 - `use_axis_arrays`     -- convert the output to AxisArrays, where applicable.
 - `use_sql`             -- load SQLite database and return connection.
 - `sql_file`            -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
+- `db_path`             -- (optional) specify the filepath of the database to use (or create.)
 - `force_db_refresh`    -- overide filehash check on database insert.
 - `verbose`             -- set to `true` to show extra output in the console.
 """
-function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool=false, use_sql::Bool = false, sql_file::String="", force_db_refresh::Bool=false, verbose::Bool=false)
+function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool=false, use_sql::Bool = false, sql_file::String="", db_path::String=string(string(rstrip(out_dir, '/'), "/"), basename(yaml_filepath), ".db"), force_db_refresh::Bool=false, verbose::Bool=false)
     out_dir = string(rstrip(out_dir, '/'), "/")
     md = process_yaml_file(yaml_filepath, out_dir, verbose)
     if use_sql                      # SQLite connection
-        db_path = string(out_dir, basename(yaml_filepath), ".db")
+        # db_path = string(out_dir, basename(yaml_filepath), ".db")
         output = load_data_per_yaml(md, db_path, force_db_refresh, verbose)
         if length(sql_file) > 0     # optional sql file
             print(" - running: ", sql_file)

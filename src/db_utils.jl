@@ -1,32 +1,50 @@
 import SQLite
 import DataFrames
 
-const DDL_SQL = "db/ddl.sql"
+# const DDL_SQL = "db/ddl.sql"
+include("../db/ddl.sql")
+
 const DB_TYPE_MAP = Dict(String => "TEXT", Int32 => "INTEGER", Float64 => "REAL")
 const DB_FLAT_ARR_APX = "_arr"
 const DB_H5_TABLE_APX = "_tbl"
 const DB_VAL_COL = "val"
 
-## read sql from file
-function get_sql_stmts(fp::String)
-    f = open(fp)
-    sql = strip(replace(read(f, String), "\n" => " "), ' ')
-    close(f)
+## split sql statements into array
+function get_sql_stmts_from_str(sql::String)
+    # sql = strip(replace(read(f, String), "\n" => " "), ' ')
+    sql = strip(strip(sql, ' '), '\n')
     return split(rstrip(sql, ';'), ';')
 end
 
-## process sql file
-function proc_sql_file!(cn::SQLite.DB, fp::String)
-    sql = get_sql_stmts(fp)
+## execute sql
+function proc_sql!(cn::SQLite.DB, sql::Array{SubString{String},1})
     for i in eachindex(sql)
         SQLite.execute(cn, sql[i])
     end
 end
 
+## process statements from single string
+function proc_sql_str!(cn::SQLite.DB, sql::String)
+    proc_sql!(cn, get_sql_stmts_from_str(sql))
+end
+
+## read sql from file
+function get_sql_stmts_from_file(fp::String)
+    f = open(fp)
+    sql = get_sql_stmts_from_str(read(f, String))
+    close(f)
+    return sql
+end
+
+## process sql file
+function proc_sql_file!(cn::SQLite.DB, fp::String)
+    proc_sql!(cn, get_sql_stmts_from_file(fp))
+end
+
 ## initialise db from file
 function init_yaml_db(db_path::String)
     output = SQLite.DB(db_path)
-    proc_sql_file!(output, DDL_SQL)
+    proc_sql_str!(output, DDL_SQL)
     return output
 end
 
