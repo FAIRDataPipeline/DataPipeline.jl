@@ -37,8 +37,8 @@ function get_3d_km_grid_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::St
     df = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
     ## scottish population AxisArray
     axis_size = Tuple(Int64[length(d) for d in dim_ax])
-    data = zeros(typeof(df.val[1]), axis_size)
-    output = AxisArrays.AxisArray(data, Tuple(dim_ax))
+    # data = zeros(typeof(df.val[1]), axis_size)
+    output = AxisArrays.AxisArray(zeros(typeof(df.val[1]), axis_size), Tuple(dim_ax))
     for row in eachrow(df)
         output[AxisArrays.atvalue(row[Symbol(dims[1])]km), AxisArrays.atvalue(row[Symbol(dims[2])]km), AxisArrays.atvalue(row[Symbol(dims[3])])] = row.val
     end

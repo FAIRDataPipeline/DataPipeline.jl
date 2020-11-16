@@ -14,9 +14,9 @@ function vanilla_example()
     data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_axis_arrays=false, verbose=true)
     # access data product by name
     println("\nExample one - access data product / component by name:")
-    dp = data["human/infection/SARS-CoV-2/symptom-delay"]
+    dp = data["human/infection/SARS-CoV-2/infectious-duration"]
     println(" ", dp)
-    println(" - e.g. distribution name: ", dp["symptom-delay"]["distribution"])
+    println(" - e.g. component type: ", dp["infectious-duration"]["type"])
 
     # loop through Dict of data products
     println("\n\nExample two - loop through Dict of data products:")
@@ -42,5 +42,5 @@ function db_example()
 end
 
 ## run examples
-# vanilla_example()
+vanilla_example()
 db_example()
