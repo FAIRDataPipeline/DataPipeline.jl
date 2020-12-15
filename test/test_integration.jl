@@ -8,7 +8,7 @@ Test.@testset "simulationdata" begin
     accessfile = "test/access-example.yaml"
     covid_inf_dur = 321.6
     remove_accessfile() = rm(accessfile, force=true)
-    # remove_data() = rm("test/data", recursive=true)
+    remove_data() = rm("test/data", recursive=true)
 
     ### Basic tests to check integration ###
 
@@ -22,11 +22,12 @@ Test.@testset "simulationdata" begin
     Test.@testset "Database usage" begin
         remove_accessfile()
         Test.@test !isfile(accessfile)
-        db = DataRegistryUtils.fetch_data_per_yaml(dataconfig, dataout, use_sql=true, access_log_path=accessfile)
+        db = DataRegistryUtils.fetch_data_per_yaml(dataconfig, dataout, use_sql=true, access_log_path=accessfile, verbose=true)
         x = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", data_type=Float64)[1]
         Test.@test x == covid_inf_dur
         Test.@test isfile(accessfile)
-        # remove_accessfile()
+        remove_accessfile()
+        remove_data()
     end
 
     # @testset "Do-block usage" begin

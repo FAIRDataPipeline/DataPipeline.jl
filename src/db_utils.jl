@@ -123,13 +123,16 @@ function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HD
     push!(dim_titles, DB_VAL_COL)               # measure column
     ## ddl / dml
     idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
-    dims = Array[]                              # fetch named dimensions
-    for d in 1:nd
+    # dims = Array[]
+    dims = Array{Array{Any,1}}(undef, nd)
+    for d in 1:nd                               # fetch named dimensions
         dim_names = get_dim_names(h5, d, size(arr)[d])
         idx = Int64[t[d] for t in idc]
-        nd = dim_names[idx]                     # 'named' dimension d
-        push!(dims, nd)
+        # nd = dim_names[idx]                     # 'named' dimension d
+        # push!(dims, nd)
+        dims[d] = dim_names[idx]
     end
+    verbose && println(" - dims := ", typeof(dims))
     df = DataFrames.DataFrame(dims)             # convert to df
     df.val = [arr[i] for i in eachindex(arr)]   # add data
     DataFrames.rename!(df, Symbol.(dim_titles)) # column names
