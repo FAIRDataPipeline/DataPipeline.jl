@@ -9,4 +9,4 @@ read:
         version: 0.1.0
     - where:
         data_product: human/demographics/population/scotland
-        version: 1.0.2
+        version: 1.0.1
