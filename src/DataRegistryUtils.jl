@@ -5,6 +5,7 @@ import HTTP
 import JSON
 import FTPClient
 import SHA
+import Dates
 
 ### YAML file processing ###
 
@@ -190,7 +191,7 @@ function process_yaml_file(d::String, out_dir::String, verbose::Bool)
         push!(fhs, res.file_hash)
     end
     println(" - files refreshed", err_cnt == 0 ? "." : ", but issues were detected.")
-    return (dp_name=dpnms, dp_file=fps, dp_hash=fhs, dp_version=dp_version)
+    return (dp_name=dpnms, dp_file=fps, dp_hash=fhs, dp_version=dp_version, config=data)
 end
 
 ## public function
@@ -207,13 +208,22 @@ Refresh and load data products from the SCRC data registry. Checks the file hash
 - `sql_file`            -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
 - `db_path`             -- (optional) specify the filepath of the database to use (or create.)
 - `force_db_refresh`    -- overide filehash check on database insert.
+- 'access_log_path'     -- filepath of .yaml access log.
 - `verbose`             -- set to `true` to show extra output in the console.
 """
-function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool=false, use_sql::Bool = false, sql_file::String="", db_path::String=string(string(rstrip(out_dir, '/'), "/"), basename(yaml_filepath), ".db"), force_db_refresh::Bool=false, verbose::Bool=false)
+function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool=false,
+    use_sql::Bool = false, sql_file::String="", db_path::String=string(string(rstrip(out_dir, '/'), "/"), basename(yaml_filepath), ".db"),
+    force_db_refresh::Bool=false, access_log_path::String=string(rstrip(out_dir, '/'), "/access-log.yaml"), verbose::Bool=false)
+
+    st = Dates.now()                                        # initialise
     out_dir = string(rstrip(out_dir, '/'), "/")
-    md = process_yaml_file(yaml_filepath, out_dir, verbose)
-    if use_sql                      # SQLite connection
-        # db_path = string(out_dir, basename(yaml_filepath), ".db")
+    md = process_yaml_file(yaml_filepath, out_dir, verbose) # read yaml
+    function write_log()                                    # write access log
+        # TO DO: version #s? ***
+        run_md = Dict("open_timestamp"=>st, "close_timestamp"=>Dates.now(), "data_directory"=>out_dir)
+        YAML.write_file(access_log_path, Dict("run_metadata"=>run_md, "config"=>md.config))
+    end
+    if use_sql                                          # SQLite connection
         output = load_data_per_yaml(md, db_path, force_db_refresh, verbose)
         if length(sql_file) > 0     # optional sql file
             print(" - running: ", sql_file)
@@ -224,6 +234,7 @@ function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; 
                 println(" - SQL ERROR:\n -- ", e)
             end
         end
+        write_log()
         return output
     else                            # return data in memory
         output = Dict()
@@ -231,6 +242,7 @@ function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; 
             dp = read_data_product(md.dp_file[i]; verbose)
             output[md.dp_name[i]] = dp
         end
+        write_log()
         return output
     end
 end

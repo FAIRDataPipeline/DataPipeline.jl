@@ -1,3 +1,4 @@
 docs/build/
 out/
 examples/*.jld
+test/data/
