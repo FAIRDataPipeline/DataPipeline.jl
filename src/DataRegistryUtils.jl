@@ -77,21 +77,12 @@ function insert_storage_location(path::String, hash::String, description::String
     return resp["url"]
 end
 
-## (register) fetch storage location object id CHANGE THIS ***********
-# function search_storage_location(path::String, hash::String, description::String, root_id::String, scrc_access_tkn::String)
-#     ## check storage location
-#     search_url = string(API_ROOT, "storage_location/?path=", path)
-#     resp = http_get_json(search_url)
-#     search_cnt::Int64 = resp["count"]
-#     if search_cnt == 0  ## add storage location
-#         return insert_storage_location(path, hash, description, root_id, scrc_access_tkn)
-#     else                ## match found, return object id
-#         sl_id = resp["results"][1]["url"]
-#         obj_search = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl_id, SL_ROOT))
-#         resp = http_get_json(obj_search)
-#         return resp["results"][1]["url"]
-#     end
-# end
+## check storage location
+function search_storage_location(path::String, hash::String, root_id::String)
+    tf_sr_id = get_id_from_root(root_id, STR_ROOT)
+    search_url = string(API_ROOT, "storage_location/?path=", path, "&hash=", hash, "&storage_root=", tf_sr_id)
+    return http_get_json(search_url)
+end
 
 ## register model as 'code repo release'
 """
@@ -115,14 +106,12 @@ function register_github_model(model_name::String, model_version::String, model_
     model_hash::String, scrc_access_tkn::String; model_description::String=DF_MODEL_REL_DESC,
     model_website::String=model_repo, storage_root_url="https://github.com/", storage_root_id=STR_RT_GITHUB)
 
-    ## fetch storage location uri
-    sl_path = replace(model_repo, storage_root_url => "")
-    # obj_uri = search_storage_location(sl_path, model_hash, model_description, storage_root_id, scrc_access_tkn)
-
     ## check storage location
-    tf_sr_id = get_id_from_root(storage_root_id, STR_ROOT)
-    search_url = string(API_ROOT, "storage_location/?path=", sl_path, "&hash=", model_hash, "&storage_root=", tf_sr_id)
-    resp = http_get_json(search_url)
+    sl_path = replace(model_repo, storage_root_url => "")
+    resp = search_storage_location(sl_path, model_hash, storage_root_id)
+    # tf_sr_id = get_id_from_root(storage_root_id, STR_ROOT)
+    # search_url = string(API_ROOT, "storage_location/?path=", sl_path, "&hash=", model_hash, "&storage_root=", tf_sr_id)
+    # resp = http_get_json(search_url)
     # search_cnt::Int64 = resp["count"]
     if resp["count"] == 0  ## add storage location
         obj_id = insert_storage_location(sl_path, model_hash, model_description, storage_root_id, scrc_access_tkn)

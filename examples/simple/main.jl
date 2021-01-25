@@ -47,11 +47,11 @@ include("access-token.jl")
 # NB. format: scrc_access_tkn = "token [insert token here (without '[]')]"
 
 ## register model code release
-# NB. uncomment to try it out!
+# NB. returns existing URI if code repo is already registered
 code_release_id = DataRegistryUtils.register_github_model(model_config, scrc_access_tkn)
 println("code_release_id: ", code_release_id)
 
-## NB. this is equivalent to:
+## NB. this code is equivalent to:
 # const model_name = "DRU simple example"
 # const model_repo = "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
 # const model_version = "0.0.1"
