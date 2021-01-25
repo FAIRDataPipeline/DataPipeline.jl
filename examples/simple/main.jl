@@ -4,16 +4,22 @@
 # - how to read data products from the DR,
 # - utilise them in a simple simulation model
 # - register model code releases
-# - and register model runs
+# - and register model runs.
 #
-# Steps:
+# Steps:                                                    Line
+# 1. preliminaries                                          L22
+# 2. config files and scripts                               L30
+# 3. register 'code repo release' [model code] in the DR    L40
+# 4. read data products from the DR                         L66
+# 5. run model simulation                                   L85
+# 6. register model 'code run' in the DR                    L122
 #
 # Author: Martin Burke (martin.burke@bioss.ac.uk)
 # Date: 24-Jan-2021
 #### #### #### #### ####
 
 
-### 1. import packages ###
+### 1. prelim: import packages ###
 import DataRegistryUtils    # pipeline stuff
 import DPOMPs               # simulation of epidemiological models
 import YAML                 # for reading model config file
@@ -76,12 +82,12 @@ inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-
 lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", data_type=Float64)[1] / 24
 
 
-### 5. run model ###
+### 5. run model simulation ###
 # here we run a simple SEIR simulation based on the
 # downloaded parameters* and plot the results
 # * however note that the population size and contract
-# rate: beta (as well as the random seed) are read
-# in from the model_config file as constants
+# parameter beta (as well as the random seed) are read
+# instead from the model_config file.
 
 ## read constants from model config file
 mc = YAML.load_file(model_config)
