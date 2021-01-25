@@ -6,7 +6,7 @@
 # - register model code releases
 # - and register model runs.
 #
-# Steps:                                                    Line
+# Steps:                                                    Code:
 # 1. preliminaries                                          L22
 # 2. config files and scripts                               L30
 # 3. register 'code repo release' [model code] in the DR    L40
