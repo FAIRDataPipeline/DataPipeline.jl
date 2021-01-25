@@ -1,4 +1,7 @@
 docs/build/
 out/
+examples/simple/data/
+examples/simulation/data/
 examples/*.jld
 test/data/
+examples/simple/access-token.jl

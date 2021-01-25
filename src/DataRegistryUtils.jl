@@ -11,10 +11,17 @@ import Dates
 
 const API_ROOT = "https://data.scrc.uk/api/"
 const NS_ROOT = string(API_ROOT, "namespace/")
+const STR_ROOT = string(API_ROOT, "storage_root/")
+const SL_ROOT = string(API_ROOT, "storage_location/")
+const TF_ROOT = string(API_ROOT, "text_file/")
 const DATA_OUT = "./out/"
 const NULL_HASH = "na"
 const NULL_FILE = "no_match"
 const VERSION_LATEST = "latest"
+const STR_RT_GITHUB = "https://data.scrc.uk/api/storage_root/11/"
+const STR_RT_TEXTFILE = "https://data.scrc.uk/api/storage_root/203/"
+const DF_MODEL_REL_DESC = "Julia model."
+const DF_MR_SUB_SCR_DESC = "Submission script."
 
 ## file hash check results
 struct DPHashCheck
@@ -29,13 +36,237 @@ include("data_prod_proc.jl")
 ## db output
 include("db_utils.jl")
 
+## function get id from uri
+function get_id_from_root(url::String, root::String)
+    return replace(replace(url, root => ""), "/" => "")
+end
+
+## get file hash
+function get_file_hash(fp::String)
+    fhash = open(fp) do f
+        return bytes2hex(SHA.sha1(f))
+    end
+    return fhash
+end
+
+## read data regitry
+function http_get_json(url::String)
+    r = HTTP.request("GET", url)
+    return JSON.parse(String(r.body))
+end
+
+### upload to data registry
+function http_post_data(table::String, data, scrc_access_tkn::String)
+    url = string(API_ROOT, table)
+    # println(" posting data to table := ", url, ": \n", data)
+    headers = Dict("Authorization"=>scrc_access_tkn, "Content-Type" => "application/json")
+    r = HTTP.request("POST", url, headers=headers, body=JSON.json(data))
+    resp = JSON.parse(String(r.body))
+    # println(" - response: \n ", resp)
+    return resp
+end
+
+## register storage location and return object id
+function insert_storage_location(path::String, hash::String, description::String, root_id::String, scrc_access_tkn::String)
+    body = Dict("path"=>path, "hash"=>hash, "storage_root"=>root_id)
+    resp = http_post_data("storage_location", body, scrc_access_tkn)
+    sl_id = resp["url"]
+    ## add object
+    body = (description=description, storage_location=sl_id)
+    resp = http_post_data("object", body, scrc_access_tkn)
+    return resp["url"]
+end
+
+## (register) fetch storage location object id CHANGE THIS ***********
+# function search_storage_location(path::String, hash::String, description::String, root_id::String, scrc_access_tkn::String)
+#     ## check storage location
+#     search_url = string(API_ROOT, "storage_location/?path=", path)
+#     resp = http_get_json(search_url)
+#     search_cnt::Int64 = resp["count"]
+#     if search_cnt == 0  ## add storage location
+#         return insert_storage_location(path, hash, description, root_id, scrc_access_tkn)
+#     else                ## match found, return object id
+#         sl_id = resp["results"][1]["url"]
+#         obj_search = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl_id, SL_ROOT))
+#         resp = http_get_json(obj_search)
+#         return resp["results"][1]["url"]
+#     end
+# end
+
+## register model as 'code repo release'
+"""
+    register_github_model(model_config, scrc_access_tkn; ... )
+    register_github_model(model_name, model_version, model_repo, scrc_access_tkn; ... )
+
+Register model as a `code_repo_release` in the SCRC data registry, from GitHub (default) or another source.
+
+If used, the `model_config` file should include (at a minimum) the ``model_name``, ``model_version`` and ``model_repo`` fields. Else these can be passed directly to the function.
+
+**Parameters**
+- `model_config`        -- path to the model config .yaml file.
+- `model_name`          -- label for the model release.
+- `model_version`       -- version number in the format 'n.n.n', e.g. ``0.0.1``.
+- `model_repo`          -- url of the model [e.g. GitHub] repo.
+- `scrc_access_tkn`     -- access token (see https://data.scrc.uk/docs/.)
+- `model_description`   -- (optional) description of the model.
+- `model_website`       -- (optional) website, e.g. for an accompanying paper, blog, or model documentation.
+"""
+function register_github_model(model_name::String, model_version::String, model_repo::String,
+    model_hash::String, scrc_access_tkn::String; model_description::String=DF_MODEL_REL_DESC,
+    model_website::String=model_repo, storage_root_url="https://github.com/", storage_root_id=STR_RT_GITHUB)
+
+    ## fetch storage location uri
+    sl_path = replace(model_repo, storage_root_url => "")
+    # obj_uri = search_storage_location(sl_path, model_hash, model_description, storage_root_id, scrc_access_tkn)
+
+    ## check storage location
+    tf_sr_id = get_id_from_root(storage_root_id, STR_ROOT)
+    search_url = string(API_ROOT, "storage_location/?path=", sl_path, "&hash=", model_hash, "&storage_root=", tf_sr_id)
+    resp = http_get_json(search_url)
+    # search_cnt::Int64 = resp["count"]
+    if resp["count"] == 0  ## add storage location
+        obj_id = insert_storage_location(sl_path, model_hash, model_description, storage_root_id, scrc_access_tkn)
+        ## register release
+        body = (name=model_name, version=model_version, object=obj_id, website=model_website)
+        resp = http_post_data("code_repo_release", body, scrc_access_tkn)
+        println("NB. code repo release URI := ", resp["url"])
+        return resp["url"]
+    else                ## match found, return object id
+        sl_id = resp["results"][1]["url"]
+        obj_search = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl_id, SL_ROOT))
+        resp = http_get_json(obj_search)
+        return resp["results"][1]["code_repo_release"]
+    end
+end
+
+## register by config file
+# - returns code_repo_release uri
+function register_github_model(model_config::String, scrc_access_tkn::String;
+    storage_root_url="https://github.com/", storage_root_id=STR_RT_GITHUB)
+
+    model_hash = get_file_hash(model_config)
+    ## read optional params
+    mc = YAML.load_file(model_config)
+    model_description = haskey(mc, "model_description") ? mc["model_description"] : DF_MODEL_REL_DESC
+    model_website = haskey(mc, "model_website") ? mc["model_website"] : mc["model_repo"]
+    ## call function
+    return register_github_model(mc["model_name"], mc["model_version"], mc["model_repo"], model_hash,
+        scrc_access_tkn, model_description=model_description, model_website=model_website,
+        storage_root_url=storage_root_url, storage_root_id=storage_root_id)
+end
+
+## insert text file
+function insert_text_file(text::String, description::String, hash_val::String, scrc_access_tkn::String)
+    ## add, e.g. model config, as text file
+    body = Dict("text"=>text)
+    resp = http_post_data("text_file", body, scrc_access_tkn)
+    tf_id = resp["url"]
+    path = get_id_from_root(tf_id, TF_ROOT)#, "/?format=text")
+    ## add storage location
+    body = Dict("path"=>path, "hash"=>hash_val, "storage_root"=>STR_RT_TEXTFILE)
+    resp = http_post_data("storage_location", body, scrc_access_tkn)
+    sl_id = resp["url"]
+    ## add object and return id
+    body = (description=description, storage_location=sl_id)
+    resp = http_post_data("object", body, scrc_access_tkn)
+    return resp["url"]
+end
+
+"""
+    register_text_file(text, code_repo_release_uri, model_run_description, scrc_access_tkn, search=true)
+
+Post an entry to the ``text_file`` endpoint of the SCRC Data Registry.
+
+Note that according to the docs, "".
+
+**Parameters**
+- `text`            -- text file contents.
+- `description`     -- object description.
+- `scrc_access_tkn` -- access token (see https://data.scrc.uk/docs/.)
+- `search`          -- (optional, default=`true`) check for existing entry by path and file hash.
+- `hash_val`        -- (optional) specify the file hash, else it is computed based on `text`.
+"""
+function register_text_file(text::String, description::String, scrc_access_tkn::String, search::Bool=true, hash_val::String=bytes2hex(SHA.sha1(text)))
+    tf_sr_id = get_id_from_root(STR_RT_TEXTFILE, STR_ROOT)
+    ## check storage location
+    search_url = string(API_ROOT, "storage_location/?hash=", hash_val, "&storage_root=", tf_sr_id)
+    resp = http_get_json(search_url)
+    search_cnt::Int64 = resp["count"]
+    if search_cnt == 0              ## no matching entry found, insert new one
+        return insert_text_file(text, description, hash_val, scrc_access_tkn)
+    else                            ## else get existing text file object uri
+        for i in 1:search_cnt
+            txt_search = string(API_ROOT, "text_file/", resp["results"][i]["path"])
+            try
+                rs = http_get_json(txt_search)
+                if text == rs["text"]
+                    sl_id = resp["results"][i]["url"]
+                    obj_search = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl_id, SL_ROOT))
+                    return http_get_json(obj_search)["results"][1]["url"]
+                end
+            catch err
+                isa(err, HTTP.ExceptionRequest.StatusError) || rethrow(err)
+                # println(" WARNING api error: ", txt_search)
+            end
+        end     ## no match found
+        return insert_text_file(text, description, hash_val, scrc_access_tkn)
+    end
+end
+
+## (register) fetch model config id
+function search_model_config(model_config::String, scrc_access_tkn::String; add_description::String="Model config file.")
+    fh = get_file_hash(model_config)
+    tf_rt = get_id_from_root(STR_RT_TEXTFILE, STR_ROOT)
+    mc_text = read(model_config, String)
+    return register_text_file(mc_text, add_description, scrc_access_tkn, true, fh)
+end
+
+## register model run as 'code_run'
+"""
+    register_model_run(model_config, code_repo_release_uri, model_run_description, scrc_access_tkn)
+
+Upload model run to the ``code_run`` endpoint of the SCRC Data Registry.
+
+**Parameters**
+- `model_config`            -- path to the model config .yaml file.
+- `submission_script_text`  -- e.g. 'julia my/julia/code.jl'.
+- `code_repo_release_uri`   -- Data Registry uri of the model ``code_repo_release``, i.e. the model code such as an (already registered) GitHub repo.
+- `model_run_description`   -- description of the model run.
+- `scrc_access_tkn`         -- access token (see https://data.scrc.uk/docs/.)
+"""
+function register_model_run(model_config::String, submission_script_text::String, code_repo_release_uri::String, model_run_description::String, scrc_access_tkn::String;
+    submission_script_uri::String="")
+
+    rt = Dates.now()
+    ## get model config object id
+    mc_id = search_model_config(model_config::String, scrc_access_tkn)
+    ## get submission script object id
+    submission_script_uri = register_text_file(submission_script_text, DF_MR_SUB_SCR_DESC, scrc_access_tkn, true)
+    ## get code repo object id
+    resp = http_get_json(code_repo_release_uri)
+    repo_obj_id = resp["object"]
+
+    ## inputs / outputs - TBA ****
+    # - OBJECT COMPONENTS
+    # body = (object=run_obj_id, name=inputs, description=)
+    # resp = http_post_data("object_component", body, scrc_access_tkn)
+    inputs = []
+    outputs = []
+
+    body = (run_date=rt, description=model_run_description, code_repo=repo_obj_id, model_config=mc_id, submission_script=submission_script_uri, inputs=inputs, outputs=outputs)
+    resp = http_post_data("code_run", body, scrc_access_tkn)
+    return resp["url"]
+end
+
+### END
+
+
 ## get namespace id (or use default)
 function get_ns_cd(ns_name)
     url = string(API_ROOT, "namespace/?name=", ns_name)
-    r = HTTP.request("GET", url)
-    resp = JSON.parse(String(r.body))
+    resp = http_get_json(url)
     ns_url = resp["results"][1]["url"]
-    ns_cd = replace(replace(ns_url, NS_ROOT => ""), "/" => "")
+    ns_cd = get_id_from_root(ns_url, NS_ROOT)
     return parse(Int, ns_cd)
 end
 # - as above
@@ -48,10 +279,12 @@ function get_ns_cd(dpd, df_cd)
     end
 end
 
-## storage root
+## storage root types
 # 1 - https://raw.githubusercontent.com/ScottishCovidResponse/temporary_data/master/
 # 14 - https://raw.githubusercontent.com/ScottishCovidResponse/DataRepository/
 # 9 - ftp://boydorr.gla.ac.uk/scrc/
+# 11 - github
+# 203 - https://data.scrc.uk/api/text_file/
 function get_storage_type(rt_url)
     if (rt_url == string(API_ROOT, "storage_root/1/") || rt_url == string(API_ROOT, "storage_root/14/"))
         return 1    # http / toml
@@ -63,18 +296,14 @@ function get_storage_type(rt_url)
     end
 end
 
-
 ## get storage location
 function get_storage_loc(obj_url)
-    r = HTTP.request("GET", obj_url)                    # object
-    resp = JSON.parse(String(r.body))
-    r = HTTP.request("GET", resp["storage_location"])   # storage location
-    resp = JSON.parse(String(r.body))
+    resp = http_get_json(obj_url)                       # object
+    resp = http_get_json(resp["storage_location"])      # storage location
     filepath = resp["path"]
     filehash = resp["hash"]
     rt_url = resp["storage_root"]
-    r = HTTP.request("GET", rt_url)                     # storage root
-    resp = JSON.parse(String(r.body))
+    resp = http_get_json(rt_url)                        # storage root
     return (s_rt = resp["root"], s_fp = filepath, s_hs = filehash, rt_tp = get_storage_type(rt_url))
 end
 
@@ -148,8 +377,7 @@ end
 ## download data (if out of date)
 function refresh_dp(dp, ns_cd, version::String, out_dir::String, verbose::Bool, fail_on_hash_mismatch::Bool)
     url = string(API_ROOT, "data_product/?name=", dp, "&namespace=", ns_cd)
-    r = HTTP.request("GET", url)
-    resp = JSON.parse(String(r.body))
+    resp = http_get_json(url)
     if resp["count"] == 0   # nothing found
         println("WARNING: no results found for ", url)
         return DPHashCheck(false, NULL_FILE, NULL_HASH)
@@ -249,5 +477,6 @@ end
 
 export fetch_data_per_yaml, read_data_product
 export read_estimate, read_table
+export register_github_model
 
 end # module

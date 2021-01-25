@@ -37,7 +37,7 @@ function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, ve
     if HDF5.exists(h5, TABLE_OBJ_NAME)
         d = read_h5_table(h5, use_axis_arrays)
         output_dict[gnm] = d
-    elseif (HDF5.exists(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.HDF5Group)
+    elseif (HDF5.exists(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
         d = read_h5_array(h5)
         output_dict[gnm] = d
     else    # group - recurse

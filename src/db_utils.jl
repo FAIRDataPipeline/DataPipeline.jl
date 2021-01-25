@@ -82,14 +82,14 @@ function get_values_str(n::Int64)
 end
 
 ## placeholder
-function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.HDF5File, verbose::Bool)
+function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.File, verbose::Bool)
     println("*** h5 group type: ", typeof(h5), " - TO BE ADDED ***")
 end
 
 ## try get dim titles, else give generic column name
 function get_dim_title(h5, d::Int64, verbose::Bool)
     ttl = string("Dimension_", d, "_title")
-    if HDF5.exists(h5, ttl)
+    if haskey(h5, ttl)
         return replace(HDF5.read(h5[ttl])[1], " " => "_");
     else
         cn = string("col", d)
@@ -112,7 +112,7 @@ end
 clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
 
 ## flatten Nd array and load as 2d table
-function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.HDF5Group, verbose::Bool)
+function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
     arr = read_h5_array(h5)
     verbose && println(" - loading array : ", size(arr), " => ", tablename)
     nd = ndims(arr)                             # fetch columns names
@@ -144,12 +144,12 @@ end
 ## recursively search and load table/array
 function process_h5_file_group!(cn::SQLite.DB, tablestub::String, h5, dp_id::Int64, verbose::Bool)
     gnm = HDF5.name(h5)
-    if HDF5.exists(h5, TABLE_OBJ_NAME)
+    if Base.haskey(h5, TABLE_OBJ_NAME)
         tablename = get_table_name(tablestub, gnm, DB_H5_TABLE_APX)
         d = read_h5_table(h5, false)
         verbose && println(" - loading table := ", tablename)
         load_component!(cn, dp_id, tablename, d)
-    elseif (HDF5.exists(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.HDF5Group)
+    elseif (haskey(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
         tablename = get_table_name(tablestub, gnm, DB_FLAT_ARR_APX)
         flat_load_array!(cn, dp_id, tablename, h5, verbose)
     else
