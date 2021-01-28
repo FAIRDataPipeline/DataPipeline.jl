@@ -85,7 +85,7 @@ lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-
 ### 5. run model simulation ###
 # here we run a simple SEIR simulation based on the
 # downloaded parameters* and plot the results
-# * however note that the population size and contract
+# * however note that the population size and contact
 # parameter beta (as well as the random seed) are read
 # instead from the model_config file.
 
@@ -94,7 +94,7 @@ mc = YAML.load_file(model_config)
 const p = mc["initial_s"]   # population size
 const t = mc["max_t"]       # simulation time
 const beta = mc["beta"]     # nb. contact rate := beta SI / N
-# NB. this is roughly equivalent to:
+# NB. this is equivalent to:
 # const p = 1000
 # const t = 180.0
 # const beta = 0.7
@@ -122,7 +122,7 @@ println(DPOMPs.plot_trajectory(x))
 ### 6. register model run
 # finally we register this particular simulation with
 # the 'code_run' endpoint of the DR's RESTful API
-# NB. 'inputs' and 'outputs' are a WIP!
+# NB. 'inputs' and 'outputs' are currently a WIP
 model_run_description = string(mc["model_name"], ": SEIR simulation.")
 model_run_id = DataRegistryUtils.register_model_run(model_config, submission_script,
     code_release_id, model_run_description, scrc_access_tkn)

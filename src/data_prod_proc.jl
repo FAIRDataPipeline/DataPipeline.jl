@@ -61,7 +61,7 @@ end
 # end
 
 """
-    read_data_product(filepath; use_axis_arrays = false, verbose = false)
+    read_data_product_from_file(filepath; use_axis_arrays = false, verbose = false)
 
 Read HDF5 or TOML file from local system.
 
@@ -70,7 +70,7 @@ Read HDF5 or TOML file from local system.
 - `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
-function read_data_product(filepath::String; use_axis_arrays::Bool = false, verbose::Bool = false)
+function read_data_product_from_file(filepath::String; use_axis_arrays::Bool = false, verbose::Bool = false)
     verbose && println("processing file: ", filepath)
     occursin(".h5", filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
     occursin(".toml", filepath) && (return TOML.parsefile(filepath))

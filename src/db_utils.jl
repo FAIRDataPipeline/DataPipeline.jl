@@ -82,9 +82,9 @@ function get_values_str(n::Int64)
 end
 
 ## placeholder
-function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.File, verbose::Bool)
-    println("*** h5 group type: ", typeof(h5), " - TO BE ADDED ***")
-end
+# function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.File, verbose::Bool)
+#     println("*** h5 group type: ", typeof(h5), " - TO BE ADDED ***")
+# end
 
 ## try get dim titles, else give generic column name
 function get_dim_title(h5, d::Int64, verbose::Bool)
@@ -280,7 +280,7 @@ end
 """
     read_table(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
 
-SQLite Data Registry helper function. Search and return HDF5-based table data resources registered in `cn`.
+SQLite Data Registry helper function. Search and return [HDF5] table data as a `DataFrame`.
 
 **Parameters**
 - `cn`              -- SQLite.DB object.

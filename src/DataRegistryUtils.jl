@@ -464,8 +464,8 @@ function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; 
     end
 end
 
-export fetch_data_per_yaml, read_data_product
+export fetch_data_per_yaml, read_data_product_from_file
 export read_estimate, read_table
-export register_github_model
+export register_github_model, register_model_run, register_text_file
 
 end # module
