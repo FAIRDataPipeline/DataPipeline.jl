@@ -4,7 +4,7 @@ using SQLite, DataFrames
 import Test
 
 ## sim test
-include("test_integration.jl")
+## include("test_integration.jl")
 
 ## main package test
 Test.@testset "package_test" begin
@@ -33,7 +33,7 @@ Test.@testset "package_test" begin
 
     ### Example: read data as SQLite connection
     Test.@testset "eg_sql" begin
-        db = DataRegistryUtils.read_data_product(fp, use_sql = true)
+        db = DataRegistryUtils.read_data_product_from_file(fp, use_sql = true)
         x = DBInterface.execute(db, "SELECT * FROM data_product") |> DataFrame
         Test.@test true
     end
