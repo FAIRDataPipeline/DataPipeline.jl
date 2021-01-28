@@ -33,7 +33,7 @@ Test.@testset "package_test" begin
 
     ### Example: read data as SQLite connection
     Test.@testset "eg_sql" begin
-        db = DataRegistryUtils.read_data_product_from_file(fp, use_sql = true)
+        db = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql = true)
         x = DBInterface.execute(db, "SELECT * FROM data_product") |> DataFrame
         Test.@test true
     end

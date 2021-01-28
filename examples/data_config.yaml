@@ -8,6 +8,9 @@ read:
       data_product: human/infection/SARS-CoV-2/infectious-duration
       component: infectious-duration
   - where:
+      data_product: human/infection/SARS-CoV-2/symptom-delay
+      component: symptom-delay
+  - where:
       data_product: records/SARS-CoV-2/scotland/cases-and-management/mortality
   - where:
       data_product: records/SARS-CoV-2/scotland/cases_and_management
