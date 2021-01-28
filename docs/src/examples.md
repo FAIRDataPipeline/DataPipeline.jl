@@ -22,6 +22,14 @@ The example is also provided as working code (including the accompanying configu
 # wrkd = "/media/martin/storage/projects/AtomProjects/DataRegistryUtils.jl"; # hide
 ```
 
+## 0. Package installation
+
+The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
+
+```
+pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
+```
+
 ## 1. Preliminaries: import packages
 
 ```@repl 1

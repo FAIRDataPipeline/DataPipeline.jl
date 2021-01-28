@@ -44,6 +44,14 @@ Key features include:
 
 The SQLite layer is optional - the data can also be returned as a set of nested Dictionaries. However it is the recommended way of using the package since it provides for convenient pre-processing and as well as certain planned features of the package.
 
+## Installation
+
+The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
+
+```
+pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
+```
+
 ## Further development work
 
 There is ongoing development work to do, subject to feedback from users. In particular:
