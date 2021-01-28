@@ -101,7 +101,7 @@ end
 ## try get dim labels, else give generic labels
 function get_dim_names(h5, d::Int64, s::Int64)
     nms = string("Dimension_", d, "_names")
-    if HDF5.exists(h5, nms)
+    if haskey(h5, nms)
         return HDF5.read(h5[nms]);
     else
         return String[string("grp", i) for i in 1:s]
@@ -153,7 +153,7 @@ function process_h5_file_group!(cn::SQLite.DB, tablestub::String, h5, dp_id::Int
         tablename = get_table_name(tablestub, gnm, DB_FLAT_ARR_APX)
         flat_load_array!(cn, dp_id, tablename, h5, verbose)
     else
-        for g in HDF5.names(h5)     # group - recurse
+        for g in keys(h5)     # group - recurse
             process_h5_file_group!(cn, tablestub, h5[g], dp_id, verbose)
         end
     end

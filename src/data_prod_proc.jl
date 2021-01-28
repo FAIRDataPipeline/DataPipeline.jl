@@ -16,7 +16,7 @@ function read_h5_table(obj_grp, use_axis_arrays::Bool)
     obj = HDF5.read(obj_grp[TABLE_OBJ_NAME])
     if use_axis_arrays      # - option for 2d AxisArray output
         cn = collect(keys(obj[1]))
-        rn = HDF5.exists(obj_grp, ROWN_OBJ_NAME) ? HDF5.read(obj_grp[ROWN_OBJ_NAME]) : [1:length(obj)]
+        rn = haskey(obj_grp, ROWN_OBJ_NAME) ? HDF5.read(obj_grp[ROWN_OBJ_NAME]) : [1:length(obj)]
         arr = [collect(obj[i]) for i in eachindex(obj)]
         d = permutedims(reshape(hcat(arr...), length(cn), length(arr)))
         return AxisArrays.AxisArray(d, AxisArrays.Axis{:row}(rn), AxisArrays.Axis{:col}(cn))
@@ -34,14 +34,14 @@ end
 function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, verbose::Bool)
     gnm = HDF5.name(h5)
     verbose && println(" - processing group: ", gnm)
-    if HDF5.exists(h5, TABLE_OBJ_NAME)
+    if haskey(h5, TABLE_OBJ_NAME)
         d = read_h5_table(h5, use_axis_arrays)
         output_dict[gnm] = d
-    elseif (HDF5.exists(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
+    elseif (haskey(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
         d = read_h5_array(h5)
         output_dict[gnm] = d
     else    # group - recurse
-        for g in HDF5.names(h5)
+        for g in keys(h5)
             process_h5_file_group!(output_dict, h5[g], use_axis_arrays, verbose)
         end
     end

@@ -4,8 +4,8 @@ import DataFrames
 
 #### loading data ####
 
-TEST_FILE = "/home/martin/AtomProjects/DataRegistryUtils.jl/examples/data_config.yaml"
-DATA_OUT = "/home/martin/AtomProjects/DataRegistryUtils.jl/out/"
+TEST_FILE = "examples/data_config.yaml"
+DATA_OUT = "out/"
 
 #### examples for usage ####
 
