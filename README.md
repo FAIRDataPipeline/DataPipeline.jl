@@ -46,7 +46,7 @@ You can also use the package to read in a file that has already been downloaded,
 
 ```
 julia> fp = "/path/to/some/file.h5"
-julia> dp = DataRegistryUtils.read_data_product(fp, use_axis_arrays = true, verbose = false)
+julia> dp = DataRegistryUtils.read_data_product_from_file(fp, use_axis_arrays = true, verbose = false)
 julia> component = dp["/conversiontable/scotland"]
 ```
 

@@ -1,8 +1,9 @@
-import DataRegistryUtils
-import SQLite
-import DataFrames
-import Test
+# import DataRegistryUtils
+# import SQLite
+# import DataFrames
+# import Test
 
+## NB. called by pkg_test.jl
 Test.@testset "simulationdata" begin
     config = "test/data_config.yaml"
     dataout = "test/data/"
