@@ -456,7 +456,7 @@ function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; 
     else                            # return data in memory
         output = Dict()
         for i in eachindex(md.dp_name)
-            dp = read_data_product(md.dp_file[i]; verbose)
+            dp = read_data_product_from_file(md.dp_file[i]; verbose)
             output[md.dp_name[i]] = dp
         end
         write_log()

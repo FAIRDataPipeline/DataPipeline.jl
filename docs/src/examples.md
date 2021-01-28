@@ -33,7 +33,7 @@ import DataFrames
 ```
 
 ## 2. Specify config files, scripts and data directory
-These variables and the corresponding files determine the model configuration; data products to be downloaded; and the directory where the downloaded files are to be saved.
+These variables and the corresponding files determine the model configuration; data products to be downloaded; and the local directory where the downloaded files are to be saved.
 
 ```@repl 1
 model_config = string(wrkd, "/examples/simple/model_config.yaml");
