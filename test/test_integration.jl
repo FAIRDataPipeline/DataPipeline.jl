@@ -15,7 +15,7 @@ Test.@testset "simulationdata" begin
 
     # parameter estimate from file
     Test.@testset "File usage" begin
-        prm = DataRegistryUtils.read_data_product("test/parameter/example.toml")
+        prm = DataRegistryUtils.read_data_product_from_file("test/parameter/example.toml")
         Test.@test prm["example-estimate"]["value"] == 1.0
     end
 

@@ -19,7 +19,7 @@ The example is also provided as working code (including the accompanying configu
 | 6. Register model 'code run' in the DR                    | L122  |
 
 ```@repl 1
-wrkd = "/media/martin/storage/projects/AtomProjects/DataRegistryUtils.jl"; # hide
+# wrkd = "/media/martin/storage/projects/AtomProjects/DataRegistryUtils.jl"; # hide
 ```
 
 ## 1. Preliminaries: import packages
