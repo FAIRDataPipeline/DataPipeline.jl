@@ -8,16 +8,16 @@ The package is not currently registered and must be added via the package manage
 pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
 ```
 
-## Usage
-
-It is recommended to use a .yaml data configuration file to specify the data products to be downloaded. An example .yaml is given in the `examples` folder. Refer to https://data.scrc.uk/ for other data products available in the registry.
-
 ``` @repl 1
 using DataRegistryUtils
 ?fetch_data_per_yaml
 ```
 
 NB. a complete working example of this code is also provided in the `examples` folder.
+
+## Usage
+
+It is recommended to use a *.yaml* data configuration file to specify the data products to be downloaded. Some example *.yaml* file are included in the `examples` folder. Refer to https://data.scrc.uk/ for information about other data products available in the registry.
 
 ### Example: refesh data
 

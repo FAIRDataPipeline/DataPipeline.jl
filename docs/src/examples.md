@@ -44,9 +44,9 @@ import DataFrames
 These variables and the corresponding files determine the model configuration; data products to be downloaded; and the local directory where the downloaded files are to be saved.
 
 ```@repl 1
-model_config = string(wrkd, "/examples/simple/model_config.yaml");
-data_config = string(wrkd, "/examples/simple/data_config.yaml");
-data_dir = string(wrkd, "/examples/simple/data/");
+model_config = "/examples/simple/model_config.yaml";
+data_config = "/examples/simple/data_config.yaml";
+data_dir = "/examples/simple/data/";
 submission_script = "julia examples/simple/main.jl";
 ```
 
@@ -151,4 +151,6 @@ julia> model_run_id = DataRegistryUtils.register_model_run(model_config, submiss
 
 ## Finished!
 
-That concludes the example. Please note however that the registration of Data Products (notably, model 'inputs' and 'outputs') is currently a WIP, along with certain other planned features. See the home page for more information.
+That concludes the example.
+
+Please note that certain features, notably the registration of Data Products (i.e. model 'inputs' and 'outputs') is currently still a work in progress. See the home page for more information.
