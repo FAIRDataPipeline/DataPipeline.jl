@@ -97,6 +97,7 @@ Here we read some epidemiological parameters from the DR, so we can use them to 
 
 First, we process data config file and return a connection to the SQLite database. I.e. we download the data products:
 ```@repl 1
+println(pwd())
 db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true, verbose=false)
 ```
 
