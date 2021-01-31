@@ -12,4 +12,6 @@ pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
 
 ## Usage
 
-See the [package docs](https://scottishcovidresponse.github.io/DataRegistryUtils.jl/stable/) for instructions, examples and code snippets.
+The [package documentation][docs] has more information and examples.
+
+[docs]: https://scottishcovidresponse.github.io/DataRegistryUtils.jl/stable/
