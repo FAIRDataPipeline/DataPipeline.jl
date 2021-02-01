@@ -112,6 +112,7 @@ end
 clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
 
 ## flatten Nd array and load as 2d table
+# - NB. TBO *****
 function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
     arr = read_h5_array(h5)
     verbose && println(" - loading array : ", size(arr), " => ", tablename)
@@ -144,7 +145,7 @@ end
 ## recursively search and load table/array
 function process_h5_file_group!(cn::SQLite.DB, tablestub::String, h5, dp_id::Int64, verbose::Bool)
     gnm = HDF5.name(h5)
-    if Base.haskey(h5, TABLE_OBJ_NAME)
+    if haskey(h5, TABLE_OBJ_NAME)
         tablename = get_table_name(tablestub, gnm, DB_H5_TABLE_APX)
         d = read_h5_table(h5, false)
         verbose && println(" - loading table := ", tablename)

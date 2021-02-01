@@ -3,7 +3,7 @@ model_name: "DRU simple example"
 model_repo: "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
 model_version: "0.0.4"
 model_description: "A simple SEIR simulation for demonstrating use of the DataRegistryUtils.jl package."
-model_website: "https://mjb3.github.io/DPOMPs.jl/stable/"
+model_website: "https://mjb3.github.io/DiscretePOMP.jl/stable/"
 
 # simulation parameters
 random_seed: 1

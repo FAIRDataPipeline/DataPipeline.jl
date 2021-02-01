@@ -56,7 +56,7 @@ println("code_release_id: ", code_release_id)
 # const model_repo = "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
 # const model_version = "0.0.1"
 # const model_description = " ... " (insert description)
-# const model_docs = "https://mjb3.github.io/DPOMPs.jl/stable/"
+# const model_docs = "https://mjb3.github.io/DiscretePOMP.jl/stable/"
 # code_release_id = DataRegistryUtils.register_github_model(model_name, model_version, model_repo, model_hash, scrc_access_tkn, model_description=model_description, model_website=model_docs)
 
 ## NB. this example is already regisered as:
@@ -109,7 +109,7 @@ theta = [beta, inf_period_days^-1, lat_period_days^-1]
 ## initial system state variable [S E I R]
 initial_condition = [p - 1, 0, 1, 0]
 
-## generate DPOMPs model (see https://github.com/mjb3/DPOMPs.jl)
+## generate DPOMPs model (see https://github.com/mjb3/DiscretePOMP.jl)
 model = DPOMPs.generate_model("SEIR", initial_condition, freq_dep=true)
 
 ## run simulation and plot results

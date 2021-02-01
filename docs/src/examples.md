@@ -81,7 +81,7 @@ model_name = "DRU simple example"
 model_repo = "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
 model_version = "0.0.1"
 model_description = " ... " (nb. insert description)
-model_docs = "https://mjb3.github.io/DPOMPs.jl/stable/"
+model_docs = "https://mjb3.github.io/DiscretePOMP.jl/stable/"
 code_release_id = DataRegistryUtils.register_github_model(model_name, model_version, model_repo, model_hash, scrc_access_tkn, model_description=model_description, model_website=model_docs)
 ```
 
@@ -109,7 +109,7 @@ lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-
 ```
 
 ## 5. Model simulation
-Now we run a brief **SEIR** simulation using the Gillespie simulation feature of the DPOMPs.jl package. We use the downloaded parameters* as inputs, and finally plot the results as a time series of the population compartments.
+Now we run a brief **SEIR** simulation using the Gillespie simulation feature of the DiscretePOMP.jl package. We use the downloaded parameters* as inputs, and finally plot the results as a time series of the population compartments.
 
 First we process the model config .yaml file:
 
@@ -130,7 +130,7 @@ We are then ready the generate a DPOMP model:
 theta = [beta, inf_period_days^-1, lat_period_days^-1]
 ## initial system state variable [S E I R]
 initial_condition = [p - 1, 0, 1, 0]
-## generate DPOMPs model (see https://github.com/mjb3/DPOMPs.jl)
+## generate DPOMPs model (see https://github.com/mjb3/DiscretePOMP.jl)
 model = DPOMPs.generate_model("SEIR", initial_condition, freq_dep=true)
 ```
 
