@@ -1,10 +1,10 @@
 # DataRegistryUtils.jl
-**The SCRC data pipeline in Julia**
+**The [SCRC data pipeline](https://scottishcovidresponse.github.io/) in Julia**
 
 ![Documentation](https://github.com/ScottishCovidResponse/DataRegistryUtils.jl/workflows/Documentation/badge.svg)
 
 ## Features
-- Conveniently download Data Products from the [SCRC Data Registry](https://scottishcovidresponse.github.io/).
+- Conveniently download Data Products from the [SCRC Data Registry](https://data.scrc.uk/).
 - File hash-based version checking: new data is downloaded only when necessary.
 - A SQLite layer for convenient pre-processing (typically aggregation, and the joining of disparate datasets based on common identifiers.)
 - Easily register model code or realisations (i.e. 'runs') with a single line of code.
