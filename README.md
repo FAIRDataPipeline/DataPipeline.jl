@@ -11,8 +11,7 @@
 
 ## Installation
 
-The package is not registered and must be added via the package manager Pkg.
-From the REPL type `]` to enter Pkg mode and run:
+The package is not yet registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
 ```
 pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
@@ -20,6 +19,6 @@ pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
 
 ## Usage
 
-The [package documentation][docs] has more information and examples.
+See the [package documentation][docs] for instructions and examples.
 
 [docs]: https://scottishcovidresponse.github.io/DataRegistryUtils.jl/stable/
