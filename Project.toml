@@ -1,7 +1,7 @@
 name = "DataRegistryUtils"
 uuid = "1a5903ec-9658-4297-bb6d-314c615f2e02"
 authors = ["Martin Burke <martinjosephburke@gmail.com>"]
-version = "0.1.0"
+version = "0.4.0"
 
 [deps]
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
@@ -19,11 +19,12 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 [compat]
 AxisArrays = "^0.4.3"
 DataFrames = "^0.21.8"
-Dates = "^1.5.0"
+# Dates = "^1.5.0"
 FTPClient = "^1.2.1"
+HDF5 = "^0.15.2"
 HTTP = "^0.8.19"
 JSON = "^0.21.1"
-SHA = "^1.5.3"
+# SHA = "^1.5.3"
 SQLite = "^1.0.5"
 TOML = "^1.0.0"
 YAML = "^0.4.2"
