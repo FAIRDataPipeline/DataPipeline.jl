@@ -141,6 +141,7 @@ end
 # - load named dims (exists and not int?)
 # - define view
 # NB. metadata? convert back to Dict?
+# - ALT: store each as single column table (plus md, dim size, names) - as module
 function flat_load_array2!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
     arr = read_h5_array(h5)
     verbose && println(" - loading array : ", size(arr), " => ", tablename)

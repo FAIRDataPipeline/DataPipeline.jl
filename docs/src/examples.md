@@ -4,8 +4,8 @@
 Here, we use a simplistic example to demonstrate use of the package to interact with the SCRC Data Registry (DR) in a process referred to as the 'pipeline', including:
 - How to read data products from the DR,
 - utilise them in a simple simulation model,
-- register model code releases,
-- and register model runs.
+- register the simulation model code with the DR,
+- and register the simulation model run with the DR.
 
 The example is also provided as working code (including the accompanying configuration files) in the *examples/simple* directory of the package repository. The steps and the corresponding line of code in that module are:
 
@@ -40,15 +40,77 @@ import DataFrames
 These variables and the corresponding files determine the model configuration; data products to be downloaded; and the local directory where the downloaded files are to be saved.
 
 ``` julia
-model_config = "/examples/simple/model_config.yaml";
-data_config = "/examples/simple/data_config.yaml";
-data_dir = "/examples/simple/data/";
-submission_script = "julia examples/simple/main.jl";
+model_config = "/examples/simple/model_config.yaml"     # (see 2a)
+data_config = "/examples/simple/data_config.yaml"       # (see 2b)
+submission_script = "julia examples/simple/main.jl"     # (see 2c)
 ```
+### 2a. model_config.yaml file
+The **'model config'** file concept is used throughout the SCRC data pipeline, (i.e. not just within this package.) In this example, it is used to store information about both the model code (step 3,) and the individual code run (step 6.) The example below is also given [here]("https://raw.githubusercontent.com/ScottishCovidResponse/DataRegistryUtils.jl/main/examples/simple/data_config.yaml").
+
+``` yaml
+# model
+model_name: "DRU simple example"
+model_repo: "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
+model_version: "0.0.4"
+model_description: "A simple SEIR simulation for demonstrating use of the DataRegistryUtils.jl package."
+model_website: "https://mjb3.github.io/DiscretePOMP.jl/stable/"
+
+# simulation parameters
+random_seed: 1
+initial_s: 1000   # initial population size
+max_t: 180.0      # simulation time
+beta: 0.7         # contact rate := beta SI / N
+```
+
+### 2b. data_config.yaml file
+Similar to the model configuration file, **'data config'** files are a standard way to interact with the data pipeline, including in other languages besides `Julia`. This example specifies the Data Products that are downloaded in step 4:
+
+``` yaml
+fail_on_hash_mismatch: True     # set 'False' to suppress data mismatch errors
+namespace: SCRC                 # default namespace
+
+read:
+  - where:
+      data_product: human/infection/SARS-CoV-2/symptom-probability
+      component: symptom-probability
+  - where:
+      data_product: prob_hosp_and_cfr/data_for_scotland
+      component: cfr_byage
+    use:
+      namespace: EERA
+  - where:
+      data_product: human/infection/SARS-CoV-2/asymptomatic-period
+      component: asymptomatic-period
+  - where:
+      data_product: human/infection/SARS-CoV-2/infectious-duration
+      component: infectious-duration
+  - where:
+      data_product: human/infection/SARS-CoV-2/latent-period
+      component: latent-period
+  - where:
+      data_product: fixed-parameters/T_hos
+      component: T_hos
+    use:
+      namespace: EERA
+  - where:
+      data_product: fixed-parameters/T_rec
+      component: T_rec
+    use:
+      namespace: EERA
+```
+
+### 2c. submission_script variable
+Finally, the `submission_script` variable is a string that contains the contents of the 'submission script' file; another artefact of the pipeline process that applies outwith the Julia package.
+
+``` julia
+submission_script = "julia examples/simple/main.jl"
+```
+
+Here it is used to define the 'entry point' of the application; together with the model code and 'config' files, it will allow others to reproduce our results in the future with ease and precision (an important benefit of the overall pipeline process.)
 
 ## 3. Registering model code ###
 
-### SCRC access token - request via https://data.scrc.uk/docs/
+### 3a. SCRC access token - request via https://data.scrc.uk/docs/
 An access token is required if you want to *write* to the DR (e.g. register model code / runs) but not necessary if you only want to *read* from the DR (e.g. download data products.)
 
 The token must not be shared. Common approaches include the use of system variables or [private] configuration files. In this example I have included mine as a separate Julia file with a single line of code. *Note that it is important to also specify the .gitignore so as not to accidentally upload to the internet!*
@@ -57,14 +119,13 @@ The token must not be shared. Common approaches include the use of system variab
 include("access-token.jl")
 ```
 
-
-Allowing that the token is the numbers one through six, the access-token.jl file looks like this:
+The variable itself looks like: `"token [my token]"`. For example, if the token is the numbers one through six, the access-token.jl file looks like this:
 
 ``` julia
 const scrc_access_tkn = "token 123456"
 ```
-
-Back in the main file, we handle model code [release] registration by calling a function that automatically returns the existing *CodeRepoRelease* URI if it is already registered, or a new one if not.
+### 3b. Register model code
+Back in the main file, we handle model code [release] registration by calling a function that automatically returns the existing `code_repo_release` URI if it is already registered, or a new one if not.
 
 ``` julia
 code_release_id = DataRegistryUtils.register_github_model(model_config, scrc_access_tkn)
@@ -87,16 +148,17 @@ Finally, the resulting URI is in the form:
 code_release_id := "https://data.scrc.uk/api/code_repo_release/2157/"
 ```
 
-
 ## 4. Downloading data products
 Here we read some epidemiological parameters from the DR, so we can use them to run an **SEIR** simulation in **step (5)**.
 
+### 4a. Download data
 First, we process data config file and return a connection to the SQLite database. I.e. we download the data products:
 ``` julia
-println(pwd())
-db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true, verbose=false)
+data_dir = "/examples/simple/data/" # local directory where data is to be stored
+db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true)
 ```
 
+### 4b. Read some data
 Next, we read some parameters and convert them to the required units.
 
 ``` julia
@@ -105,9 +167,11 @@ lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-
 ```
 
 ## 5. Model simulation
-Now we run a brief **SEIR** simulation using the Gillespie simulation feature of the DiscretePOMP.jl package. We use the downloaded parameters* as inputs, and finally plot the results as a time series of the population compartments.
+**Step 5 relies on the use of another package: [DiscretePOMP.jl](https://github.com/mjb3/DiscretePOMP.jl), so you may wish to skip this section or replace it with, e.g. your own model or simulation code.**
 
-First we process the model config .yaml file:
+Next, *for illustration purposes only* we run a simple **SEIR** simulation using the Gillespie simulation feature of the `DiscretePOMP.jl` package. We use the downloaded parameters* as inputs, and finally plot the results as a time series of the population as they migrate between states according to the stochastic dynamics of the model.
+
+First we extract some information about the model run from the `model_config.yaml` file:
 
 ``` julia
 mc = YAML.load_file(model_config)
@@ -117,9 +181,7 @@ beta = mc["beta"]     # nb. contact rate := beta SI / N
 Random.seed!(mc["random_seed"])
 ```
 
-* Note that the population size and contact parameter beta (as well as the random seed) are read from the *model_config.yaml* file instead.
-
-We are then ready the generate a DPOMP model:
+These include the population size and contact parameter beta, as well as the random seed. We are then ready the generate a DiscretePOMP model:
 
 ``` julia
 ## define a vector of simulation parameters
@@ -127,18 +189,18 @@ theta = [beta, inf_period_days^-1, lat_period_days^-1]
 ## initial system state variable [S E I R]
 initial_condition = [p - 1, 0, 1, 0]
 ## generate DPOMPs model (see https://github.com/mjb3/DiscretePOMP.jl)
-model = DPOMPs.generate_model("SEIR", initial_condition, freq_dep=true)
+model = DiscretePOMP.generate_model("SEIR", initial_condition, freq_dep=true)
 ```
 
 Finally, we run the simulation and plot the results:
 
 ``` julia
-x = DPOMPs.gillespie_sim(model, theta, tmax=t)
-println(DPOMPs.plot_trajectory(x))
+x = DiscretePOMP.gillespie_sim(model, theta, tmax=t)
+println(DiscretePOMP.plot_trajectory(x))
 ```
 
 ## 6. Registering a 'model run'
-Lastly, we register the results of this particular simulation by POSTing to the **CodeRun** endpoint of the DR's RESTful API:
+Lastly, we register the results of this particular simulation by POSTing to the `code_run` endpoint of the DR's RESTful API:
 
 ``` julia
 model_run_description = "Just another SEIR simulation."
