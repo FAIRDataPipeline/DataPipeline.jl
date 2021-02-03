@@ -57,6 +57,8 @@ Key features include:
 
 The SQLite layer is optional - the data can also be returned as a set of nested Dictionaries. However it is the recommended way of using the package since it provides for convenient pre-processing and as well as certain planned features of the package. See the [SQLite.jl docs](https://juliadatabases.github.io/SQLite.jl/stable/) for more information about that package, and the [Simple example](@ref) and Code snippets page for practical usage examples pertinent to this one.
 
+## Getting started
+
 ## Package installation
 
 The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:

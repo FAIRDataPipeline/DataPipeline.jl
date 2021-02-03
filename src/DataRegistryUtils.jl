@@ -49,7 +49,7 @@ function get_file_hash(fp::String)
     return fhash
 end
 
-## read data regitry
+## read data registry
 function http_get_json(url::String)
     r = HTTP.request("GET", url)
     return JSON.parse(String(r.body))
@@ -80,7 +80,13 @@ end
 ## check storage location
 function search_storage_location(path::String, hash::String, root_id::String)
     tf_sr_id = get_id_from_root(root_id, STR_ROOT)
-    search_url = string(API_ROOT, "storage_location/?path=", path, "&hash=", hash, "&storage_root=", tf_sr_id)
+    search_url = string(API_ROOT, "storage_location/?path=", HTTP.escapeuri(path), "&hash=", hash, "&storage_root=", tf_sr_id)
+    return http_get_json(search_url)
+end
+
+## check repo release key (name and version)
+function search_code_repo_release(name::String, version::String)
+    search_url = string(API_ROOT, "code_repo_release/?name=", HTTP.escapeuri(name), "&version=", HTTP.escapeuri(version))
     return http_get_json(search_url)
 end
 
@@ -106,26 +112,41 @@ function register_github_model(model_name::String, model_version::String, model_
     model_hash::String, scrc_access_tkn::String; model_description::String=DF_MODEL_REL_DESC,
     model_website::String=model_repo, storage_root_url="https://github.com/", storage_root_id=STR_RT_GITHUB)
 
-    ## check storage location
+    ## UPDATE: check name/version
+    crr_chk = search_code_repo_release(model_name, model_version)
     sl_path = replace(model_repo, storage_root_url => "")
-    resp = search_storage_location(sl_path, model_hash, storage_root_id)
-    # tf_sr_id = get_id_from_root(storage_root_id, STR_ROOT)
-    # search_url = string(API_ROOT, "storage_location/?path=", sl_path, "&hash=", model_hash, "&storage_root=", tf_sr_id)
-    # resp = http_get_json(search_url)
-    # search_cnt::Int64 = resp["count"]
-    if resp["count"] == 0  ## add storage location
+    if crr_chk["count"] == 0
         obj_id = insert_storage_location(sl_path, model_hash, model_description, storage_root_id, scrc_access_tkn)
         ## register release
         body = (name=model_name, version=model_version, object=obj_id, website=model_website)
         resp = http_post_data("code_repo_release", body, scrc_access_tkn)
-        println("NB. code repo release URI := ", resp["url"])
+        println("NB. new code repo release registered. URI := ", resp["url"])
         return resp["url"]
-    else                ## match found, return object id
-        sl_id = resp["results"][1]["url"]
-        obj_search = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl_id, SL_ROOT))
-        resp = http_get_json(obj_search)
-        return resp["results"][1]["code_repo_release"]
+    else
+        ## check model_repo is the same
+        # NB. check SR?
+        resp = http_get_json(crr_chk["results"][1]["object"])
+        resp = http_get_json(resp["storage_location"])
+        sl_path  == resp["path"] || println("WARNING: repo mismatch detected := ", sl_path, " != ", resp["path"])
+        println("NB. code repo release := ", crr_chk["results"][1]["url"])
+        return crr_chk["results"][1]["url"]
     end
+    # ## check storage location
+    # sl_path = replace(model_repo, storage_root_url => "")
+    # resp = search_storage_location(sl_path, model_hash, storage_root_id)
+    # if resp["count"] == 0  ## add storage location
+    #     obj_id = insert_storage_location(sl_path, model_hash, model_description, storage_root_id, scrc_access_tkn)
+    #     ## register release
+    #     body = (name=model_name, version=model_version, object=obj_id, website=model_website)
+    #     resp = http_post_data("code_repo_release", body, scrc_access_tkn)
+    #     println("NB. code repo release URI := ", resp["url"])
+    #     return resp["url"]
+    # else                ## match found, return object id
+    #     sl_id = resp["results"][1]["url"]
+    #     obj_search = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl_id, SL_ROOT))
+    #     resp = http_get_json(obj_search)
+    #     return resp["results"][1]["code_repo_release"]
+    # end
 end
 
 ## register by config file

@@ -10,9 +10,9 @@
 # 1. preliminaries                                          L22
 # 2. config files and scripts                               L30
 # 3. register 'code repo release' [model code] in the DR    L40
-# 4. read data products from the DR                         L66
-# 5. run model simulation                                   L85
-# 6. register model 'code run' in the DR                    L122
+# 4. read data products from the DR                         L54
+# 5. run model simulation                                   L73
+# 6. register model 'code run' in the DR                    L110
 #
 # Author: Martin Burke (martin.burke@bioss.ac.uk)
 # Date: 24-Jan-2021
@@ -21,7 +21,7 @@
 
 ### 1. prelim: import packages ###
 import DataRegistryUtils    # pipeline stuff
-import DPOMPs               # simulation of epidemiological models
+import DiscretePOMP         # simulation of epidemiological models
 import YAML                 # for reading model config file
 import Random               # other assorted packages used incidentally
 import DataFrames
@@ -49,18 +49,6 @@ include("access-token.jl")
 ## register model code release
 # NB. returns existing URI if code repo is already registered
 code_release_id = DataRegistryUtils.register_github_model(model_config, scrc_access_tkn)
-println("code_release_id: ", code_release_id)
-
-## NB. this code is equivalent to:
-# const model_name = "DRU simple example"
-# const model_repo = "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
-# const model_version = "0.0.1"
-# const model_description = " ... " (insert description)
-# const model_docs = "https://mjb3.github.io/DiscretePOMP.jl/stable/"
-# code_release_id = DataRegistryUtils.register_github_model(model_name, model_version, model_repo, model_hash, scrc_access_tkn, model_description=model_description, model_website=model_docs)
-
-## NB. this example is already regisered as:
-# code_release_id = "https://data.scrc.uk/api/code_repo_release/2157/"
 
 
 ### 4. download data products ###
@@ -109,12 +97,12 @@ theta = [beta, inf_period_days^-1, lat_period_days^-1]
 ## initial system state variable [S E I R]
 initial_condition = [p - 1, 0, 1, 0]
 
-## generate DPOMPs model (see https://github.com/mjb3/DiscretePOMP.jl)
-model = DPOMPs.generate_model("SEIR", initial_condition, freq_dep=true)
+## generate DiscretePOMP model (see https://github.com/mjb3/DiscretePOMP.jl)
+model = DiscretePOMP.generate_model("SEIR", initial_condition, freq_dep=true)
 
 ## run simulation and plot results
-x = DPOMPs.gillespie_sim(model, theta, tmax=t)
-println(DPOMPs.plot_trajectory(x))
+x = DiscretePOMP.gillespie_sim(model, theta, tmax=t)
+println(DiscretePOMP.plot_trajectory(x))
 # println(" observations: ", x.observations, "\n")      # uncomment to display
 # println(" final system state: ", x.population[end])   # simulated observations
                                                         # and final systen state

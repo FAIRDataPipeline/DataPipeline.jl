@@ -14,9 +14,9 @@ The example is also provided as working code (including the accompanying configu
 | 1. Preliminaries                                          | L22   |
 | 2. Config files and scripts                               | L30   |
 | 3. Register 'code repo release' [model code] in the DR    | L40   |
-| 4. Read data products from the DR                         | L66   |
-| 5. Run model simulation                                   | L85   |
-| 6. Register model 'code run' in the DR                    | L122  |
+| 4. Read data products from the DR                         | L54   |
+| 5. Run model simulation                                   | L73   |
+| 6. Register model 'code run' in the DR                    | L110  |
 
 ## 0. Package installation
 
@@ -37,20 +37,21 @@ import DataFrames
 ```
 
 ## 2. Specify config files, scripts and data directory
-These variables and the corresponding files determine the model configuration; data products to be downloaded; and the local directory where the downloaded files are to be saved.
+These variables and the corresponding files determine the model configuration; data products to be downloaded; and 'submission script' (see 2c.)
 
 ``` julia
 model_config = "/examples/simple/model_config.yaml"     # (see 2a)
 data_config = "/examples/simple/data_config.yaml"       # (see 2b)
 submission_script = "julia examples/simple/main.jl"     # (see 2c)
 ```
-### 2a. model_config.yaml file
+### 2a. The *model_config.yaml* file
 The **'model config'** file concept is used throughout the SCRC data pipeline, (i.e. not just within this package.) In this example, it is used to store information about both the model code (step 3,) and the individual code run (step 6.) The example below is also given [here]("https://raw.githubusercontent.com/ScottishCovidResponse/DataRegistryUtils.jl/main/examples/simple/data_config.yaml").
 
 ``` yaml
 # model
 model_name: "DRU simple example"
 model_repo: "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
+# NB. ^ because the example is part of this package - replace with your own repo
 model_version: "0.0.4"
 model_description: "A simple SEIR simulation for demonstrating use of the DataRegistryUtils.jl package."
 model_website: "https://mjb3.github.io/DiscretePOMP.jl/stable/"
@@ -62,7 +63,7 @@ max_t: 180.0      # simulation time
 beta: 0.7         # contact rate := beta SI / N
 ```
 
-### 2b. data_config.yaml file
+### 2b. The *data_config.yaml* file
 Similar to the model configuration file, **'data config'** files are a standard way to interact with the data pipeline, including in other languages besides `Julia`. This example specifies the Data Products that are downloaded in step 4:
 
 ``` yaml
@@ -99,7 +100,7 @@ read:
       namespace: EERA
 ```
 
-### 2c. submission_script variable
+### 2c. The *submission_script* variable
 Finally, the `submission_script` variable is a string that contains the contents of the 'submission script' file; another artefact of the pipeline process that applies outwith the Julia package.
 
 ``` julia
@@ -149,10 +150,10 @@ code_release_id := "https://data.scrc.uk/api/code_repo_release/2157/"
 ```
 
 ## 4. Downloading data products
-Here we read some epidemiological parameters from the DR, so we can use them to run an **SEIR** simulation in **step (5)**.
+Here we read some epidemiological parameters from the DR, so we can use them to run an **SEIR** simulation in **step (5)**. First we download some data, then read it.
 
 ### 4a. Download data
-First, we process data config file and return a connection to the SQLite database. I.e. we download the data products:
+First, we process the `data_config` file, which (in this case) returns a variable representing a connection to a SQLite database. I.e. we download the data products:
 ``` julia
 data_dir = "/examples/simple/data/" # local directory where data is to be stored
 db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true)
@@ -165,6 +166,8 @@ Next, we read some parameters and convert them to the required units.
 inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", data_type=Float64)[1] / 24
 lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", data_type=Float64)[1] / 24
 ```
+
+See [Code snippets](@ref) and the [Package manual](@ref) for information about reading other types of data product.
 
 ## 5. Model simulation
 **Step 5 relies on the use of another package: [DiscretePOMP.jl](https://github.com/mjb3/DiscretePOMP.jl), so you may wish to skip this section or replace it with, e.g. your own model or simulation code.**
@@ -209,6 +212,6 @@ model_run_id = DataRegistryUtils.register_model_run(model_config, submission_scr
 
 ## Finished!
 
-That concludes the example.
+That concludes the example. A complete working example of this code can be found [here](https://github.com/ScottishCovidResponse/DataRegistryUtils.jl/tree/main/examples/simple).
 
 Please note that certain features, notably the registration of Data Products (i.e. model 'inputs' and 'outputs') is currently still a work in progress. See the home page for more information.
