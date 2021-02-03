@@ -124,7 +124,7 @@ function register_github_model(model_name::String, model_version::String, model_
         return resp["url"]
     else
         ## check model_repo is the same
-        # NB. check SR?
+        # NB. check SR match?
         resp = http_get_json(crr_chk["results"][1]["object"])
         resp = http_get_json(resp["storage_location"])
         sl_path  == resp["path"] || println("WARNING: repo mismatch detected := ", sl_path, " != ", resp["path"])
