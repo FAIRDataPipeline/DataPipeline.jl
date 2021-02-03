@@ -2,14 +2,8 @@
 using DataRegistryUtils
 using SQLite, DataFrames
 import Test
-### 1. prelim: import packages ###
-import DataRegistryUtils    # pipeline stuff
-import DiscretePOMP         # simulation of epidemiological models
-import YAML                 # for reading model config file
-import Random               # other assorted packages used incidentally
 
 ## tests
-
 Test.@testset "package tests" begin
     ## simple example s2; s4
     Test.@testset "simple example" begin
