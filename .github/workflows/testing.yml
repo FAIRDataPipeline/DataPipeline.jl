@@ -3,6 +3,8 @@ name: DataRegistryUtils testing
 # run workflow on push
 on:
   push:
+    branches:
+      - main
 
 jobs:
   dru-tests:
