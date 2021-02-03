@@ -136,6 +136,34 @@ function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HD
     DataFrames.rename!(df, Symbol.(dim_titles)) # column names
     load_component!(cn, dp_id, tablename, df)   # load to db
 end
+# replacement:
+# - load data (indices + msr) > new tbl
+# - load named dims (exists and not int?)
+# - define view
+# NB. metadata? convert back to Dict?
+function flat_load_array2!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
+    arr = read_h5_array(h5)
+    verbose && println(" - loading array : ", size(arr), " => ", tablename)
+    nd = ndims(arr)                             # fetch columns names
+    dim_titles = String[]
+    for d in 1:nd
+        push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
+    end
+    push!(dim_titles, DB_VAL_COL)               # measure column
+    ## ddl / dml
+    idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
+    dims = Array{Array{Any,1}}(undef, nd)
+    for d in 1:nd                               # fetch named dimensions
+        dim_names = get_dim_names(h5, d, size(arr)[d])
+        idx = Int64[t[d] for t in idc]
+        dims[d] = dim_names[idx]                # 'named' dimension d
+    end
+    verbose && println(" - dims := ", typeof(dims))
+    df = DataFrames.DataFrame(dims)             # convert to df
+    df.val = [arr[i] for i in eachindex(arr)]   # add data
+    DataFrames.rename!(df, Symbol.(dim_titles)) # column names
+    load_component!(cn, dp_id, tablename, df)   # load to db
+end
 
 ## format table name
 function get_table_name(tablestub::String, gnm::String, apx::String)
@@ -221,7 +249,7 @@ SQLite Data Registry helper function. Aggregate measure column `msr` from table 
 
 **Parameters**
 - `cn`      -- SQLite.DB object.
-- `dims`    -- data product search string, e.g. `'human/infection/SARS-CoV-2/%'`.
+- `dims`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
 - `msr`     -- as above, optional search string for components names.
 - `tbl`     -- table or view name.
 """
@@ -261,7 +289,7 @@ SQLite Data Registry helper function. Search TOML-based data resources stored in
 
 **Parameters**
 - `cn`              -- SQLite.DB object.
-- `data_product`    -- data product search string, e.g. `'human/infection/SARS-CoV-2/%'`.
+- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
 - `component`       -- as above, optional search string for components names.
 - `data_type`       -- (optional) specify to return an array of this type, instead of a DataFrame.
 """
@@ -285,7 +313,7 @@ SQLite Data Registry helper function. Search and return [HDF5] table data as a `
 
 **Parameters**
 - `cn`              -- SQLite.DB object.
-- `data_product`    -- data product search string, e.g. `'human/infection/SARS-CoV-2/%'`.
+- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
 - `component`       -- as above, [required] search string for components names.
 """
 function read_table(cn::SQLite.DB, data_product::String, component::String)
