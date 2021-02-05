@@ -1,13 +1,13 @@
 import SQLite
 import DataFrames
 
-# const DDL_SQL = "db/ddl.sql"
+## ddl SQL
 include("../db/ddl.sql")
 
-const DB_TYPE_MAP = Dict(String => "TEXT", Int32 => "INTEGER", Float64 => "REAL")
+# const DB_TYPE_MAP = Dict(String => "TEXT", Int32 => "INTEGER", Float64 => "REAL")
 const DB_FLAT_ARR_APX = "_arr"
 const DB_H5_TABLE_APX = "_tbl"
-const DB_VAL_COL = "val"
+# const DB_VAL_COL = "val"
 
 ## insert sql helper
 # function get_values_str(n::Int64)
@@ -352,12 +352,15 @@ const READ_EST_SQL = "SELECT dp_name, comp_name, key, val FROM toml_view\nWHERE 
 """
     read_estimate(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
 
+Read key-value pair, e.g. a point-estimate.
+
 SQLite Data Registry helper function. Search TOML-based data resources stored in `cn`, a SQLite database created previously by a call to `fetch_data_per_yaml`.
 
 **Parameters**
 - `cn`              -- SQLite.DB object.
 - `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
 - `component`       -- as above, optional search string for components names.
+- `key`             -- (optional) specify to return .toml keys of a particular type, e.g. `"type"` or `"value"`.
 - `data_type`       -- (optional) specify to return an array of this type, instead of a DataFrame.
 """
 function read_estimate(cn::SQLite.DB, data_product::String; key=nothing, data_type=nothing)
@@ -377,7 +380,7 @@ end
 
 # - tables
 """
-    read_table(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
+    read_table(cn::SQLite.DB, data_product::String, component::String)
 
 SQLite Data Registry helper function. Search and return [HDF5] table data as a `DataFrame`.
 

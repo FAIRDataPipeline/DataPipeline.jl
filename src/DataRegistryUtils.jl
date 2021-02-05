@@ -434,15 +434,17 @@ end
 
 ## public function
 """
-    fetch_data_per_yaml(yaml_filepath, out_dir = "./out/"; use_axis_arrays::Bool = false, verbose = false, ...)
+    fetch_data_per_yaml(yaml_filepath, out_dir = "./out/"; ... )
 
 Refresh and load data products from the SCRC data registry. Checks the file hash for each data product and downloads anew any that are determined to be out-of-date.
 
 **Parameters**
 - `yaml_filepath`       -- the location of a .yaml file.
 - `out_dir`             -- the local system directory where data will be stored.
+
+**Named parameters**
 - `use_axis_arrays`     -- convert the output to AxisArrays, where applicable.
-- `use_sql`             -- load SQLite database and return connection.
+- `use_sql`             -- load SQLite database and return connection (`true` by default.)
 - `sql_file`            -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
 - `db_path`             -- (optional) specify the filepath of the database to use (or create.)
 - `force_db_refresh`    -- overide filehash check on database insert.
