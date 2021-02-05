@@ -4,19 +4,13 @@ fail_on_hash_mismatch: False
 namespace: SCRC
 
 read:
-  - where:
+  - where:  # estimates
       data_product: human/infection/SARS-CoV-2/infectious-duration
       component: infectious-duration
   - where:
       data_product: human/infection/SARS-CoV-2/symptom-delay
       component: symptom-delay
-  - where:
-      data_product: records/SARS-CoV-2/scotland/cases-and-management/mortality
-  - where:
+  - where:  # arrays
       data_product: records/SARS-CoV-2/scotland/cases_and_management
-  - where:
-      data_product: human/demographics/population/scotland
-  - where:
+  - where:  # table
       data_product: geography/scotland/lookup_table
-  - where:
-      data_product: geography/england/lookup_table

@@ -13,32 +13,52 @@ using DataRegistryUtils
 ?fetch_data_per_yaml
 ```
 
-NB. a complete working example of this code is also provided in the `examples` folder.
-
 ## Usage
 
 It is recommended to use a *.yaml* data configuration file to specify the data products to be downloaded. Some example *.yaml* file are included in the `examples` folder. Refer to https://data.scrc.uk/ for information about other data products available in the registry.
 
-### Example: refesh data
+### Example: refreshing (i.e. downloading) data
 
 ``` julia
 TEST_FILE = "examples/data_config.yaml"
 DATA_OUT = "out/"
-data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_axis_arrays=true, verbose=false)
+data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=true)
 ```
 
 The results referenced by the `data` variable are a `Dict` of data products, indexed by data product name, component name, and so on. They can be accessed thusly:
 
-### Example: access data product by name
+### Example: reading key-value pairs, e.g. point estimates
 
 ``` julia
-data_product = data["human/infection/SARS-CoV-2/symptom-delay"]
-component = data_product["symptom-delay"]
-component_type = component["type"]
-distribution_name = component["distribution"]
+data_product = "human/infection/SARS-CoV-2/infectious-duration"
+comp_name = "infectious-duration"
+# by data product
+est = DataRegistryUtils.read_estimate(data, data_product)
+println(est)
+# by component name
+est = DataRegistryUtils.read_estimate(data, data_product, comp_name)
 ```
 
-### Example: read individual HDF5 or TOML file
+### Example: reading arrays
+
+``` julia
+data_product = "records/SARS-CoV-2/scotland/cases_and_management"
+comp_name = "/test_result/date-cumulative"
+## read array by dp:
+some_arrays = DataRegistryUtils.read_array(data, data_product)
+one_array = some_arrays[comp_name]
+## read array by component name:
+one_array = DataRegistryUtils.read_array(data, data_product, comp_name)
+```
+
+### Example: reading tables
+``` julia
+data_product = "geography/scotland/lookup_table"
+comp_name = "/conversiontable/scotland"
+tbl = DataRegistryUtils.read_table(data, data_product, comp_name)
+```
+
+### Example: reading data products from file
 
 You can also use the package to read in a file that has already been downloaded, as follows:
 
@@ -48,12 +68,12 @@ dp = DataRegistryUtils.read_data_product_from_file(fp, use_axis_arrays = true, v
 component = dp["/conversiontable/scotland"]
 ```
 
-### Example: read data as SQLite connection
+### Example: custom SQL query
 
-Data can be staged using SQLite and returned as an active connection to a file database for querying and aggregation. For example:
+Data can also be queried using SQL for convenient joining and aggregation. For example:
 
 ``` julia
 using SQLite, DataFrames
 db = DataRegistryUtils.read_data_product(fp, use_sql = true)
-x = DBInterface.execute(db, "SELECT * FROM data_product") |> DataFrame
+x = DBInterface.execute(data, "SELECT * FROM data_product") |> DataFrame
 ```

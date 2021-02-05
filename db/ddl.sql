@@ -10,8 +10,11 @@ CREATE TABLE IF NOT EXISTS data_product(
 CREATE TABLE IF NOT EXISTS h5_component(
 	comp_id	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 	dp_id	INTEGER NOT NULL,
-	tbl_name TEXT
+	meta_src INTEGER NOT NULL,
+	comp_type TEXT NOT NULL,
+	data_obj TEXT NOT NULL
 );
+
 CREATE TABLE IF NOT EXISTS toml_component(
 	comp_id	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 	dp_id	INTEGER NOT NULL,
@@ -27,7 +30,7 @@ DROP VIEW IF EXISTS h5_view;
 DROP VIEW IF EXISTS toml_view;
 
 CREATE VIEW h5_view AS
-SELECT d.dp_name, c.*
+SELECT d.dp_name, d.dp_path, c.*
 FROM data_product d
 INNER JOIN h5_component c ON(d.dp_id = c.dp_id);
 

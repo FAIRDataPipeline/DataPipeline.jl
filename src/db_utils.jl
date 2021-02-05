@@ -9,6 +9,15 @@ const DB_FLAT_ARR_APX = "_arr"
 const DB_H5_TABLE_APX = "_tbl"
 const DB_VAL_COL = "val"
 
+## insert sql helper
+# function get_values_str(n::Int64)
+#     output = "VALUES("
+#     for i in 1:n
+#         output = string(output, "?,")
+#     end
+#     return string(rstrip(output, ','), ")")
+# end
+
 ## split sql statements into array
 function get_sql_stmts_from_str(sql::String)
     # sql = strip(replace(read(f, String), "\n" => " "), ' ')
@@ -64,107 +73,117 @@ function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
     end
 end
 
+## 'meta' load component from [h5] object d
+function meta_load_component!(cn::SQLite.DB, dp_id::Int64, comp_type::String, data_obj::String, meta_obj::Bool=true)
+    stmt = SQLite.Stmt(cn, "INSERT INTO h5_component(dp_id, meta_src, comp_type, data_obj) VALUES(?,?,?,?)")
+    SQLite.execute(stmt, (dp_id, meta_obj, comp_type, data_obj))
+    return SQLite.last_insert_rowid(cn)
+end
+
 ## load component from [h5] object d
-function load_component!(cn::SQLite.DB, dp_id::Int64, tablename::String, d)
+function load_component!(cn::SQLite.DB, dp_id::Int64, comp_type::String, tablename::String, d)
     SQLite.drop!(cn, tablename, ifexists=true)
     SQLite.load!(d, cn, tablename)
-    stmt = SQLite.Stmt(cn, "INSERT INTO h5_component(dp_id, tbl_name) VALUES(?, ?)")
-    SQLite.execute(stmt, (dp_id, tablename))
+    return meta_load_component!(cn, dp_id, comp_type, tablename, false)
 end
 
-## insert sql helper
-function get_values_str(n::Int64)
-    output = "VALUES("
-    for i in 1:n
-        output = string(output, "?,")
-    end
-    return string(rstrip(output, ','), ")")
-end
-
-## placeholder
-# function flat_load_array!(cn::SQLite.DB, tablestub::String, gnm::String, h5::HDF5.File, verbose::Bool)
-#     println("*** h5 group type: ", typeof(h5), " - TO BE ADDED ***")
+# ## try get dim titles, else give generic column name
+# # - deprecate this ***
+# function get_dim_title(h5, d::Int64, verbose::Bool)
+#     ttl = string("Dimension_", d, "_title")
+#     if haskey(h5, ttl)
+#         return replace(HDF5.read(h5[ttl])[1], " " => "_");
+#     else
+#         cn = string("col", d)
+#         verbose && println(" - nb. no metadata found for ", cn)
+#         return cn
+#     end
 # end
-
-## try get dim titles, else give generic column name
-function get_dim_title(h5, d::Int64, verbose::Bool)
-    ttl = string("Dimension_", d, "_title")
-    if haskey(h5, ttl)
-        return replace(HDF5.read(h5[ttl])[1], " " => "_");
-    else
-        cn = string("col", d)
-        verbose && println(" - nb. no metadata found for ", cn)
-        return cn
-    end
-end
-
 ## try get dim labels, else give generic labels
-function get_dim_names(h5, d::Int64, s::Int64)
-    nms = string("Dimension_", d, "_names")
-    if haskey(h5, nms)
-        return HDF5.read(h5[nms]);
-    else
-        return String[string("grp", i) for i in 1:s]
-    end
-end
-
-## db table labeller
-clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
+# - deprecate this? ***
+# function get_dim_names(h5, d::Int64, s::Int64)
+#     nms = string("Dimension_", d, "_names")
+#     if haskey(h5, nms)
+#         return HDF5.read(h5[nms]);
+#     else
+#         return String[string("grp", i) for i in 1:s]
+#     end
+# end
 
 ## flatten Nd array and load as 2d table
 # - NB. TBO *****
-function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
-    arr = read_h5_array(h5)
-    verbose && println(" - loading array : ", size(arr), " => ", tablename)
-    nd = ndims(arr)                             # fetch columns names
-    dim_titles = String[]
-    for d in 1:nd
-        push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
-    end
-    push!(dim_titles, DB_VAL_COL)               # measure column
-    ## ddl / dml
-    idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
-    dims = Array{Array{Any,1}}(undef, nd)
-    for d in 1:nd                               # fetch named dimensions
-        dim_names = get_dim_names(h5, d, size(arr)[d])
-        idx = Int64[t[d] for t in idc]
-        dims[d] = dim_names[idx]                # 'named' dimension d
-    end
-    verbose && println(" - dims := ", typeof(dims))
-    df = DataFrames.DataFrame(dims)             # convert to df
-    df.val = [arr[i] for i in eachindex(arr)]   # add data
-    DataFrames.rename!(df, Symbol.(dim_titles)) # column names
-    load_component!(cn, dp_id, tablename, df)   # load to db
-end
+# function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
+#     arr = read_h5_array(h5)
+#     verbose && println(" - loading array : ", size(arr), " => ", tablename)
+#     nd = ndims(arr)                             # fetch columns names
+#     dim_titles = String[]
+#     for d in 1:nd
+#         push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
+#     end
+#     push!(dim_titles, DB_VAL_COL)               # measure column
+#     ## ddl / dml
+#     idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
+#     dims = Array{Array{Any,1}}(undef, nd)
+#     for d in 1:nd                               # fetch named dimensions
+#         dim_names = get_dim_names(h5, d, size(arr)[d])
+#         idx = Int64[t[d] for t in idc]
+#         dims[d] = dim_names[idx]                # 'named' dimension d
+#     end
+#     verbose && println(" - dims := ", typeof(dims))
+#     df = DataFrames.DataFrame(dims)             # convert to df
+#     df.val = [arr[i] for i in eachindex(arr)]   # add data
+#     DataFrames.rename!(df, Symbol.(dim_titles)) # column names
+#     load_component!(cn, dp_id, tablename, df)   # load to db
+# end
 # replacement:
 # - load data (indices + msr) > new tbl
 # - load named dims (exists and not int?)
 # - define view
-# NB. metadata? convert back to Dict?
 # - ALT: store each as single column table (plus md, dim size, names) - as module
-function flat_load_array2!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
-    arr = read_h5_array(h5)
-    verbose && println(" - loading array : ", size(arr), " => ", tablename)
-    nd = ndims(arr)                             # fetch columns names
-    dim_titles = String[]
-    for d in 1:nd
-        push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
-    end
-    push!(dim_titles, DB_VAL_COL)               # measure column
-    ## ddl / dml
-    idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
-    dims = Array{Array{Any,1}}(undef, nd)
-    for d in 1:nd                               # fetch named dimensions
-        dim_names = get_dim_names(h5, d, size(arr)[d])
-        idx = Int64[t[d] for t in idc]
-        dims[d] = dim_names[idx]                # 'named' dimension d
-    end
-    verbose && println(" - dims := ", typeof(dims))
-    df = DataFrames.DataFrame(dims)             # convert to df
-    df.val = [arr[i] for i in eachindex(arr)]   # add data
-    DataFrames.rename!(df, Symbol.(dim_titles)) # column names
-    load_component!(cn, dp_id, tablename, df)   # load to db
-end
+# - NB. even worse performance wise! (insert is the bottle neck)
+# function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
+#     arrd = HDF5.read(h5)    # > Dict
+#     arr = arrd[ARRAY_OBJ_NAME]
+#     arr_size = size(arr)
+#     ## load data to db
+#     verbose && println(" - loading array : ", arr_size, " => ", tablename)
+#     data = DataFrames.DataFrame((val=arr[:]))
+#     # data = Dict("val"=>arr[:])
+#     comp_id = load_component!(cn, dp_id, ARRAY_OBJ_NAME, tablename, data)
+#     ## load dims
+#     dim_sql = "INSERT INTO array_dim(comp_id, dim_index, dim_type, dim_title, dim_size) VALUES(?,?,?,?,?)"
+#     nm_sql = "INSERT INTO array_dim_name(dim_id, dim_val) VALUES(?,?)"
+#     dim_stmt = SQLite.Stmt(cn, dim_sql)
+#     nm_stmt = SQLite.Stmt(cn, nm_sql)
+#     for d in eachindex(arr_size)
+#         ttl = string("Dimension_", d, "_title")
+#         dim_type = haskey(arrd, ttl) ? 1 : 0
+#         dim_title = dim_type == 0 ? "Index" : arrd[ttl][1]
+#         SQLite.execute(dim_stmt, (comp_id, d, dim_type, dim_title, arr_size[d]))
+#         dim_id = SQLite.last_insert_rowid(cn)
+#         ## load dim names
+#         if dim_type == 1
+#             nms = string("Dimension_", d, "_names")
+#             @assert haskey(arrd, nms)
+#             for i in eachindex(arrd[nms])
+#                 SQLite.execute(nm_stmt, (dim_id, arrd[nms][i]))
+#             end
+#         end
+#     end
+# end
+# ## WIP > metadata load only - meta_load_component?
+# function flat_load_array2!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
+#     ## extract meta?
+#     arrd = HDF5.read(h5)    # > Dict
+#     arr = arrd[ARRAY_OBJ_NAME]
+#     verbose && println(" - loading array : ", size(arr), " => ", tablename)
+#     idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
+#     df = DataFrames.DataFrame(idc)
+#     df.val = arr[:]
+# end
+
+## db table labeller
+clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
 
 ## format table name
 function get_table_name(tablestub::String, gnm::String, apx::String)
@@ -172,28 +191,29 @@ function get_table_name(tablestub::String, gnm::String, apx::String)
 end
 
 ## recursively search and load table/array
-function process_h5_file_group!(cn::SQLite.DB, tablestub::String, h5, dp_id::Int64, verbose::Bool)
+function process_h5_file_group!(cn::SQLite.DB, name::String, h5, dp_id::Int64, verbose::Bool)
     gnm = HDF5.name(h5)
     if haskey(h5, TABLE_OBJ_NAME)
+        tablestub = clean_path(name)
         tablename = get_table_name(tablestub, gnm, DB_H5_TABLE_APX)
         d = read_h5_table(h5, false)
         verbose && println(" - loading table := ", tablename)
-        load_component!(cn, dp_id, tablename, d)
+        load_component!(cn, dp_id, TABLE_OBJ_NAME, tablename, d)
     elseif (haskey(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
-        tablename = get_table_name(tablestub, gnm, DB_FLAT_ARR_APX)
-        flat_load_array!(cn, dp_id, tablename, h5, verbose)
+        verbose && println(" - array found := ", gnm)
+        meta_load_component!(cn, dp_id, ARRAY_OBJ_NAME, gnm)
     else
         for g in keys(h5)     # group - recurse
-            process_h5_file_group!(cn, tablestub, h5[g], dp_id, verbose)
+            process_h5_file_group!(cn, name, h5[g], dp_id, verbose)
         end
     end
 end
 
 ## wrapper for recursive processing
 function process_h5_file!(cn::SQLite.DB, name::String, filepath::String, dp_id::Int64, verbose::Bool)
-    tablestub = clean_path(name)
+    # tablestub = clean_path(name)
     f = HDF5.h5open(filepath)
-    process_h5_file_group!(cn, tablestub, f, dp_id, verbose)
+    process_h5_file_group!(cn, name, f, dp_id, verbose)
     HDF5.close(f)
 end
 
@@ -270,7 +290,7 @@ function get_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::String, tbl::
     data = zeros(typeof(df.val[1]), axis_size)
     ## build and populate array
     output = AxisArrays.AxisArray(data, Tuple(dim_ax))
-    for row in eachrow(df)  ## HACK: need to figure out how to index n dimension axis array
+    for row in eachrow(df)  ## HACK: reminder - figure out how to index n dimension axis array
         length(dims) == 1 && (output[AxisArrays.atvalue(row[Symbol(dims[1])])] = row.val)
         length(dims) == 2 && (output[AxisArrays.atvalue(row[Symbol(dims[1])]), AxisArrays.atvalue(row[Symbol(dims[2])])] = row.val)
         length(dims) == 3 && (output[AxisArrays.atvalue(row[Symbol(dims[1])]), AxisArrays.atvalue(row[Symbol(dims[2])]), AxisArrays.atvalue(row[Symbol(dims[3])])] = row.val)
@@ -280,9 +300,55 @@ function get_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::String, tbl::
     return output
 end
 
-##
-# - add as float option
-const READ_EST_SQL = "SELECT dp_name, comp_name, val FROM toml_view\nWHERE key='value' AND dp_name LIKE ?"
+## array handling: db metadata => Dict{String, Any}
+function read_array(df::DataFrames.DataFrame, use_axis_arrays::Bool, verbose::Bool)
+    if DataFrames.nrow(df)==1      # return individual component
+        dpp::String = df[1, :dp_path]
+        output = process_h5_file(dpp, use_axis_arrays, verbose)
+        return output[df[1, :data_obj]]
+    end
+    output = Dict{String, Any}()
+    hf = nothing
+    for i in 1:DataFrames.nrow(df) # return dictionary of matching components
+        proc::Bool = (i==1 || df[i,:dp_path]!=df[i-1,:dp_path])
+        hf = proc ? process_h5_file(df[i,:dp_path], use_axis_arrays, verbose) : hf
+        output[df[i, :data_obj]] = hf[df[i, :data_obj]]
+    end
+    return output
+end
+
+## array by data product only
+const search_arr_sql = "SELECT DISTINCT dp_path, data_obj FROM h5_view WHERE comp_type=? AND dp_name=?"
+"""
+    read_array(cn::SQLite.DB, data_product::String[, component::String]; use_axis_arrays=false, verbose=false)
+
+Load HDF5 array(s) data resource.
+
+SQLite Data Registry helper function. Optionally specify the individual component.
+
+**Parameters**
+- `cn`              -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
+- `component`       -- as above, optional search string for components names.
+- `use_axis_arrays` -- (optional) return the matching data as AxisArrays.
+"""
+function read_array(cn::SQLite.DB, data_product::String; use_axis_arrays::Bool=false, verbose::Bool=false)
+    stmt = SQLite.Stmt(cn, search_arr_sql)
+    df = SQLite.DBInterface.execute(stmt, (ARRAY_OBJ_NAME, data_product)) |> DataFrames.DataFrame
+    DataFrames.nrow(df)==0 && println("WARNING: no matching data products found for '", data_product, "'")
+    return read_array(df, use_axis_arrays, verbose)
+end
+
+## array by data product and component name
+function read_array(cn::SQLite.DB, data_product::String, component::String; use_axis_arrays::Bool=false, verbose::Bool=false)
+    stmt = SQLite.Stmt(cn, string(search_arr_sql, " AND data_obj=?"))
+    df = SQLite.DBInterface.execute(stmt, (ARRAY_OBJ_NAME, data_product, component)) |> DataFrames.DataFrame
+    DataFrames.nrow(df)==0 && println("WARNING: no matching data products found for '", data_product, component, "'")
+    return read_array(df, use_axis_arrays, verbose)
+end
+
+## read .toml estimate
+const READ_EST_SQL = "SELECT dp_name, comp_name, key, val FROM toml_view\nWHERE dp_name LIKE ?"
 """
     read_estimate(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
 

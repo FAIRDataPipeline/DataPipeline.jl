@@ -16,6 +16,7 @@ fetch_data_per_yaml
 
 ```@docs
 read_table
+read_array
 read_estimate
 read_data_product_from_file
 ```
