@@ -2,7 +2,7 @@
 **The [SCRC data pipeline](https://scottishcovidresponse.github.io/) in Julia**
 
 ![Documentation](https://github.com/ScottishCovidResponse/DataRegistryUtils.jl/workflows/Documentation/badge.svg)
-![Tests](https://github.com/ScottishCovidResponse/DataRegistryUtils.jl/workflows/Tests/badge.svg)
+![Package tests](https://github.com/ScottishCovidResponse/DataRegistryUtils.jl/workflows/Tests/badge.svg)
 
 ## Features
 - Conveniently download Data Products from the [SCRC Data Registry](https://data.scrc.uk/).
