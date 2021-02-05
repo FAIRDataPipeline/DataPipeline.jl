@@ -1,4 +1,4 @@
-name: DataRegistryUtils testing
+name: Tests
 
 # run workflow on push
 on:
