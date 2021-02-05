@@ -360,14 +360,17 @@ SQLite Data Registry helper function. Search TOML-based data resources stored in
 - `component`       -- as above, optional search string for components names.
 - `data_type`       -- (optional) specify to return an array of this type, instead of a DataFrame.
 """
-function read_estimate(cn::SQLite.DB, data_product::String; data_type=nothing)
-    output = SQLite.DBInterface.execute(cn, READ_EST_SQL, (data_product, )) |> DataFrames.DataFrame
+function read_estimate(cn::SQLite.DB, data_product::String; key=nothing, data_type=nothing)
+    sql = string(READ_EST_SQL, isnothing(key) ? "" : " AND key = ?")
+    vals = isnothing(key) ? (data_product, ) : (data_product, key)
+    output = SQLite.DBInterface.execute(cn, sql, (data_product, )) |> DataFrames.DataFrame
     isnothing(data_type) && return output
     return parse.(data_type, output.val)
 end
-function read_estimate(cn::SQLite.DB, data_product::String, component::String; data_type=nothing)
-    sql = string(READ_EST_SQL, "\nAND comp_name LIKE ?")
-    output = SQLite.DBInterface.execute(cn, sql, (data_product, component)) |> DataFrames.DataFrame
+function read_estimate(cn::SQLite.DB, data_product::String, component::String; key=nothing, data_type=nothing)
+    sql = string(READ_EST_SQL, "\nAND comp_name LIKE ?", isnothing(key) ? "" : " AND key = ?")
+    vals = isnothing(key) ? (data_product, component) : (data_product, component, key)
+    output = SQLite.DBInterface.execute(cn, sql, vals) |> DataFrames.DataFrame
     isnothing(data_type) && return output
     return parse.(data_type, output.val)
 end

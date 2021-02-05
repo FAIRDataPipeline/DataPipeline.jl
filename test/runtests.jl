@@ -14,7 +14,7 @@ Test.@testset "package tests" begin
         submission_script = "julia examples/simple/main.jl"
 
         ### 4. download data products ###
-        db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true, verbose=false)
+        db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, verbose=false)
         Test.@test true
 
         ## display parameter search
@@ -25,8 +25,8 @@ Test.@testset "package tests" begin
             println("\n search: human/infection/SARS-CoV-2/* := ", DataFrames.first(sars_cov2, 6),"\n")
 
             ## read some parameters and convert from hours => days
-            inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", data_type=Float64)[1] / 24
-            lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", data_type=Float64)[1] / 24
+            inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", key="value", data_type=Float64)[1] / 24
+            lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", key="value", data_type=Float64)[1] / 24
             Test.@test true
         end
     end
@@ -38,7 +38,7 @@ Test.@testset "package tests" begin
 
         ### Example: no SQL
         Test.@testset "read estimate (no sql)" begin
-            data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_axis_arrays=true)
+            data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=false, use_axis_arrays=true)
             data_product = data["human/infection/SARS-CoV-2/symptom-delay"]
             component = data_product["symptom-delay"]
             component_type = component["type"]

@@ -2,7 +2,7 @@
 
 !!! note
 
-    Please note that this package is still in development.
+    See [here](https://scottishcovidresponse.github.io/) for the main SCRC documentation. This website is for the Julia package only.
 
 **DataRegistryUtils.jl**  -  *the SCRC 'Data Pipeline' in Julia*
 

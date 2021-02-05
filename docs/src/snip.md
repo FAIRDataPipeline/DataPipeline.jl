@@ -22,7 +22,7 @@ It is recommended to use a *.yaml* data configuration file to specify the data p
 ``` julia
 TEST_FILE = "examples/data_config.yaml"
 DATA_OUT = "out/"
-data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=true)
+data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
 ```
 
 The results referenced by the `data` variable are a `Dict` of data products, indexed by data product name, component name, and so on. They can be accessed thusly:
@@ -34,7 +34,6 @@ data_product = "human/infection/SARS-CoV-2/infectious-duration"
 comp_name = "infectious-duration"
 # by data product
 est = DataRegistryUtils.read_estimate(data, data_product)
-println(est)
 # by component name
 est = DataRegistryUtils.read_estimate(data, data_product, comp_name)
 ```

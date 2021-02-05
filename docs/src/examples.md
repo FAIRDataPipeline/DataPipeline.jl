@@ -163,8 +163,8 @@ db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true)
 Next, we read some parameters and convert them to the required units.
 
 ``` julia
-inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", data_type=Float64)[1] / 24
-lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", data_type=Float64)[1] / 24
+inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", key="value", data_type=Float64)[1] / 24
+lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", key="value", data_type=Float64)[1] / 24
 ```
 
 See [Code snippets](@ref) and the [Package manual](@ref) for information about reading other types of data product.

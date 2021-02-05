@@ -450,7 +450,7 @@ Refresh and load data products from the SCRC data registry. Checks the file hash
 - `verbose`             -- set to `true` to show extra output in the console.
 """
 function fetch_data_per_yaml(yaml_filepath::String, out_dir::String = DATA_OUT; use_axis_arrays::Bool=false,
-    use_sql::Bool=false, sql_file::String="", db_path::String=string(string(rstrip(out_dir, '/'), "/"), basename(yaml_filepath), ".db"),
+    use_sql::Bool=true, sql_file::String="", db_path::String=string(string(rstrip(out_dir, '/'), "/"), basename(yaml_filepath), ".db"),
     force_db_refresh::Bool=false, access_log_path::String=string(rstrip(out_dir, '/'), "/access-log.yaml"), verbose::Bool=false)
 
     st = Dates.now()                                        # initialise
