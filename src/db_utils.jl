@@ -18,6 +18,13 @@ const DB_H5_TABLE_APX = "_tbl"
 #     return string(rstrip(output, ','), ")")
 # end
 
+##
+function get_session_data_dir(db::SQLite.DB)
+    stmt = SQLite.Stmt(db, "SELECT data_dir FROM session_view")
+    df = SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
+    return df[1,1]
+end
+
 ## split sql statements into array
 function get_sql_stmts_from_str(sql::String)
     # sql = strip(replace(read(f, String), "\n" => " "), ' ')
@@ -74,113 +81,18 @@ function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
 end
 
 ## 'meta' load component from [h5] object d
-function meta_load_component!(cn::SQLite.DB, dp_id::Int64, comp_type::String, data_obj::String, meta_obj::Bool=true)
-    stmt = SQLite.Stmt(cn, "INSERT INTO h5_component(dp_id, meta_src, comp_type, data_obj) VALUES(?,?,?,?)")
-    SQLite.execute(stmt, (dp_id, meta_obj, comp_type, data_obj))
+function meta_load_component!(cn::SQLite.DB, dp_id::Int64, comp_name::String, comp_type::String, data_obj::String, meta_obj::Bool=true)
+    stmt = SQLite.Stmt(cn, "INSERT INTO h5_component(dp_id, comp_name, comp_type, meta_src, data_obj) VALUES(?,?,?,?,?)")
+    SQLite.execute(stmt, (dp_id, comp_name, comp_type, meta_obj, data_obj))
     return SQLite.last_insert_rowid(cn)
 end
 
 ## load component from [h5] object d
-function load_component!(cn::SQLite.DB, dp_id::Int64, comp_type::String, tablename::String, d)
+function load_component!(cn::SQLite.DB, dp_id::Int64, comp_name::String, comp_type::String, tablename::String, d)
     SQLite.drop!(cn, tablename, ifexists=true)
     SQLite.load!(d, cn, tablename)
-    return meta_load_component!(cn, dp_id, comp_type, tablename, false)
+    return meta_load_component!(cn, dp_id, comp_name, comp_type, tablename, false)
 end
-
-# ## try get dim titles, else give generic column name
-# # - deprecate this ***
-# function get_dim_title(h5, d::Int64, verbose::Bool)
-#     ttl = string("Dimension_", d, "_title")
-#     if haskey(h5, ttl)
-#         return replace(HDF5.read(h5[ttl])[1], " " => "_");
-#     else
-#         cn = string("col", d)
-#         verbose && println(" - nb. no metadata found for ", cn)
-#         return cn
-#     end
-# end
-## try get dim labels, else give generic labels
-# - deprecate this? ***
-# function get_dim_names(h5, d::Int64, s::Int64)
-#     nms = string("Dimension_", d, "_names")
-#     if haskey(h5, nms)
-#         return HDF5.read(h5[nms]);
-#     else
-#         return String[string("grp", i) for i in 1:s]
-#     end
-# end
-
-## flatten Nd array and load as 2d table
-# - NB. TBO *****
-# function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
-#     arr = read_h5_array(h5)
-#     verbose && println(" - loading array : ", size(arr), " => ", tablename)
-#     nd = ndims(arr)                             # fetch columns names
-#     dim_titles = String[]
-#     for d in 1:nd
-#         push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
-#     end
-#     push!(dim_titles, DB_VAL_COL)               # measure column
-#     ## ddl / dml
-#     idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
-#     dims = Array{Array{Any,1}}(undef, nd)
-#     for d in 1:nd                               # fetch named dimensions
-#         dim_names = get_dim_names(h5, d, size(arr)[d])
-#         idx = Int64[t[d] for t in idc]
-#         dims[d] = dim_names[idx]                # 'named' dimension d
-#     end
-#     verbose && println(" - dims := ", typeof(dims))
-#     df = DataFrames.DataFrame(dims)             # convert to df
-#     df.val = [arr[i] for i in eachindex(arr)]   # add data
-#     DataFrames.rename!(df, Symbol.(dim_titles)) # column names
-#     load_component!(cn, dp_id, tablename, df)   # load to db
-# end
-# replacement:
-# - load data (indices + msr) > new tbl
-# - load named dims (exists and not int?)
-# - define view
-# - ALT: store each as single column table (plus md, dim size, names) - as module
-# - NB. even worse performance wise! (insert is the bottle neck)
-# function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
-#     arrd = HDF5.read(h5)    # > Dict
-#     arr = arrd[ARRAY_OBJ_NAME]
-#     arr_size = size(arr)
-#     ## load data to db
-#     verbose && println(" - loading array : ", arr_size, " => ", tablename)
-#     data = DataFrames.DataFrame((val=arr[:]))
-#     # data = Dict("val"=>arr[:])
-#     comp_id = load_component!(cn, dp_id, ARRAY_OBJ_NAME, tablename, data)
-#     ## load dims
-#     dim_sql = "INSERT INTO array_dim(comp_id, dim_index, dim_type, dim_title, dim_size) VALUES(?,?,?,?,?)"
-#     nm_sql = "INSERT INTO array_dim_name(dim_id, dim_val) VALUES(?,?)"
-#     dim_stmt = SQLite.Stmt(cn, dim_sql)
-#     nm_stmt = SQLite.Stmt(cn, nm_sql)
-#     for d in eachindex(arr_size)
-#         ttl = string("Dimension_", d, "_title")
-#         dim_type = haskey(arrd, ttl) ? 1 : 0
-#         dim_title = dim_type == 0 ? "Index" : arrd[ttl][1]
-#         SQLite.execute(dim_stmt, (comp_id, d, dim_type, dim_title, arr_size[d]))
-#         dim_id = SQLite.last_insert_rowid(cn)
-#         ## load dim names
-#         if dim_type == 1
-#             nms = string("Dimension_", d, "_names")
-#             @assert haskey(arrd, nms)
-#             for i in eachindex(arrd[nms])
-#                 SQLite.execute(nm_stmt, (dim_id, arrd[nms][i]))
-#             end
-#         end
-#     end
-# end
-# ## WIP > metadata load only - meta_load_component?
-# function flat_load_array2!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
-#     ## extract meta?
-#     arrd = HDF5.read(h5)    # > Dict
-#     arr = arrd[ARRAY_OBJ_NAME]
-#     verbose && println(" - loading array : ", size(arr), " => ", tablename)
-#     idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
-#     df = DataFrames.DataFrame(idc)
-#     df.val = arr[:]
-# end
 
 ## db table labeller
 clean_path(x::String) = replace(replace(strip(x, '/'), "/" => "_"), " " => "_")
@@ -198,10 +110,10 @@ function process_h5_file_group!(cn::SQLite.DB, name::String, h5, dp_id::Int64, v
         tablename = get_table_name(tablestub, gnm, DB_H5_TABLE_APX)
         d = read_h5_table(h5, false)
         verbose && println(" - loading table := ", tablename)
-        load_component!(cn, dp_id, TABLE_OBJ_NAME, tablename, d)
+        load_component!(cn, dp_id, gnm, TABLE_OBJ_NAME, tablename, d)
     elseif (haskey(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
         verbose && println(" - array found := ", gnm)
-        meta_load_component!(cn, dp_id, ARRAY_OBJ_NAME, gnm)
+        meta_load_component!(cn, dp_id, gnm, ARRAY_OBJ_NAME, gnm)
     else
         for g in keys(h5)     # group - recurse
             process_h5_file_group!(cn, name, h5[g], dp_id, verbose)
@@ -222,13 +134,13 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
     println(" - checking database: ", db_path)
     output = init_yaml_db(db_path)      # initialise db
     ## for loading dp to db
-    sel_stmt = SQLite.Stmt(output, "SELECT * FROM data_product WHERE dp_name = ? AND dp_version = ? AND dp_hash = ? AND dp_hash != ?")
-    del_stmt = SQLite.Stmt(output, "DELETE FROM data_product WHERE dp_name = ? AND dp_version = ?")
-    ins_stmt = SQLite.Stmt(output, "INSERT INTO data_product(dp_name, dp_path, dp_hash, dp_version) VALUES(?, ?, ?, ?)")
-    function load_data_product!(name::String, filepath::String, filehash::String, version::String)
+    sel_stmt = SQLite.Stmt(output, "SELECT * FROM data_product WHERE dp_name=? AND dp_version=? AND dp_hash=? AND dp_hash != ?")
+    del_stmt = SQLite.Stmt(output, "DELETE FROM data_product WHERE dp_name=? AND dp_version=?")
+    ins_stmt = SQLite.Stmt(output, "INSERT INTO data_product(namespace, dp_name, dp_path, dp_hash, dp_version) VALUES(?,?,?,?,?)")
+    function load_data_product!(namespace::String, name::String, filepath::String, filehash::String, version::String)
         verbose && println(" - processing file: ", filepath)
         function insert_dp()            # function: insert dp and return id
-            SQLite.execute(ins_stmt, (name, filepath, filehash, version))
+            SQLite.execute(ins_stmt, (namespace, name, filepath, filehash, version))
             return SQLite.last_insert_rowid(output)
         end
         if !force_refresh               # check hash (unless forced db refresh)
@@ -250,7 +162,8 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
     ## process file metadata
     updated = 0
     for i in eachindex(md.dp_name)
-        load_data_product!(md.dp_name[i], md.dp_file[i], md.dp_hash[i], md.dp_version[i]) && (updated += 1)
+        ## get namespace
+        load_data_product!(md.dp_namespace[i], md.dp_name[i], md.dp_file[i], md.dp_hash[i], md.dp_version[i]) && (updated += 1)
     end
     ## clean up
     SQLite.execute(output, "DELETE FROM h5_component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
@@ -318,7 +231,6 @@ function read_array(df::DataFrames.DataFrame, use_axis_arrays::Bool, verbose::Bo
 end
 
 ## array by data product only
-const search_arr_sql = "SELECT DISTINCT dp_path, data_obj FROM h5_view WHERE comp_type=? AND dp_name=?"
 """
     read_array(cn::SQLite.DB, data_product::String[, component::String]; use_axis_arrays=false, verbose=false)
 
@@ -329,26 +241,39 @@ SQLite Data Registry helper function. Optionally specify the individual componen
 **Parameters**
 - `cn`              -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
 - `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
-- `component`       -- as above, optional search string for components names.
-- `use_axis_arrays` -- (optional) return the matching data as AxisArrays.
+- `component`       -- [optionally] specify the component name.
+- `use_axis_arrays` -- set `true` to return the matching data as `AxisArray` types.
 """
-function read_array(cn::SQLite.DB, data_product::String; use_axis_arrays::Bool=false, verbose::Bool=false)
-    stmt = SQLite.Stmt(cn, search_arr_sql)
-    df = SQLite.DBInterface.execute(stmt, (ARRAY_OBJ_NAME, data_product)) |> DataFrames.DataFrame
-    DataFrames.nrow(df)==0 && println("WARNING: no matching data products found for '", data_product, "'")
-    return read_array(df, use_axis_arrays, verbose)
+## array by data product and component name
+function read_array(cn::SQLite.DB, data_product::String, component=nothing;
+    use_axis_arrays::Bool=false, verbose::Bool=false, log_access=true, data_log_id=get_log_id(cn::SQLite.DB))
+
+    ## prepare sql
+    sel_sql = "SELECT DISTINCT dp_path, data_obj FROM h5_view\n"
+    sql_args = string("WHERE comp_type=? AND dp_name=?", isnothing(component) ? "" : " AND data_obj=?")
+    stmt = SQLite.Stmt(cn, string(sel_sql, sql_args))
+    vals = [ARRAY_OBJ_NAME, data_product]
+    isnothing(component) || push!(vals, component)
+    ## execute
+    df = SQLite.DBInterface.execute(stmt, vals) |> DataFrames.DataFrame
+    if DataFrames.nrow(df)==0
+        println("WARNING: no matching data products found for '", data_product, component, "'")
+        return nothing
+    else # log and return results:
+        log_access && log_data_access(cn, data_log_id, "h5_view", sql_args, vals)
+        return read_array(df, use_axis_arrays, verbose)
+    end
 end
 
-## array by data product and component name
-function read_array(cn::SQLite.DB, data_product::String, component::String; use_axis_arrays::Bool=false, verbose::Bool=false)
-    stmt = SQLite.Stmt(cn, string(search_arr_sql, " AND data_obj=?"))
-    df = SQLite.DBInterface.execute(stmt, (ARRAY_OBJ_NAME, data_product, component)) |> DataFrames.DataFrame
-    DataFrames.nrow(df)==0 && println("WARNING: no matching data products found for '", data_product, component, "'")
-    return read_array(df, use_axis_arrays, verbose)
-end
+# function read_array(cn::SQLite.DB, data_product::String; use_axis_arrays::Bool=false, verbose::Bool=false)
+#     stmt = SQLite.Stmt(cn, search_arr_sql)
+#     df = SQLite.DBInterface.execute(stmt, (ARRAY_OBJ_NAME, data_product)) |> DataFrames.DataFrame
+#     DataFrames.nrow(df)==0 && println("WARNING: no matching data products found for '", data_product, "'")
+#     return read_array(df, use_axis_arrays, verbose)
+# end
 
 ## read .toml estimate
-const READ_EST_SQL = "SELECT dp_name, comp_name, key, val FROM toml_view\nWHERE dp_name LIKE ?"
+const READ_EST_SQL = "SELECT * FROM toml_view\n"
 """
     read_estimate(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
 
@@ -359,24 +284,44 @@ SQLite Data Registry helper function. Search TOML-based data resources stored in
 **Parameters**
 - `cn`              -- SQLite.DB object.
 - `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
-- `component`       -- as above, optional search string for components names.
-- `key`             -- (optional) specify to return .toml keys of a particular type, e.g. `"type"` or `"value"`.
-- `data_type`       -- (optional) specify to return an array of this type, instead of a DataFrame.
+- `component`       -- as above, [optional] search string for components names.
+- `key`             -- (optionally) specify to return .toml keys of a particular type, e.g. `"type"` or `"value"`.
+- `data_type`       -- (optionally) specify to return an array of this type instead of a DataFrame.
+- `log_access`      -- set `false` to supress data access logging.
+- `data_log_id`     -- (optionally) specify the data log id.
 """
-function read_estimate(cn::SQLite.DB, data_product::String; key=nothing, data_type=nothing)
-    sql = string(READ_EST_SQL, isnothing(key) ? "" : " AND key = ?")
-    vals = isnothing(key) ? (data_product, ) : (data_product, key)
-    output = SQLite.DBInterface.execute(cn, sql, (data_product, )) |> DataFrames.DataFrame
+function read_estimate(cn::SQLite.DB, data_product::String, component=nothing;
+    key=nothing, data_type=nothing, log_access=true, data_log_id=get_log_id(cn::SQLite.DB))
+
+    ## prepare sql
+    sql_args = string("WHERE dp_name LIKE ?", isnothing(component) ? "" : " AND comp_name LIKE ?", isnothing(key) ? "" : " AND key = ?")
+    # sql = string(READ_EST_SQL, "\nAND comp_name LIKE ?", isnothing(key) ? "" : " AND key = ?")
+    vals = Any[data_product]
+    isnothing(component) || push!(vals, component)
+    isnothing(key) || push!(vals, key)
+    # isnothing(key) ? (data_product, component) : (data_product, component, key)
+    ## execute
+    output = SQLite.DBInterface.execute(cn, string(READ_EST_SQL, sql_args), vals) |> DataFrames.DataFrame
+    # - write access log:
+    log_access && log_data_access(cn, data_log_id, "toml_view", sql_args, vals)
+    ## FN THIS
+    # prepend!(vals, data_log_id)
+    # sql = "INSERT INTO access_log_data(log_id, dp_id, comp_id)\nSELECT ?, dp_id, comp_id FROM "
+    # sel_vw = "toml_view"
+    # SQLite.DBInterface.execute(cn, string(sql, sel_vw, "\n", sql_args), vals)
+
     isnothing(data_type) && return output
     return parse.(data_type, output.val)
 end
-function read_estimate(cn::SQLite.DB, data_product::String, component::String; key=nothing, data_type=nothing)
-    sql = string(READ_EST_SQL, "\nAND comp_name LIKE ?", isnothing(key) ? "" : " AND key = ?")
-    vals = isnothing(key) ? (data_product, component) : (data_product, component, key)
-    output = SQLite.DBInterface.execute(cn, sql, vals) |> DataFrames.DataFrame
-    isnothing(data_type) && return output
-    return parse.(data_type, output.val)
-end
+
+# function read_estimate(cn::SQLite.DB, data_product::String; key=nothing, data_type=nothing)
+#     sql = string(READ_EST_SQL, isnothing(key) ? "" : " AND key = ?")
+#     vals = isnothing(key) ? (data_product, ) : (data_product, key)
+#     output = SQLite.DBInterface.execute(cn, sql, (data_product, )) |> DataFrames.DataFrame
+#     ## write access log here *******
+#     isnothing(data_type) && return output
+#     return parse.(data_type, output.val)
+# end
 
 # - tables
 """
@@ -389,8 +334,13 @@ SQLite Data Registry helper function. Search and return [HDF5] table data as a `
 - `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
 - `component`       -- as above, [required] search string for components names.
 """
-function read_table(cn::SQLite.DB, data_product::String, component::String)
+function read_table(cn::SQLite.DB, data_product::String, component::String;
+    log_access=true, data_log_id=get_log_id(cn::SQLite.DB))
+
+    ##
     tablename = get_table_name(data_product, component, DB_H5_TABLE_APX)
+    # - write access log:
+    # log_access && log_data_access(cn, data_log_id, "toml_view", sql_args, vals)
     stmt = SQLite.Stmt(cn, string("SELECT * FROM ", tablename))
     return SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
 end

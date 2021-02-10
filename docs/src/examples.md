@@ -169,6 +169,15 @@ lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-
 
 See [Code snippets](@ref) and the [Package manual](@ref) for information about reading other types of data product.
 
+### 4c. Offline access
+Once the data has been downloaded initially, it can be retrieved for offline access (e.g. no/slow internet connection) using the `offline_mode` option:
+
+``` julia
+db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=true, offline_mode=true)
+```
+
+The main functions for registering objects, such as model code, model runs, and data products, work by staging the data to a local database so they are also compatible with 'offline mode'. only the `commit_` functions require internet access, which can be run once access has been restored.
+
 ## 5. Model simulation
 **Step 5 relies on the use of another package: [DiscretePOMP.jl](https://github.com/mjb3/DiscretePOMP.jl), so you may wish to skip this section or replace it with, e.g. your own model or simulation code.**
 
@@ -203,11 +212,19 @@ println(DiscretePOMP.plot_trajectory(x))
 ```
 
 ## 6. Registering a 'model run'
-Lastly, we register the results of this particular simulation by POSTing to the `code_run` endpoint of the DR's RESTful API:
+Next we register the results of this particular simulation by POSTing to the `code_run` endpoint of the DR's RESTful API:
 
 ``` julia
 model_run_description = "Just another SEIR simulation."
 model_run_id = DataRegistryUtils.register_model_run(model_config, submission_script, code_release_id, model_run_description, scrc_access_tkn)
+```
+
+## 7. Finally, commit objects to registry
+The final step is to commit the local changes we have made to the DR:
+``` julia
+code_release_url = DataRegistryUtils.commit_staged_model(db, code_release_id, scrc_access_tkn)
+model_run_url = DataRegistryUtils.commit_staged_run(db, model_run_id, scrc_access_tkn)
+DataRegistryUtils.registry_commit_status(db) # optional: display status
 ```
 
 ## Finished!

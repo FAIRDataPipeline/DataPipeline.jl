@@ -1,7 +1,7 @@
 # Code snippets
 
 ```@contents
-Pages = ["manual.md"]
+Pages = ["snip.md"]
 Depth = 3
 ```
 
