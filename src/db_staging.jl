@@ -95,7 +95,7 @@ function commit_staged_model(db::SQLite.DB, staging_id::Int64, scrc_access_tkn::
                 df[1,:storage_root_url], df[1,:storage_root_id])
         else                        # found:
             println("NB. model code already registered as := ", df[1,:crr_url])
-            return dp_url
+            return df[1,:crr_url]
         end
     end
 end

@@ -170,7 +170,7 @@ lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-
 See [Code snippets](@ref) and the [Package manual](@ref) for information about reading other types of data product.
 
 ### 4c. Offline access
-Once the data has been downloaded initially, it can be retrieved for offline access (e.g. no/slow internet connection) using the `offline_mode` option:
+Once the data has been downloaded initially, it can be retrieved for offline access (e.g. no or slow internet connections) using the `offline_mode` option:
 
 ``` julia
 db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=true, offline_mode=true)
