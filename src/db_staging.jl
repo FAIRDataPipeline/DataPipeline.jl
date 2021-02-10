@@ -182,6 +182,7 @@ function commit_staged_run(db::SQLite.DB, staging_id::Int64, scrc_access_tkn::St
         run_url = register_model_run(dff[1,:model_config], dff[1,:ss_text], m_url, dff[1,:run_desc], scrc_access_tkn)
         upd_stmt = SQLite.Stmt(db, "UPDATE code_run SET registered=?, run_url=? WHERE run_id=?")
         SQLite.DBInterface.execute(upd_stmt, (true, run_url, staging_id))
+        println("NB. model run registered as := ", run_url)
         return run_url
     end
 end

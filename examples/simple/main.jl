@@ -6,13 +6,15 @@
 # - register model code releases
 # - and register model runs.
 #
-# Steps:                                                    Code: FIX
-# 1. preliminaries                                          L22
-# 2. config files and scripts                               L30
-# 3. read data products from the DR                         L54
-# 4. run model simulation                                   L73
-# 5. register 'code repo release' [model code] in the DR    L40
-# 6. register model 'code run' in the DR                    L110
+# Steps:                                                    Code:
+# 1. preliminaries                                          L24
+# 2. config files and scripts                               L32
+# 3. read data products from the DR                         L43
+# 4. run model simulation                                   L65
+# 4b. automatic data access logging                         L103
+# 5. stage 'code repo release' (i.e. model code)            L107
+# 6. stage model 'code run'                                 L111
+# 7. commit staged objects to the Registry                  L133
 #
 # Author:   Martin Burke (martin.burke@bioss.ac.uk)
 # Date:     24-Jan-2021
@@ -28,7 +30,6 @@ import Random               # other assorted packages used incidentally
 import DataFrames
 
 
-# NB. SPLIT THIS ***********
 ### 2. specify config files, scripts and data directory ###
 # these determine the model configuration;
 # data products to be downloaded; and the directory
@@ -48,8 +49,7 @@ submission_script = "julia examples/simple/main.jl"
 # i.e. download data products
 db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=false, verbose=false)
 
-## process data config file and return connection to SQLite db
-# i.e. download data products
+# NB. this function can now be rerun later in 'offline_mode' to fetch the already downloaded data
 db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=true, offline_mode=true)
 
 ## display parameter search
@@ -130,7 +130,7 @@ model_run_id = DataRegistryUtils.register_model_run(db, code_release_id,
 #     code_release_id, model_run_description, scrc_access_tkn)
 
 
-### 7. commit staged objects
+### 7. commit staged objects to the Registry
 DataRegistryUtils.registry_commit_status(db)
 code_release_url = DataRegistryUtils.commit_staged_model(db, code_release_id, scrc_access_tkn)
 model_run_url = DataRegistryUtils.commit_staged_run(db, model_run_id, scrc_access_tkn)

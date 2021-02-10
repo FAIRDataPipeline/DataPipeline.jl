@@ -11,12 +11,14 @@ The example is also provided as working code (including the accompanying configu
 
 | Steps                                                     | Code  |
 |:---------------------------------------------------------:|:-----:|
-| 1. Preliminaries                                          | L22   |
-| 2. Config files and scripts                               | L30   |
-| 3. Register 'code repo release' [model code] in the DR    | L40   |
-| 4. Read data products from the DR                         | L54   |
-| 5. Run model simulation                                   | L73   |
-| 6. Register model 'code run' in the DR                    | L110  |
+| 1. Preliminaries                                          | L24   |
+| 2. Config files and scripts                               | L32   |
+| 3. Reading data products from the Registry                | L43   |
+| 4. Running a model simulation                             | L65   |
+| 4b. Automatic data access logging                         | L103  |
+| 5. Staging 'code repo releases' (i.e. model code)         | L107  |
+| 6. Staging model 'code runs'                              | L111  |
+| 7. Committing staged objects to the Registry              | L133  |
 
 ## 0. Package installation
 
@@ -109,6 +111,82 @@ submission_script = "julia examples/simple/main.jl"
 
 Here it is used to define the 'entry point' of the application; together with the model code and 'config' files, it will allow others to reproduce our results in the future with ease and precision (an important benefit of the overall pipeline process.)
 
+## 3. Downloading data products
+Here we read some epidemiological parameters from the DR, so we can use them to run an **SEIR** simulation in **step (5)**. First we download some data, then read it.
+
+### 3a. Download data
+First, we process the `data_config` file, which (in this case) returns a variable representing a connection to a SQLite database. I.e. we download the data products:
+``` julia
+data_dir = "/examples/simple/data/" # local directory where data is to be stored
+db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true)
+```
+
+### 3b. Read some data
+Next, we read some parameters and convert them to the required units.
+
+``` julia
+inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", key="value", data_type=Float64)[1] / 24
+lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", key="value", data_type=Float64)[1] / 24
+```
+
+See [Code snippets](@ref) and the [Package manual](@ref) for information about reading other types of data product.
+
+### 3c. Offline access
+Once the data has been downloaded initially, it can be retrieved for offline access (e.g. no or slow internet connections) using the `offline_mode` option:
+
+``` julia
+db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=true, offline_mode=true)
+```
+
+The main functions for registering objects, such as model code, model runs, and data products, work by staging the data to a local database so they are also compatible with 'offline mode'. only the `commit_` functions require internet access, which can be run once access has been restored.
+
+## 4. Model simulation
+**Step 5 relies on the use of another package: [DiscretePOMP.jl](https://github.com/mjb3/DiscretePOMP.jl), so you may wish to skip this section or replace it with, e.g. your own model or simulation code.**
+
+Next, *for illustration purposes only* we run a simple **SEIR** simulation using the Gillespie simulation feature of the `DiscretePOMP.jl` package. We use the downloaded parameters* as inputs, and finally plot the results as a time series of the population as they migrate between states according to the stochastic dynamics of the model.
+
+First we extract some information about the model run from the `model_config.yaml` file:
+
+``` julia
+mc = YAML.load_file(model_config)
+p = mc["initial_s"]   # population size
+t = mc["max_t"]       # simulation time
+beta = mc["beta"]     # nb. contact rate := beta SI / N
+Random.seed!(mc["random_seed"])
+```
+
+These include the population size and contact parameter beta, as well as the random seed. We are then ready the generate a DiscretePOMP model:
+
+``` julia
+## define a vector of simulation parameters
+theta = [beta, inf_period_days^-1, lat_period_days^-1]
+## initial system state variable [S E I R]
+initial_condition = [p - 1, 0, 1, 0]
+## generate DPOMPs model (see https://github.com/mjb3/DiscretePOMP.jl)
+model = DiscretePOMP.generate_model("SEIR", initial_condition, freq_dep=true)
+```
+
+Finally, we run the simulation and plot the results:
+
+``` julia
+x = DiscretePOMP.gillespie_sim(model, theta, tmax=t)
+println(DiscretePOMP.plot_trajectory(x))
+```
+
+### 4b. automatic data access logging
+In order to register a given code run in the DR, we require a record of the data products and components accessed to produce that particular run. Data access logging can essentially be handled automatically. The most recent active data log is used to register code runs by default. However, it is advisable to manually 'finish' the log instead, and specify the log id manually at the point of registration:
+
+``` julia
+## this is not usually necessary in a single process environment:
+# initialise_data_log(db, offline_mode)
+
+## this is necessary when we want a [human-*and*-machine-readable] file copy of the log
+log_id = DataRegistryUtils.finish_data_log(db; filepath=data_log)
+```
+
+This is particularly important if we are planning on doing further work in the interim, such as if we want an accurate record of the access *time*. Logs should also handled manually (including initialisation) when working with multiple processes running on separate cores, but utilising the same filesystem/data resources.
+
+
 ## 3. Registering model code ###
 
 ### 3a. SCRC access token - request via https://data.scrc.uk/docs/
@@ -149,68 +227,6 @@ Finally, the resulting URI is in the form:
 code_release_id := "https://data.scrc.uk/api/code_repo_release/2157/"
 ```
 
-## 4. Downloading data products
-Here we read some epidemiological parameters from the DR, so we can use them to run an **SEIR** simulation in **step (5)**. First we download some data, then read it.
-
-### 4a. Download data
-First, we process the `data_config` file, which (in this case) returns a variable representing a connection to a SQLite database. I.e. we download the data products:
-``` julia
-data_dir = "/examples/simple/data/" # local directory where data is to be stored
-db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true)
-```
-
-### 4b. Read some data
-Next, we read some parameters and convert them to the required units.
-
-``` julia
-inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", key="value", data_type=Float64)[1] / 24
-lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", key="value", data_type=Float64)[1] / 24
-```
-
-See [Code snippets](@ref) and the [Package manual](@ref) for information about reading other types of data product.
-
-### 4c. Offline access
-Once the data has been downloaded initially, it can be retrieved for offline access (e.g. no or slow internet connections) using the `offline_mode` option:
-
-``` julia
-db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=true, offline_mode=true)
-```
-
-The main functions for registering objects, such as model code, model runs, and data products, work by staging the data to a local database so they are also compatible with 'offline mode'. only the `commit_` functions require internet access, which can be run once access has been restored.
-
-## 5. Model simulation
-**Step 5 relies on the use of another package: [DiscretePOMP.jl](https://github.com/mjb3/DiscretePOMP.jl), so you may wish to skip this section or replace it with, e.g. your own model or simulation code.**
-
-Next, *for illustration purposes only* we run a simple **SEIR** simulation using the Gillespie simulation feature of the `DiscretePOMP.jl` package. We use the downloaded parameters* as inputs, and finally plot the results as a time series of the population as they migrate between states according to the stochastic dynamics of the model.
-
-First we extract some information about the model run from the `model_config.yaml` file:
-
-``` julia
-mc = YAML.load_file(model_config)
-p = mc["initial_s"]   # population size
-t = mc["max_t"]       # simulation time
-beta = mc["beta"]     # nb. contact rate := beta SI / N
-Random.seed!(mc["random_seed"])
-```
-
-These include the population size and contact parameter beta, as well as the random seed. We are then ready the generate a DiscretePOMP model:
-
-``` julia
-## define a vector of simulation parameters
-theta = [beta, inf_period_days^-1, lat_period_days^-1]
-## initial system state variable [S E I R]
-initial_condition = [p - 1, 0, 1, 0]
-## generate DPOMPs model (see https://github.com/mjb3/DiscretePOMP.jl)
-model = DiscretePOMP.generate_model("SEIR", initial_condition, freq_dep=true)
-```
-
-Finally, we run the simulation and plot the results:
-
-``` julia
-x = DiscretePOMP.gillespie_sim(model, theta, tmax=t)
-println(DiscretePOMP.plot_trajectory(x))
-```
-
 ## 6. Registering a 'model run'
 Next we register the results of this particular simulation by POSTing to the `code_run` endpoint of the DR's RESTful API:
 
@@ -224,7 +240,7 @@ The final step is to commit the local changes we have made to the DR:
 ``` julia
 code_release_url = DataRegistryUtils.commit_staged_model(db, code_release_id, scrc_access_tkn)
 model_run_url = DataRegistryUtils.commit_staged_run(db, model_run_id, scrc_access_tkn)
-DataRegistryUtils.registry_commit_status(db) # optional: display status
+DataRegistryUtils.registry_commit_status(db)    # optional: display status
 ```
 
 ## Finished!
