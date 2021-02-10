@@ -252,7 +252,7 @@ function read_array(cn::SQLite.DB, data_product::String, component=nothing;
     sel_sql = "SELECT DISTINCT dp_path, data_obj FROM h5_view\n"
     sql_args = string("WHERE comp_type=? AND dp_name=?", isnothing(component) ? "" : " AND data_obj=?")
     stmt = SQLite.Stmt(cn, string(sel_sql, sql_args))
-    vals = [ARRAY_OBJ_NAME, data_product]
+    vals = Any[ARRAY_OBJ_NAME, data_product]
     isnothing(component) || push!(vals, component)
     ## execute
     df = SQLite.DBInterface.execute(stmt, vals) |> DataFrames.DataFrame

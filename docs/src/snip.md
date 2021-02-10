@@ -30,7 +30,7 @@ DATA_OUT = "out/"
 data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
 ```
 
-The results referenced by the `data` variable are a `Dict` of data products, indexed by data product name, component name, and so on. They can be accessed thusly:
+The results referenced by the `data` variable is a SQLite file databased, containing records of downloaded data products, components, and so on. They can be accessed thusly:
 
 ### Example: reading key-value pairs, e.g. point estimates
 

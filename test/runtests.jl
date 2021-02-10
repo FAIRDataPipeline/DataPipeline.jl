@@ -37,17 +37,17 @@ Test.@testset "package tests" begin
         DATA_OUT = "out/"
 
         ### Example: no SQL
-        Test.@testset "read estimate (no sql)" begin
-            data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=false, use_axis_arrays=true)
-            data_product = data["human/infection/SARS-CoV-2/symptom-delay"]
-            component = data_product["symptom-delay"]
-            component_type = component["type"]
-            distribution_name = component["distribution"]
-            Test.@test true ## FIX THIS ***
-        end
+        # Test.@testset "read estimate (no sql)" begin
+        #     data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=false, use_axis_arrays=true)
+        #     data_product = data["human/infection/SARS-CoV-2/symptom-delay"]
+        #     component = data_product["symptom-delay"]
+        #     component_type = component["type"]
+        #     distribution_name = component["distribution"]
+        #     Test.@test true ## FIX THIS ***
+        # end
 
         ### refresh data
-        data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=true)
+        data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
         Test.@test true
 
         ### Example: reading point estimates
