@@ -23,21 +23,27 @@ read_data_product_from_file
 
 ## Writing to the Data Registry
 
-### Register model
+### Registering models
 ```@docs
 register_github_model
 commit_staged_model
 ```
 
-### Register model run
+### Registering model runs
 ```@docs
 register_model_run
 commit_staged_run
 ```
 
-### Other
+### Register data products
 ```@docs
 register_text_file
+```
+
+## Other
+```@docs
+whats_my_file
+registry_audit
 ```
 
 ## Index

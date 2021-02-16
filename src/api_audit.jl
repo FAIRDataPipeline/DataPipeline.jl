@@ -1,3 +1,60 @@
+### what's my file
+# NB. add option for staged objects
+"""
+    whats_my_file(path::String)
+
+Search the Data Registry for matches with a given local file (or directory of files.)
+
+**Parameters**
+- `path`     -- file path, or directory.
+"""
+function whats_my_file(path::String)
+    if isfile(path)     ## single file
+        ft = get_file_type(path)
+        fh = get_file_hash(path)
+        search_url = string(API_ROOT, "storage_location/?hash=", fh)
+        println("Searching the Data Registry for matches with: ", basename(path))
+        println(" - filepath: ", path)
+        println(" - type:     ", ft)
+        ## process results
+        resp = http_get_json(search_url)
+        println(" -> FOUND: ", resp["count"], " matching file", resp["count"]==1 ? "" : "s")
+        for i in eachindex(resp["results"])
+            ## get object
+            sl = resp["results"][i]["url"]
+            obj_url = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl, SL_ROOT))
+            obj_resp = http_get_json(obj_url)["results"][1]
+            dp_resp = http_get_json(obj_resp["data_product"])
+            ns_resp = http_get_json(dp_resp["namespace"])
+            println("\n ", dp_resp["url"])
+            println(" - name:         ", dp_resp["name"])
+            println(" -- version:     ", dp_resp["version"])
+            println(" -- namespace:   ", ns_resp["name"])
+            println(" -- description: ", obj_resp["description"])
+            println(" - last updated: ", obj_resp["last_updated"])
+            println(" -- by:          ", obj_resp["updated_by"])
+            println(" - object:       ", obj_resp["url"])
+            println(" - storage:      ", sl)
+            println(" -- root:        ", resp["results"][i]["storage_root"])
+        end
+    elseif isdir(path)  ## recurse
+        println("Searching directory ... ")
+        cnt = 0
+        for (root, dirs, files) in walkdir(path)
+            # println("Searching $root")
+            cnt += 1
+            for file in files
+                println()
+                whats_my_file(joinpath(root, file))
+            end
+        end
+        cnt==0 && println(" - none found.")
+    else
+        println("ERROR: invalid path:", path)
+    end
+end
+
+
 ### audit trail ph
 # NB - what about auth for user info? ***
 # - TBA: versioning ******

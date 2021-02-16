@@ -13,6 +13,7 @@ const NS_ROOT = string(API_ROOT, "namespace/")
 const STR_ROOT = string(API_ROOT, "storage_root/")
 const SL_ROOT = string(API_ROOT, "storage_location/")
 const TF_ROOT = string(API_ROOT, "text_file/")
+# const OBJ_ROOT = string(API_ROOT, "object/")
 const DATA_OUT = "./out/"
 const NULL_HASH = "na"
 const NULL_FILE = "no_match"

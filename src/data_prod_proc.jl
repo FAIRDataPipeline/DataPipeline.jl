@@ -11,6 +11,16 @@ const ROWN_OBJ_NAME = "row_names"
 # - csv
 const CSV_OBJ_NAME = "csv"
 
+const DATA_FILE_TYPES = ["HDF5", "TOML", "CSV", "UNKNOWN"]
+
+function get_file_type(filepath::String)
+    HDF5.ishdf5(filepath) && (return DATA_FILE_TYPES[1])
+    occursin(".toml", filepath) && (return DATA_FILE_TYPES[2])
+    occursin(".tml", filepath) && (return DATA_FILE_TYPES[2])
+    occursin(".csv", filepath) && (return DATA_FILE_TYPES[3])
+    return DATA_FILE_TYPES[4]
+end
+
 ## does what it says on the tin
 function read_h5_table(obj_grp, use_axis_arrays::Bool)
     obj = HDF5.read(obj_grp[TABLE_OBJ_NAME])
