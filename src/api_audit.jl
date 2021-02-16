@@ -13,12 +13,12 @@ function whats_my_file(path::String)
         ft = get_file_type(path)
         fh = get_file_hash(path)
         search_url = string(API_ROOT, "storage_location/?hash=", fh)
-        println("Searching the Data Registry for matches with: ", basename(path))
+        println("Searching the Data Registry for files similar to ", basename(path))
         println(" - filepath: ", path)
         println(" - type:     ", ft)
         ## process results
         resp = http_get_json(search_url)
-        println(" -> FOUND: ", resp["count"], " matching file", resp["count"]==1 ? "" : "s")
+        println(" -> Results: ", resp["count"], " matching data product", resp["count"]==1 ? "" : "s")
         for i in eachindex(resp["results"])
             ## get object
             sl = resp["results"][i]["url"]
@@ -26,6 +26,7 @@ function whats_my_file(path::String)
             obj_resp = http_get_json(obj_url)["results"][1]
             dp_resp = http_get_json(obj_resp["data_product"])
             ns_resp = http_get_json(dp_resp["namespace"])
+            sr_resp = http_get_json(resp["results"][i]["storage_root"])
             println("\n ", dp_resp["url"])
             println(" - name:         ", dp_resp["name"])
             println(" -- version:     ", dp_resp["version"])
@@ -33,22 +34,23 @@ function whats_my_file(path::String)
             println(" -- description: ", obj_resp["description"])
             println(" - last updated: ", obj_resp["last_updated"])
             println(" -- by:          ", obj_resp["updated_by"])
-            println(" - object:       ", obj_resp["url"])
-            println(" - storage:      ", sl)
-            println(" -- root:        ", resp["results"][i]["storage_root"])
+            println(" - object:     ", obj_resp["url"])
+            println(" - storage:  ", sl)
+            println(" -- root:    ", sr_resp["name"])
+            println(" -- path:    ", joinpath(sr_resp["root"], resp["results"][i]["path"]))
         end
     elseif isdir(path)  ## recurse
-        println("Searching directory ... ")
-        cnt = 0
+        println("Scanning directory... ")
+        none = true
         for (root, dirs, files) in walkdir(path)
             # println("Searching $root")
-            cnt += 1
             for file in files
-                println()
+                none || println()
+                none = false
                 whats_my_file(joinpath(root, file))
             end
         end
-        cnt==0 && println(" - none found.")
+        none && println(" - no files found.")
     else
         println("ERROR: invalid path:", path)
     end

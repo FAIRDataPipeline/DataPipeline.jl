@@ -82,10 +82,10 @@ db = DataRegistryUtils.read_data_product(fp, use_sql = true)
 x = DBInterface.execute(data, "SELECT * FROM data_product") |> DataFrame
 ```
 
-### Example: what's my file?
+### What's my file?
 
 Sometimes you need to know if a file (or directory of files,) is registered in the Data Registry. This can be accomplished using the `whats_my_file` function. For example:
 
 ``` julia
-DataRegistryUtils.whats_my_file(fp)
+DataRegistryUtils.whats_my_file("path/to/some/file/or/directory")
 ```
