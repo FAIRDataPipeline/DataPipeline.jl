@@ -1,14 +1,15 @@
 ### what's my file
 # NB. add option for staged objects
 """
-    whats_my_file(path::String)
+    whats_my_file(path::String; show_path=false)
 
 Search the Data Registry for matches with a given local file (or directory of files.)
 
 **Parameters**
-- `path`     -- file path, or directory.
+- `path`        -- local file path, or directory.
+- `show_path`   -- (optional) display the [remote] path of any matching files.
 """
-function whats_my_file(path::String)
+function whats_my_file(path::String; show_path=false)
     if isfile(path)     ## single file
         ft = get_file_type(path)
         fh = get_file_hash(path)
@@ -37,7 +38,7 @@ function whats_my_file(path::String)
             println(" - object:     ", obj_resp["url"])
             println(" - storage:  ", sl)
             println(" -- root:    ", sr_resp["name"])
-            println(" -- path:    ", joinpath(sr_resp["root"], resp["results"][i]["path"]))
+            show_path && println(" -- path:    ", joinpath(sr_resp["root"], resp["results"][i]["path"]))
         end
     elseif isdir(path)  ## recurse
         println("Scanning directory... ")
@@ -47,7 +48,7 @@ function whats_my_file(path::String)
             for file in files
                 none || println()
                 none = false
-                whats_my_file(joinpath(root, file))
+                whats_my_file(joinpath(root, file), show_path=show_path)
             end
         end
         none && println(" - no files found.")
