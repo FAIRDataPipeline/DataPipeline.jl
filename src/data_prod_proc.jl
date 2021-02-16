@@ -8,8 +8,8 @@ import AxisArrays
 const ARRAY_OBJ_NAME = "array"
 const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"
-
-## TBA: md type w/hash
+# - csv
+const CSV_OBJ_NAME = "csv"
 
 ## does what it says on the tin
 function read_h5_table(obj_grp, use_axis_arrays::Bool)
@@ -56,6 +56,11 @@ function process_h5_file(filepath::String, use_axis_arrays::Bool, verbose::Bool)
     return output
 end
 
+## tabular data
+# function process_csv_file(filepath::String, use_axis_arrays::Bool, verbose::Bool)
+#     return CSV.read(filepath, DataFrames.DataFrame)
+# end
+
 # function process_toml_file(filepath::String)
 #     return TOML.parsefile(filepath)
 # end
@@ -63,17 +68,20 @@ end
 """
     read_data_product_from_file(filepath; use_axis_arrays = false, verbose = false)
 
-Read HDF5 or TOML file from local system.
+Read HDF5, CSV or TOML file from local system.
 
 **Parameters**
-- `filepath`        -- the location of an HDF5 or TOML file.
+- `filepath`        -- the location of an e.g. HDF5 file.
 - `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
 function read_data_product_from_file(filepath::String; use_axis_arrays::Bool = false, verbose::Bool = false)
     verbose && println("processing file: ", filepath)
-    occursin(".h5", filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
+    ## occursin(".h5", filepath)
+    HDF5.ishdf5(filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
     occursin(".toml", filepath) && (return TOML.parsefile(filepath))
+    occursin(".tml", filepath) && (return TOML.parsefile(filepath))
+    occursin(".csv", filepath) && (return CSV.read(filepath, DataFrames.DataFrame))
     println(" - WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
 end
 

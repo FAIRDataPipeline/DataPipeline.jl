@@ -7,6 +7,8 @@ include("../db/ddl.sql")
 # const DB_TYPE_MAP = Dict(String => "TEXT", Int32 => "INTEGER", Float64 => "REAL")
 const DB_FLAT_ARR_APX = "_arr"
 const DB_H5_TABLE_APX = "_tbl"
+const DB_CSV_TABLE_APX = "_csv"
+
 # const DB_VAL_COL = "val"
 
 ## insert sql helper
@@ -129,6 +131,15 @@ function process_h5_file!(cn::SQLite.DB, name::String, filepath::String, dp_id::
     HDF5.close(f)
 end
 
+## tabular data
+# - NEED TO REDESIGN THIS FOR SEP DB *******
+function process_csv_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
+    df = CSV.read(filepath, DataFrames.DataFrame)
+    tablestub = clean_path(basename(filepath))
+    tablename = string(tablestub, DB_CSV_TABLE_AP)
+    load_component!(cn, dp_id, tablestub, CSV_OBJ_NAME, tablename, df)
+end
+
 ## load yaml data to sqlite db
 function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::Bool)
     println(" - checking database: ", db_path)
@@ -149,10 +160,12 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
             DataFrames.nrow(qr) == 0 || (return false)
         end                             # else load from scratch
         SQLite.execute(del_stmt, (name, version))
-        if occursin(".h5", filepath)
+        if HDF5.ishdf5(filepath) # occursin(".h5", filepath)
             process_h5_file!(output, name, filepath, insert_dp(), verbose)
-        elseif occursin(".toml", filepath)
+        elseif (occursin(".toml", filepath) || occursin(".tml", filepath))
             process_toml_file!(output, filepath, insert_dp())
+        elseif occursin(".csv", filepath)
+            process_csv_file!(output, filepath, insert_dp())
         else    # TBA: CSV/TSV? ***
             filepath == NULL_FILE || println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
             return false

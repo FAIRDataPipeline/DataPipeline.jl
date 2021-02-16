@@ -32,6 +32,7 @@ end
 include("data_prod_proc.jl")    # dp file handling
 include("db_utils.jl")          # db output
 include("data_log.jl")          # access logging
+include("api_audit.jl")         # DR audits
 
 ## function get id from uri
 function get_id_from_root(url::String, root::String)
