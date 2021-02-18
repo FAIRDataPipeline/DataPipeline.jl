@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS data_product(
 	sl_path TEXT,
 	description TEXT,
 	registered BOOLEAN DEFAULT FALSE,
-	dp_url TEXT
+	dp_url TEXT,
 	row_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 CREATE TABLE IF NOT EXISTS h5_component(

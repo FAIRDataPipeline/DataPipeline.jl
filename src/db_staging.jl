@@ -24,7 +24,8 @@ Stage a data set (i.e. a local file) for upload to the ``data_product`` endpoint
 - `storage_root_id` -- Data Registry storage root identifier, `"https://data.scrc.uk/api/storage_root/11/"` (GitHub) by default.
 """
 function register_data_product(db::SQLite.DB, dp_name::String,
-    version::String, filepath::String; namespace="SCRC", storage_root_id=STR_RT_BOYDORR,
+    version::String, filepath::String; namespace="SCRC",
+    description="", storage_root_id=STR_RT_BOYDORR,
     check_hash=true, ftp_transfer=storage_root_id==STR_RT_BOYDORR, remote_path=dp_name)
 
     ## hash search
@@ -42,8 +43,8 @@ function register_data_product(db::SQLite.DB, dp_name::String,
     sel_stmt = SQLite.Stmt(db, "SELECT dp_id, registered FROM data_product WHERE dp_name=? AND dp_version=?")
     df = SQLite.DBInterface.execute(sel_stmt, (dp_name, version)) |> DataFrames.DataFrame
     if DataFrames.nrow(df)==0   # stage data product
-        ins_stmt = SQLite.Stmt(db, "INSERT INTO data_product(namespace, dp_name, dp_path, dp_hash, dp_version, storage_root_id) VALUES(?,?,?,?,?,?)")
-        SQLite.DBInterface.execute(ins_stmt, (namespace, dp_name, filepath, fh, version, storage_root_id))
+        ins_stmt = SQLite.Stmt(db, "INSERT INTO data_product(namespace, dp_name, filepath, dp_hash, dp_version, sr_url, sl_path, description) VALUES(?,?,?,?,?,?,?,?)")
+        SQLite.DBInterface.execute(ins_stmt, (namespace, dp_name, filepath, fh, version, storage_root_id, remote_path, description))
         return SQLite.last_insert_rowid(db)
     else                        # else return db staging id
         println("WARNING: this data product name and version is already ", df[1,:registered]==0 ? "staged" : "registered")
@@ -80,8 +81,8 @@ function commit_staged_data_product(db::SQLite.DB, staging_id::Int64
             end
             ## commit to registry
             return commit_data_product(df[1,:namespace], df[1,:dp_name], df[1,:version],
-                df[1,:version]local_path, df[1,:file_hash], description, scrc_access_tkn,
-                df[1,:storage_root_id], check_hash)
+                df[1,:version]local_path, df[1,:dp_hash], df[1,:description], scrc_access_tkn,
+                df[1,:sr_url], check_hash)
         else                        # found:
             println("NB. already registered as := ", df[1,:dp_url])
             return df[1,:dp_url]

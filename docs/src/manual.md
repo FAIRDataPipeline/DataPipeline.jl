@@ -25,20 +25,19 @@ read_data_product_from_file
 
 ## Writing to the Data Registry
 
-The process of registering objects such as data, code, and model runs in the main Data Registry
+The process of registering objects such as data, code, and model runs, in the main Data Registry involves two steps; [local] registration, and then committing registered objects to the main online Registry.
 
 ### Registering objects locally
 
 ```@docs
 register_data_product
-register_text_file
 register_github_model
 register_model_run
 ```
 
-### Committing to the main Registry
+### Committing objects to the online Registry
 
-Note that 'staged' objects (i.e. registered locally) can be committed all at once, or one at a time using the identifiers yielded by the above function calls, e.g. `register_data_product`.
+Note that 'staged' objects (i.e. registered locally) can be committed all at once using `commit_all`, or one at a time using the identifiers yielded by the above function calls, e.g. `register_data_product`.
 
 ```@docs
 registry_commit_status

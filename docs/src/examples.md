@@ -1,7 +1,7 @@
 # Simple example
 
 ##  Introduction
-Here, we use a simplistic example to demonstrate use of the package to interact with the SCRC Data Registry (DR) in a process referred to as the 'pipeline', including:
+The purpose of this tutorial is to demonstrate use of the package to interact with the SCRC Data Registry (DR) in a process referred to as the 'pipeline', including:
 - How to read data products from the DR,
 - utilise them in a simple simulation model,
 - register the simulation model code with the DR,
@@ -9,7 +9,7 @@ Here, we use a simplistic example to demonstrate use of the package to interact 
 
 The example is also provided as working code (including the accompanying configuration files) in the *examples/simple* directory of the package repository. The steps and the corresponding line of code in that module are:
 
-| Steps                                                     | Code  |
+| Steps / Learning outcomes                                 | Code  |
 |:---------------------------------------------------------:|:-----:|
 | 1. Preliminaries                                          | L24   |
 | 2. Config files and scripts                               | L32   |
