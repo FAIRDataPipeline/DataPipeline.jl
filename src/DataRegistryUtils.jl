@@ -141,7 +141,7 @@ function download_file(storage_info, fp::String, fail_on_hash_mismatch::Bool)
         end
         return fh
     end
-    return DPHashCheck(fhash == storage_info.s_hs, fp, fhash)
+    return DPHashCheck(fhash == storage_info.sl_hash, fp, fhash)
 end
 
 ## hash check and download
