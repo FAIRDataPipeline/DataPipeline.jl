@@ -14,7 +14,8 @@ Test.@testset "package tests" begin
         submission_script = "julia examples/simple/main.jl"
 
         ### 4. download data products ###
-        db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, verbose=false)
+        # db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, verbose=false)
+        db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config, verbose=false)
         Test.@test true
 
         ## display parameter search

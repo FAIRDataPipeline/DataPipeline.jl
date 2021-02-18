@@ -1,26 +1,95 @@
-### DATA PRODUCT
-
-### CODE REPO RELEASE
-
-## stage data product (internal)
-# - low level first (i.e. format agnostic)
-function register_data_product(db::SQLite.DB, dp_name::String,
-    version::String, filepath::String; namespace="SCRC")
-
-    ## process file and load
-    # file_hash =
+### STORAGE ROOTS
+function get_storage_root(storage_root_id, offline_mode=false)
 
 end
 
-## stage data product (internal)
-# - e.g. table, array, kv, etc.
+### STORAGE LOCATIONS
 # function register_data_product(db::SQLite.DB,
-#     dp_name::String, component::String, version::String,
-#     data::Array, titles::Array{String,1}, names::Array{Array,1};
-#     namespace="SCRC", data_dir=get_session_data_dir(db))
-#
-#     ## convert data
-# end
+
+### DATA PRODUCT
+
+## stage data product (internal)
+# - low level first (i.e. format agnostic)
+"""
+    register_data_product(db, dp_name, version, filepath; namespace="SCRC")
+
+Stage a data set (i.e. a local file) for upload to the ``data_product`` endpoint of the SCRC Data Registry.
+
+**Parameters**
+- `db`              -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+- `dp_name`         -- data product name.
+- `version`         -- e.g. `"0.0.1"`
+- `filepath`        -- path of the e.g. HDF5 file.
+- `namespace`       -- (optionally) specify the namespace, `"SCRC"` by default.
+- `storage_root_id` -- Data Registry storage root identifier, `"https://data.scrc.uk/api/storage_root/11/"` (GitHub) by default.
+"""
+function register_data_product(db::SQLite.DB, dp_name::String,
+    version::String, filepath::String; namespace="SCRC", storage_root_id=STR_RT_BOYDORR,
+    check_hash=true, ftp_transfer=storage_root_id==STR_RT_BOYDORR, remote_path=dp_name)
+
+    ## hash search
+    fh = get_file_hash(filepath)
+    if check_hash
+        sel_stmt = SQLite.Stmt(db, "SELECT dp_id, dp_name, namespace, registered FROM data_product WHERE dp_hash=?")
+        df = SQLite.DBInterface.execute(sel_stmt, (fh, )) |> DataFrames.DataFrame
+        if DataFrames.nrow(df)>0   # stage data product
+            println("WARNING: a file with this checksum is already ", df[1,:registered]==0 ? "staged" : "registered", " as :=\n - ", df[1,:dp_name], "in the ", namespace, "namespace")
+            # model_repo==df[1,:crr_repo] || println(msg)
+            return df[1,:dp_id]
+        end
+    end
+    ## search local db:
+    sel_stmt = SQLite.Stmt(db, "SELECT dp_id, registered FROM data_product WHERE dp_name=? AND dp_version=?")
+    df = SQLite.DBInterface.execute(sel_stmt, (dp_name, version)) |> DataFrames.DataFrame
+    if DataFrames.nrow(df)==0   # stage data product
+        ins_stmt = SQLite.Stmt(db, "INSERT INTO data_product(namespace, dp_name, dp_path, dp_hash, dp_version, storage_root_id) VALUES(?,?,?,?,?,?)")
+        SQLite.DBInterface.execute(ins_stmt, (namespace, dp_name, filepath, fh, version, storage_root_id))
+        return SQLite.last_insert_rowid(db)
+    else                        # else return db staging id
+        println("WARNING: this data product name and version is already ", df[1,:registered]==0 ? "staged" : "registered")
+        return df[1,:dp_id]
+    end
+end
+## NB. add FTP staging table? ***
+
+## register staged model
+"""
+    commit_staged_data_product(db, staging_id, scrc_access_tkn)
+
+Commit staged [local] file to the ``data_product`` endpoint of the SCRC Data Registry.
+
+**Parameters**
+- `db`                      -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+- `staging_id`              -- data product id, obtained when the model was [pre-]registered.
+- `scrc_access_tkn`         -- access token (see https://data.scrc.uk/docs/.)
+"""
+function commit_staged_data_product(db::SQLite.DB, staging_id::Int64
+    , scrc_access_tkn::String, ftp_username=nothing, ftp_password=nothing)
+
+    sel_stmt = SQLite.Stmt(db, "SELECT * FROM data_product WHERE dp_id=?")
+    df = SQLite.DBInterface.execute(sel_stmt, (staging_id, )) |> DataFrames.DataFrame
+    if DataFrames.nrow(df)==0   # handle bad id
+        println("ERROR: id not recognised")
+        return nothing
+    else
+        ## check [internal] registry status
+        if df[1, :registered]==0    # commit to registry
+            ## ftp transfer
+            if !isnothing(ftp_username)
+                ftp_transfer_file(storage_root_id, local_path, name, ftp_username, ftp_password)
+            end
+            ## commit to registry
+            return commit_data_product(df[1,:namespace], df[1,:dp_name], df[1,:version],
+                df[1,:version]local_path, df[1,:file_hash], description, scrc_access_tkn,
+                df[1,:storage_root_id], check_hash)
+        else                        # found:
+            println("NB. already registered as := ", df[1,:dp_url])
+            return df[1,:dp_url]
+        end
+    end
+end
+
+### CODE REPO RELEASES
 
 ## stage model as 'code repo release' (internal)
 function stage_github_model(db::SQLite.DB, model_name::String, model_version::String, model_repo::String,
@@ -42,6 +111,7 @@ function stage_github_model(db::SQLite.DB, model_name::String, model_version::St
 end
 
 ## stage by congig file
+# - `storage_root_url`    -- E.g.  -- also the default.
 """
     register_github_model(model_config, scrc_access_tkn; ... )
     register_github_model(db, model_config, scrc_access_tkn; ... )
@@ -61,12 +131,11 @@ The staged `code_repo_release` can then be pushed to the main Data Registry usin
 **Named parameters**
 - `model_description`   -- (optional) description of the model.
 - `model_website`       -- (optional) website, e.g. for an accompanying paper, blog, or model documentation -- `model_repo` by default.
-- `storage_root_url`    -- E.g. `"https://github.com/"` -- also the default.
-- `storage_root_id`     -- Data Registry storage root identifier, `"https://data.scrc.uk/api/storage_root/11/"` by default.
-
+- `storage_root_id`     -- Data Registry storage root identifier, `"https://data.scrc.uk/api/storage_root/11/"` (GitHub) by default.
 """
-function register_github_model(db::SQLite.DB, model_config::String;
-    storage_root_url="https://github.com/", storage_root_id=STR_RT_GITHUB)
+function register_github_model(db::SQLite.DB, model_config::String; storage_root_id=STR_RT_GITHUB)
+    # storage_root_url="https://github.com/",
+    storage_root_url = get_storage_root(storage_root_id)
 
     model_hash = get_file_hash(model_config)
     ## read optional params
@@ -80,7 +149,16 @@ function register_github_model(db::SQLite.DB, model_config::String;
 end
 
 ## register staged model
-# ADD DOCS ****
+"""
+    commit_staged_model(db, staging_id, scrc_access_tkn)
+
+Upload model run to the ``code_run`` endpoint of the SCRC Data Registry.
+
+**Parameters**
+- `db`                      -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+- `staging_id`              -- model id, obtained when the model was [pre-]registered.
+- `scrc_access_tkn`         -- access token (see https://data.scrc.uk/docs/.)
+"""
 function commit_staged_model(db::SQLite.DB, staging_id::Int64, scrc_access_tkn::String)
     sel_stmt = SQLite.Stmt(db, "SELECT * FROM code_repo_rel WHERE crr_id=?")
     df = SQLite.DBInterface.execute(sel_stmt, (staging_id, )) |> DataFrames.DataFrame
@@ -118,7 +196,7 @@ end
 
 ## stage model run as 'code_run'
 """
-    register_model_run(db, model_staging_id, submission_script_text, model_run_description)
+    register_model_run(db, model_id, model_config, submission_script_text, model_run_description)
 
 Stage a model run for subsequent upload to the ``code_run`` endpoint of the SCRC Data Registry.
 
@@ -142,14 +220,13 @@ end
 
 ## register staged run as 'code_run' -> INTERNAL ***
 """
-    commit_staged_run(model_config, code_repo_release_uri, model_run_description, scrc_access_tkn)
+    commit_staged_run(db, staging_id, scrc_access_tkn)
 
 Upload model run to the ``code_run`` endpoint of the SCRC Data Registry.
 
 **Parameters**
 - `db`                      -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
-- `model_config`            -- path to the model config .yaml file.
-- `submission_script_text`  -- e.g. 'julia my/julia/code.jl'.
+- `staging_id`              -- run id, obtained when the run was [pre-]registered.
 - `scrc_access_tkn`         -- access token (see https://data.scrc.uk/docs/.)
 """
 function commit_staged_run(db::SQLite.DB, staging_id::Int64, scrc_access_tkn::String)
@@ -188,14 +265,21 @@ function commit_staged_run(db::SQLite.DB, staging_id::Int64, scrc_access_tkn::St
 end
 
 ## print staging status
-# NB. to do: docs ***
-# NB. use pretty tables?
+"""
+    registry_commit_status(db)
+
+Display the current commit status of the local staging Registry.
+
+**Parameters**
+- `db`                      -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+"""
 function registry_commit_status(db::SQLite.DB)
     ## data products
     ## models and runs
     sl_stmt = SQLite.Stmt(db, string("SELECT * FROM crr_view")) # WHERE registered=FALSE
     df = SQLite.DBInterface.execute(sl_stmt) |> DataFrames.DataFrame
     println(df)
+    DataFrames.nrow(df)==0 || println("Hint: use `DataRegistryUtils.commit_all(...)` to commit staged objects.")
 end
 # h = ["θ", "E[θ]", ":σ", "E[f(θ)]", ":σ", "SRE", "SRE975"]
 #         PrettyTables.pretty_table(d, h)
@@ -206,15 +290,34 @@ end
 # end
 
 ## register everything
-# function register_all_staged(db::SQLite.DB; since=nothing)
-#     sl_stmt(tbl) = SQLite.Stmt(db, string("SELECT * FROM ", tbl, " WHERE registered=FALSE")
-#     df = SQLite.DBInterface.execute(sl_stmt("code_run")) |> DataFrames.DataFrame
-#     for i in 1:DataFrames.nrow(df)  ## register model runs
-#
-#     end
-#     ## register leftover models
-#     df = SQLite.DBInterface.execute(sl_stmt("code_repo_rel")) |> DataFrames.DataFrame
-#     for i in 1:DataFrames.nrow(df)  ## register model runs
-#
-#     end
-# end
+"""
+    commit_all(db, scrc_access_tkn)
+
+Commit all outstanding (i.e. 'staged') objects to the Data Registry.
+
+**Parameters**
+- `db`                  -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+- `scrc_access_tkn`     -- access token (see https://data.scrc.uk/docs/.)
+- `ftp_username`        -- optionally specify
+- `ftp_password`        -- optionally specify
+"""
+function commit_all(db::SQLite.DB, scrc_access_tkn::String, ftp_username=nothing, ftp_password=nothing; since=nothing)
+    sl_stmt(col, tbl) = SQLite.Stmt(db, string("SELECT ", col, " FROM ", tbl, " WHERE registered=FALSE"))
+    println("Checking for staged objects...")
+    ## register data products
+    df = SQLite.DBInterface.execute(sl_stmt("dp_id", "data_product")) |> DataFrames.DataFrame
+    for i in 1:DataFrames.nrow(df)
+        commit_staged_data_product(db, df[i,:dp_id], scrc_access_tkn, ftp_username, ftp_password)
+    end
+    ## register model runs
+    df = SQLite.DBInterface.execute(sl_stmt("run_id", "code_run")) |> DataFrames.DataFrame
+    for i in 1:DataFrames.nrow(df)
+        commit_staged_run(db, df[i,:run_id], scrc_access_tkn)
+    end
+    ## register leftover models
+    df = SQLite.DBInterface.execute(sl_stmt("crr_id", "code_repo_rel")) |> DataFrames.DataFrame
+    for i in 1:DataFrames.nrow(df)
+        commit_staged_model(db, df[i,:run_id], scrc_access_tkn)
+    end
+    println(" - finished.")
+end

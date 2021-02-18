@@ -147,36 +147,41 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
     ## for loading dp to db
     sel_stmt = SQLite.Stmt(output, "SELECT * FROM data_product WHERE dp_name=? AND dp_version=? AND dp_hash=? AND dp_hash != ?")
     del_stmt = SQLite.Stmt(output, "DELETE FROM data_product WHERE dp_name=? AND dp_version=?")
-    ins_stmt = SQLite.Stmt(output, "INSERT INTO data_product(namespace, dp_name, dp_path, dp_hash, dp_version) VALUES(?,?,?,?,?)")
-    function load_data_product!(namespace::String, name::String, filepath::String, filehash::String, version::String)
-        verbose && println(" - processing file: ", filepath)
+    ins_stmt = SQLite.Stmt(output, "INSERT INTO data_product(namespace, dp_name, filepath, dp_hash, dp_version, sr_url, sl_path, description, registered, dp_url) VALUES(?,?,?,?,?,?,?,?,?,?)")
+    # function load_data_product!(namespace::String, name::String, filepath::String, filehash::String, version::String, url::String, chk::Bool)
+    function load_data_product!(metadata::NamedTuple)
+        verbose && println(" - processing file: ", metadata.filepath)
+        # println("metadata: ", metadata)
         function insert_dp()            # function: insert dp and return id
-            SQLite.execute(ins_stmt, (namespace, name, filepath, filehash, version))
+            # SQLite.execute(ins_stmt, (namespace, name, filepath, filehash, version, chk, url))
+            SQLite.execute(ins_stmt, values(metadata))
             return SQLite.last_insert_rowid(output)
         end
         if !force_refresh               # check hash (unless forced db refresh)
-            qr = SQLite.DBInterface.execute(sel_stmt, (name, version, filehash, NULL_HASH)) |> DataFrames.DataFrame
+            vals = (metadata.dp_name, metadata.dp_version, metadata.dp_hash, NULL_HASH)
+            qr = SQLite.DBInterface.execute(sel_stmt, vals) |> DataFrames.DataFrame
             verbose && println(" - searching db := found ", DataFrames.nrow(qr), " matching, up-to-date data products.")
             DataFrames.nrow(qr) == 0 || (return false)
         end                             # else load from scratch
-        SQLite.execute(del_stmt, (name, version))
-        if HDF5.ishdf5(filepath) # occursin(".h5", filepath)
-            process_h5_file!(output, name, filepath, insert_dp(), verbose)
-        elseif (occursin(".toml", filepath) || occursin(".tml", filepath))
-            process_toml_file!(output, filepath, insert_dp())
-        elseif occursin(".csv", filepath)
-            process_csv_file!(output, filepath, insert_dp())
-        else    # TBA: CSV/TSV? ***
-            filepath == NULL_FILE || println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
+        SQLite.execute(del_stmt, (metadata.dp_name, metadata.dp_version))
+        if HDF5.ishdf5(metadata.filepath) # occursin(".h5", filepath)
+            process_h5_file!(output, metadata.dp_name, metadata.filepath, insert_dp(), verbose)
+        elseif (occursin(".toml", metadata.filepath) || occursin(".tml", metadata.filepath))
+            process_toml_file!(output, metadata.filepath, insert_dp())
+        elseif occursin(".csv", metadata.filepath)
+            process_csv_file!(output, metadata.filepath, insert_dp())
+        else    # TBA: TSV? ***
+            metadata.filepath == NULL_FILE || println(" -- WARNING - UNKNOWN FILE TYPE - skipping: ", metadata.filepath)
             return false
         end
         return true
     end
     ## process file metadata
     updated = 0
-    for i in eachindex(md.dp_name)
+    for i in eachindex(md.metadata)
         ## get namespace
-        load_data_product!(md.dp_namespace[i], md.dp_name[i], md.dp_file[i], md.dp_hash[i], md.dp_version[i]) && (updated += 1)
+        # load_data_product!(md.dp_namespace[i], md.dp_name[i], md.dp_file[i], md.dp_hash[i], md.dp_version[i], md.dp_url[i], md.chk[i]) && (updated += 1)
+        load_data_product!(md.metadata[i]) && (updated += 1)
     end
     ## clean up
     SQLite.execute(output, "DELETE FROM h5_component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
@@ -229,21 +234,21 @@ end
 ## array handling: db metadata => Dict{String, Any}
 function read_array(df::DataFrames.DataFrame, use_axis_arrays::Bool, verbose::Bool)
     if DataFrames.nrow(df)==1      # return individual component
-        dpp::String = df[1, :dp_path]
+        dpp::String = df[1, :filepath]
         output = process_h5_file(dpp, use_axis_arrays, verbose)
         return output[df[1, :data_obj]]
     end
     output = Dict{String, Any}()
     hf = nothing
     for i in 1:DataFrames.nrow(df) # return dictionary of matching components
-        proc::Bool = (i==1 || df[i,:dp_path]!=df[i-1,:dp_path])
-        hf = proc ? process_h5_file(df[i,:dp_path], use_axis_arrays, verbose) : hf
+        proc::Bool = (i==1 || df[i,:filepath]!=df[i-1,:filepath])
+        hf = proc ? process_h5_file(df[i,:filepath], use_axis_arrays, verbose) : hf
         output[df[i, :data_obj]] = hf[df[i, :data_obj]]
     end
     return output
 end
 
-## array by data product only
+## array by data product / component name
 """
     read_array(cn::SQLite.DB, data_product::String[, component::String]; use_axis_arrays=false, verbose=false)
 
@@ -257,12 +262,11 @@ SQLite Data Registry helper function. Optionally specify the individual componen
 - `component`       -- [optionally] specify the component name.
 - `use_axis_arrays` -- set `true` to return the matching data as `AxisArray` types.
 """
-## array by data product and component name
 function read_array(cn::SQLite.DB, data_product::String, component=nothing;
     use_axis_arrays::Bool=false, verbose::Bool=false, log_access=true, data_log_id=get_log_id(cn::SQLite.DB))
 
     ## prepare sql
-    sel_sql = "SELECT DISTINCT dp_path, data_obj FROM h5_view\n"
+    sel_sql = "SELECT DISTINCT filepath, data_obj FROM h5_view\n"
     sql_args = string("WHERE comp_type=? AND dp_name=?", isnothing(component) ? "" : " AND data_obj=?")
     stmt = SQLite.Stmt(cn, string(sel_sql, sql_args))
     vals = Any[ARRAY_OBJ_NAME, data_product]

@@ -21,10 +21,13 @@ CREATE TABLE IF NOT EXISTS data_product(
 	dp_id	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 	namespace TEXT NOT NULL,
 	dp_name	TEXT NOT NULL,
-	dp_path	TEXT NOT NULL,
+	filepath	TEXT NOT NULL,
 	dp_hash	TEXT NOT NULL,
 	dp_version TEXT NOT NULL,
-	dp_registered BOOLEAN DEFAULT TRUE,
+	sr_url TEXT,
+	sl_path TEXT,
+	description TEXT,
+	registered BOOLEAN DEFAULT FALSE,
 	dp_url TEXT
 	row_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -87,12 +90,13 @@ SELECT * FROM session
 WHERE sn_id=(SELECT max(sn_id) FROM session);
 
 CREATE VIEW h5_view AS
-SELECT d.dp_name, d.dp_version, d.dp_path, c.*
+SELECT d.namespace, d.dp_name, d.dp_version
+, d.filepath, c.*
 FROM data_product d
 INNER JOIN h5_component c ON(d.dp_id = c.dp_id);
 
 CREATE VIEW toml_view AS
-SELECT d.dp_name, d.dp_version
+SELECT d.namespace, d.dp_name, d.dp_version
 , t.*, k.key, k.val
 FROM data_product d
 INNER JOIN toml_component t ON(d.dp_id = t.dp_id)

@@ -8,7 +8,7 @@ import AxisArrays
 const ARRAY_OBJ_NAME = "array"
 const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"
-# - csv
+# - csv (https://tools.ietf.org/html/rfc4180)
 const CSV_OBJ_NAME = "csv"
 
 const DATA_FILE_TYPES = ["HDF5", "TOML", "CSV", "UNKNOWN"]

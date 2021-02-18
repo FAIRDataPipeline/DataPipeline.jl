@@ -28,22 +28,44 @@ function search_data_product(namespace::String, name::String, version::String)
     return http_get_json(search_url)
 end
 
+## ftp upload function (internal use only)
+# https://github.com/invenia/FTPClient.jl#readme
+function ftp_transfer_file(storage_root_id, local_path, name, ftp_username, ftp_password)
+    r = http_get_json(storage_root_id)
+    ftp = FTP(hostname=r["root"], username=ftp_username, password=ftp_password, ssl=true, implicit=true)
+    upload(ftp, local_path, name)
+    close(ftp)
+end
+
 ## register data product (internal use only)
-function register_data_product(namespace::String, name::String, version::String,
-    path::String, file_hash::String, description::String, scrc_access_tkn::String,
-    storage_root_id::String) #storage_root_url::String
+function commit_data_product(namespace::String, name::String, version::String,
+    local_path::String, file_hash::String, description::String, scrc_access_tkn::String,
+    storage_root_id::String, check_hash::Bool) #storage_root_url::String
 
-    ## FTP file fn here?
-
+    ## hash check
+    # fh = get_file_hash(path)
+    if check_hash
+        resp = whats_my_hash(file_hash)
+        if resp["count"]>0
+            obj_url = string(API_ROOT, "object/?storage_location=", get_id_from_root(resp["results"][1]["url"], SL_ROOT))
+            resp = http_get_json(obj_url)["results"][1]
+            println("NB. file already registered as ", resp["data_product"])
+            return resp["data_product"]
+        end
+    end
     ## search
     chk = search_data_product(namespace, name, version)
-    if chk["count"] == 0
+    if chk["count"]==0
         ## register storage location
         obj_url = insert_storage_location(path, hash, description, storage_root_id, scrc_access_tkn)
+
+        ## FTP file here?
+
+
         ## register dp
         body = (namespace=namespace, name=name, version=version, object=obj_url)
         resp = http_post_data("data_product", body, scrc_access_tkn)
-        println("NB. new data found registered. URI := ", resp["url"])
+        println("NB. new data product registered as ", resp["url"])
         return resp["url"]
     else
         ## check hash

@@ -6,10 +6,12 @@ Depth = 3
 
 ## Reading / downloading data
 
-### Process data products
+### Downloading data products
+
+Note that data products are processed and downloaded at the point of initialisation, provided that a `data_config` file is specified, and the `offline_mode` option is not used.
 
 ```@docs
-fetch_data_per_yaml
+initialise_local_registry
 ```
 
 ### Reading data
@@ -23,24 +25,34 @@ read_data_product_from_file
 
 ## Writing to the Data Registry
 
-### Registering models
+The process of registering objects such as data, code, and model runs in the main Data Registry
+
+### Registering objects locally
+
 ```@docs
+register_data_product
+register_text_file
 register_github_model
-commit_staged_model
+register_model_run
 ```
 
-### Registering model runs
+### Committing to the main Registry
+
+Note that 'staged' objects (i.e. registered locally) can be committed all at once, or one at a time using the identifiers yielded by the above function calls, e.g. `register_data_product`.
+
 ```@docs
-register_model_run
+registry_commit_status
+commit_all
+```
+
+```@docs
+commit_staged_data_product
+commit_staged_model
 commit_staged_run
 ```
 
-### Register data products
-```@docs
-register_text_file
-```
-
 ## Other
+
 ```@docs
 whats_my_file
 registry_audit

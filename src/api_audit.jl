@@ -1,5 +1,9 @@
 ### what's my file
-# NB. add option for staged objects
+function whats_my_hash(fh::String)
+    search_url = string(API_ROOT, "storage_location/?hash=", fh)
+    return http_get_json(search_url)
+end
+# NB. add option for staged objects?
 """
     whats_my_file(path::String; show_path=false)
 
@@ -11,14 +15,13 @@ Search the Data Registry for matches with a given local file (or directory of fi
 """
 function whats_my_file(path::String; show_path=false)
     if isfile(path)     ## single file
-        ft = get_file_type(path)
-        fh = get_file_hash(path)
-        search_url = string(API_ROOT, "storage_location/?hash=", fh)
+        # ft = get_file_type(path)
         println("Searching the Data Registry for files similar to ", basename(path))
         println(" - filepath: ", path)
-        println(" - type:     ", ft)
+        println(" - type:     ", get_file_type(path))
+        fh = get_file_hash(path)
+        resp = whats_my_hash(fh)
         ## process results
-        resp = http_get_json(search_url)
         println(" -> Results: ", resp["count"], " matching data product", resp["count"]==1 ? "" : "s")
         for i in eachindex(resp["results"])
             ## get object
