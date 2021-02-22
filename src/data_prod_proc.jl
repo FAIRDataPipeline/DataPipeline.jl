@@ -3,6 +3,7 @@
 import HDF5
 import TOML
 import AxisArrays
+import NetCDF
 
 ### hdf5 file processing ###
 const ARRAY_OBJ_NAME = "array"
@@ -11,14 +12,15 @@ const ROWN_OBJ_NAME = "row_names"
 # - csv (https://tools.ietf.org/html/rfc4180)
 const CSV_OBJ_NAME = "csv"
 
-const DATA_FILE_TYPES = ["HDF5", "TOML", "CSV", "UNKNOWN"]
+const DATA_FILE_TYPES = ["HDF5", "NetCDF", "TOML", "CSV", "UNKNOWN"]
 
 function get_file_type(filepath::String)
     HDF5.ishdf5(filepath) && (return DATA_FILE_TYPES[1])
-    occursin(".toml", filepath) && (return DATA_FILE_TYPES[2])
-    occursin(".tml", filepath) && (return DATA_FILE_TYPES[2])
-    occursin(".csv", filepath) && (return DATA_FILE_TYPES[3])
-    return DATA_FILE_TYPES[4]
+    occursin(".nc", filepath) && (return DATA_FILE_TYPES[2])
+    occursin(".toml", filepath) && (return DATA_FILE_TYPES[3])
+    occursin(".tml", filepath) && (return DATA_FILE_TYPES[3])
+    occursin(".csv", filepath) && (return DATA_FILE_TYPES[4])
+    return DATA_FILE_TYPES[5]
 end
 
 ## does what it says on the tin
@@ -92,6 +94,7 @@ function read_data_product_from_file(filepath::String; use_axis_arrays::Bool = f
     occursin(".toml", filepath) && (return TOML.parsefile(filepath))
     occursin(".tml", filepath) && (return TOML.parsefile(filepath))
     occursin(".csv", filepath) && (return CSV.read(filepath, DataFrames.DataFrame))
+    # occursin(".nc", filepath) && (return TOML.parsefile(filepath))
     println(" - WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
 end
 

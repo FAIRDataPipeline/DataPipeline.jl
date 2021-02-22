@@ -47,10 +47,10 @@ submission_script = "julia examples/simple/main.jl"
 
 ## process data config file and return connection to SQLite db
 # i.e. download data products
-db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=false, verbose=false)
+db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config, auto_logging=false, verbose=false)
 
 # NB. this function can now be rerun later in 'offline_mode' to fetch the already downloaded data
-db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=true, offline_mode=true)
+db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config, auto_logging=true, offline_mode=true)
 
 ## display parameter search
 # NB. based on *downloaded* data products
@@ -132,7 +132,7 @@ model_run_id = DataRegistryUtils.register_model_run(db, code_release_id,
 
 ### 7. commit staged objects to the Registry
 DataRegistryUtils.registry_commit_status(db)
-code_release_url = DataRegistryUtils.commit_staged_model(db, code_release_id, scrc_access_tkn)
-model_run_url = DataRegistryUtils.commit_staged_run(db, model_run_id, scrc_access_tkn)
-DataRegistryUtils.registry_commit_status(db)
-println("finished - model run registered as: ", model_run_url)
+# code_release_url = DataRegistryUtils.commit_staged_model(db, code_release_id, scrc_access_tkn)
+# model_run_url = DataRegistryUtils.commit_staged_run(db, model_run_id, scrc_access_tkn)
+# DataRegistryUtils.registry_commit_status(db)
+# println("finished - model run registered as: ", model_run_url)

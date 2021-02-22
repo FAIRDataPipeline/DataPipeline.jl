@@ -118,7 +118,7 @@ Here we read some epidemiological parameters from the DR, so we can use them to 
 First, we process the `data_config` file, which (in this case) returns a variable representing a connection to a SQLite database. I.e. we download the data products:
 ``` julia
 data_dir = "/examples/simple/data/" # local directory where data is to be stored
-db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, use_sql=true)
+db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config)
 ```
 
 ### 3b. Read some data
@@ -135,7 +135,7 @@ See [Code snippets](@ref) and the [Package manual](@ref) for information about r
 Once the data has been downloaded initially, it can be retrieved for offline access (e.g. no or slow internet connections) using the `offline_mode` option:
 
 ``` julia
-db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, auto_logging=true, offline_mode=true)
+db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config, auto_logging=true, offline_mode=true)
 ```
 
 The main functions for registering objects, such as model code, model runs, and data products, work by staging the data to a local database so they are also compatible with 'offline mode'. only the `commit_` functions require internet access, which can be run once access has been restored.

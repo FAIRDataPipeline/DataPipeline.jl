@@ -24,9 +24,13 @@ Stage a data set (i.e. a local file) for upload to the ``data_product`` endpoint
 - `storage_root_id` -- Data Registry storage root identifier, `"https://data.scrc.uk/api/storage_root/11/"` (GitHub) by default.
 """
 function register_data_product(db::SQLite.DB, dp_name::String,
-    version::String, filepath::String; namespace="SCRC",
-    description="", storage_root_id=STR_RT_BOYDORR,
-    check_hash=true, ftp_transfer=storage_root_id==STR_RT_BOYDORR, remote_path=dp_name)
+    version::String, filepath::String; namespace="SCRC", description="",
+    storage_location_id=nothing, storage_root_id=STR_RT_BOYDORR, remote_path=dp_name,
+    check_hash=true, ftp_transfer=storage_root_id==STR_RT_BOYDORR)
+
+    ## storage
+    isnothing(storage_location_id)
+    # -
 
     ## hash search
     fh = get_file_hash(filepath)
