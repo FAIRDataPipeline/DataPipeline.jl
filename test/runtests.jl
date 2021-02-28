@@ -21,13 +21,13 @@ Test.@testset "package tests" begin
         ## display parameter search
         # NB. based on *downloaded* data products
         Test.@testset "read estimates" begin
-            sars_cov2_search = "human/infection/SARS-CoV-2/%"
+            sars_cov2_search = "human/infection/SARS-CoV-2/"
             sars_cov2 = DataRegistryUtils.read_estimate(db, sars_cov2_search)
             println("\n search: human/infection/SARS-CoV-2/* := ", DataFrames.first(sars_cov2, 6),"\n")
 
             ## read some parameters and convert from hours => days
-            inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", key="value", data_type=Float64)[1] / 24
-            lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", key="value", data_type=Float64)[1] / 24
+            inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", key="value", data_type=Float64)[1] / 24
+            lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "latent-period", key="value", data_type=Float64)[1] / 24
             Test.@test true
         end
     end
@@ -48,7 +48,8 @@ Test.@testset "package tests" begin
         # end
 
         ### refresh data
-        data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
+        data = DataRegistryUtils.initialise_local_registry(DATA_OUT, data_config=TEST_FILE, verbose=false)
+        # data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
         Test.@test true
 
         ### Example: reading point estimates

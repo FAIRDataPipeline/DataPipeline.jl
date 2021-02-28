@@ -238,8 +238,9 @@ function process_data_config_yaml(d::String, out_dir::String, verbose::Bool)
     return (metadata=output, config=data)
 end
 
-## helper
+## helpers
 get_df_db_path(out_dir, data_config) = string(string(rstrip(out_dir, '/'), "/"), isnothing(data_config) ? "registry" : basename(data_config), ".db")
+get_pkg_version = "0.50.5" # placeholder
 
 ## replacement for fetch_data_per_yaml
 """
@@ -275,8 +276,8 @@ function initialise_local_registry(out_dir::String = DATA_OUT; data_config=nothi
     end
     ## initialise
     db = get_db()
-    stmt = SQLite.Stmt(db, "INSERT INTO session(data_dir) VALUES(?)")
-    SQLite.DBInterface.execute(stmt, (out_dir, ))
+    stmt = SQLite.Stmt(db, "INSERT INTO session(data_dir, pkg_version) VALUES(?,?)")
+    SQLite.DBInterface.execute(stmt, (out_dir, get_pkg_version))
     auto_logging && initialise_data_log(db, offline_mode)
     if length(sql_file) > 0     # optional sql file
         print(" - running: ", sql_file)
@@ -294,67 +295,67 @@ end
 # - `use_sql`             -- load SQLite database and return connection (`true` by default.)
 # - `use_axis_arrays`     -- convert the output to AxisArrays, where applicable.
 # - `data_log_path`       -- filepath of .yaml access log.
-"""
-    fetch_data_per_yaml(data_config, out_dir = "./out/"; ... )
-
-**DEPRECATED** - use `initialise_local_registry`
-
-Refresh and load data products from the SCRC data registry.
-
-Checks the file hash for each data product and downloads anew any that are determined to be out-of-date. Allowing that the function has been called previously (i.e. so that the data has already been downloaded,)
-
-**Parameters**
-- `data_config`         -- the location of the .yaml config file.
-- `out_dir`             -- the local system directory where data will be stored.
-
-**Named parameters**
-- `offline_mode`        -- set `true` when the Data Registry's RESTful API is inaccessible, e.g. no internet connection.
-- `sql_file`            -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
-- `db_path`             -- (optionally) specify the filepath of the database to use (or create.)
-- `force_db_refresh`    -- set `true` to overide file hash check on database inserts.
-- `auto_logging`        -- set `true` to enable automatic data access logging.
-- `verbose`             -- set to `true` to show extra output in the console.
-"""
-function fetch_data_per_yaml(data_config::String, out_dir::String = DATA_OUT; offline_mode::Bool=false,
-    sql_file::String="", db_path::String=db_path::String=get_df_db_path(out_dir, data_config),
-    force_db_refresh::Bool=false, auto_logging::Bool=false, verbose::Bool=false)
-
-    # st = Dates.now()
-    ## SQLite connection:
-    function get_db()
-        if offline_mode
-            return init_yaml_db(db_path)    # refresh db views only
-        else                                # online refresh:
-            out_dir = string(rstrip(out_dir, '/'), "/")
-            md = process_data_config_yaml(data_config, out_dir, verbose) # read yaml
-            return load_data_per_yaml(md, db_path, force_db_refresh, verbose)
-        end
-    end
-    ## initialise
-    db = get_db()
-    stmt = SQLite.Stmt(db, "INSERT INTO session(data_dir) VALUES(?)")
-    SQLite.DBInterface.execute(stmt, (out_dir, ))
-    auto_logging && initialise_data_log(db, offline_mode)
-    if length(sql_file) > 0     # optional sql file
-        print(" - running: ", sql_file)
-        try
-            proc_sql_file!(db, sql_file)
-            println(" - done.")
-        catch e
-            println(" - SQL ERROR:\n -- ", e)
-        end
-    end
-    return db
-    # else                            # return data in memory
-    #     output = Dict()
-    #     for i in eachindex(md.dp_name)
-    #         dp = read_data_product_from_file(md.dp_file[i]; verbose)
-    #         output[md.dp_name[i]] = dp
-    #     end
-    #     write_log()
-    #     return output
-    # end
-end
+# """
+#     fetch_data_per_yaml(data_config, out_dir = "./out/"; ... )
+#
+# **DEPRECATED** - use `initialise_local_registry`
+#
+# Refresh and load data products from the SCRC data registry.
+#
+# Checks the file hash for each data product and downloads anew any that are determined to be out-of-date. Allowing that the function has been called previously (i.e. so that the data has already been downloaded,)
+#
+# **Parameters**
+# - `data_config`         -- the location of the .yaml config file.
+# - `out_dir`             -- the local system directory where data will be stored.
+#
+# **Named parameters**
+# - `offline_mode`        -- set `true` when the Data Registry's RESTful API is inaccessible, e.g. no internet connection.
+# - `sql_file`            -- (optional) SQL file for e.g. custom SQLite views, indexes, or whatever.
+# - `db_path`             -- (optionally) specify the filepath of the database to use (or create.)
+# - `force_db_refresh`    -- set `true` to overide file hash check on database inserts.
+# - `auto_logging`        -- set `true` to enable automatic data access logging.
+# - `verbose`             -- set to `true` to show extra output in the console.
+# """
+# function fetch_data_per_yaml(data_config::String, out_dir::String = DATA_OUT; offline_mode::Bool=false,
+#     sql_file::String="", db_path::String=db_path::String=get_df_db_path(out_dir, data_config),
+#     force_db_refresh::Bool=false, auto_logging::Bool=false, verbose::Bool=false)
+#
+#     # st = Dates.now()
+#     ## SQLite connection:
+#     function get_db()
+#         if offline_mode
+#             return init_yaml_db(db_path)    # refresh db views only
+#         else                                # online refresh:
+#             out_dir = string(rstrip(out_dir, '/'), "/")
+#             md = process_data_config_yaml(data_config, out_dir, verbose) # read yaml
+#             return load_data_per_yaml(md, db_path, force_db_refresh, verbose)
+#         end
+#     end
+#     ## initialise
+#     db = get_db()
+#     stmt = SQLite.Stmt(db, "INSERT INTO session(data_dir) VALUES(?)")
+#     SQLite.DBInterface.execute(stmt, (out_dir, ))
+#     auto_logging && initialise_data_log(db, offline_mode)
+#     if length(sql_file) > 0     # optional sql file
+#         print(" - running: ", sql_file)
+#         try
+#             proc_sql_file!(db, sql_file)
+#             println(" - done.")
+#         catch e
+#             println(" - SQL ERROR:\n -- ", e)
+#         end
+#     end
+#     return db
+#     # else                            # return data in memory
+#     #     output = Dict()
+#     #     for i in eachindex(md.dp_name)
+#     #         dp = read_data_product_from_file(md.dp_file[i]; verbose)
+#     #         output[md.dp_name[i]] = dp
+#     #     end
+#     #     write_log()
+#     #     return output
+#     # end
+# end
 
 ## db staging
 include("db_staging.jl")

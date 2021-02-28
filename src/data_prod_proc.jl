@@ -10,7 +10,9 @@ const ARRAY_OBJ_NAME = "array"
 const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"
 # - csv (https://tools.ietf.org/html/rfc4180)
-const CSV_OBJ_NAME = "csv"
+const CSV_OBJ_NAME = TABLE_OBJ_NAME # "csv"
+# TBL_OBJ_NAME
+const TOML_OBJ_NAME = "toml" # CHG to KEYVAL ? ***
 
 const DATA_FILE_TYPES = ["HDF5", "NetCDF", "TOML", "CSV", "UNKNOWN"]
 
@@ -38,9 +40,9 @@ function read_h5_table(obj_grp, use_axis_arrays::Bool)
 end
 
 ## does what it says on the tin
-function read_h5_array(obj_grp)
-    return HDF5.read(obj_grp[ARRAY_OBJ_NAME])
-end
+# function read_h5_array(obj_grp)
+#     return HDF5.read(obj_grp[ARRAY_OBJ_NAME])
+# end
 
 ## recursively search and read table/array
 function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, verbose::Bool)
@@ -50,7 +52,8 @@ function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, ve
         d = read_h5_table(h5, use_axis_arrays)
         output_dict[gnm] = d
     elseif (haskey(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
-        d = read_h5_array(h5)
+        # d = read_h5_array(h5)
+        d = HDF5.read(h5)
         output_dict[gnm] = d
     else    # group - recurse
         for g in keys(h5)

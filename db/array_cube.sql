@@ -21,3 +21,9 @@ CREATE TABLE IF NOT EXISTS array_dim_name(
 	dim_id INTEGER NOT NULL,
 	dim_val TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS toml_component(
+	comp_id	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	dp_id	INTEGER NOT NULL,
+	comp_name	TEXT
+);

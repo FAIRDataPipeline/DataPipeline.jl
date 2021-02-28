@@ -11,14 +11,14 @@ const DB_CSV_TABLE_APX = "_csv"
 
 # const DB_VAL_COL = "val"
 
-## insert sql helper
-# function get_values_str(n::Int64)
-#     output = "VALUES("
-#     for i in 1:n
-#         output = string(output, "?,")
-#     end
-#     return string(rstrip(output, ','), ")")
-# end
+## values/in() sql helper
+function get_query_str(n::Int64)
+    output = "("
+    for i in 1:n
+        output = string(output, "?,")
+    end
+    return string(rstrip(output, ','), ")")
+end
 
 ##
 function get_session_data_dir(db::SQLite.DB)
@@ -66,25 +66,9 @@ function init_yaml_db(db_path::String)
     return output
 end
 
-## load toml data product component
-function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
-    d = TOML.parsefile(filepath)
-    components = collect(keys(d))
-    stmt = SQLite.Stmt(cn, "INSERT INTO toml_component(dp_id, comp_name) VALUES(?, ?)")
-    kv_stmt = SQLite.Stmt(cn, "INSERT INTO toml_keyval(comp_id, key, val) VALUES(?, ?, ?)")
-    for i in eachindex(components)
-        SQLite.execute(stmt, (dp_id, components[i]))
-        comp_id = SQLite.last_insert_rowid(cn)
-        fields = collect(keys(d[components[i]]))
-        for f in eachindex(fields)
-            SQLite.execute(kv_stmt, (comp_id, fields[f], d[components[i]][fields[f]]))
-        end
-    end
-end
-
 ## 'meta' load component from [h5] object d
 function meta_load_component!(cn::SQLite.DB, dp_id::Int64, comp_name::String, comp_type::String, data_obj::String, meta_obj::Bool=true)
-    stmt = SQLite.Stmt(cn, "INSERT INTO h5_component(dp_id, comp_name, comp_type, meta_src, data_obj) VALUES(?,?,?,?,?)")
+    stmt = SQLite.Stmt(cn, "INSERT INTO component(dp_id, comp_name, comp_type, meta_src, data_obj) VALUES(?,?,?,?,?)")
     SQLite.execute(stmt, (dp_id, comp_name, comp_type, meta_obj, data_obj))
     return SQLite.last_insert_rowid(cn)
 end
@@ -94,6 +78,23 @@ function load_component!(cn::SQLite.DB, dp_id::Int64, comp_name::String, comp_ty
     SQLite.drop!(cn, tablename, ifexists=true)
     SQLite.load!(d, cn, tablename)
     return meta_load_component!(cn, dp_id, comp_name, comp_type, tablename, false)
+end
+
+## load toml data product component
+function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
+    d = TOML.parsefile(filepath)
+    components = collect(keys(d))
+    # stmt = SQLite.Stmt(cn, "INSERT INTO toml_component(dp_id, comp_name) VALUES(?, ?)")
+    stmt = SQLite.Stmt(cn, "INSERT INTO toml_keyval(comp_id, key, val) VALUES(?, ?, ?)")
+    for i in eachindex(components)
+        # SQLite.execute(stmt, (dp_id, components[i]))
+        # comp_id = SQLite.last_insert_rowid(cn)
+        comp_id = meta_load_component!(cn, dp_id, components[i], TOML_OBJ_NAME, "toml_keyval", false)
+        fields = collect(keys(d[components[i]]))
+        for f in eachindex(fields)
+            SQLite.execute(stmt, (comp_id, fields[f], d[components[i]][fields[f]]))
+        end
+    end
 end
 
 ## db table labeller
@@ -184,9 +185,9 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
         load_data_product!(md.metadata[i]) && (updated += 1)
     end
     ## clean up
-    SQLite.execute(output, "DELETE FROM h5_component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
-    SQLite.execute(output, "DELETE FROM toml_component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
-    SQLite.execute(output, "DELETE FROM toml_keyval WHERE comp_id NOT IN(SELECT DISTINCT comp_id FROM toml_component)")
+    SQLite.execute(output, "DELETE FROM component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
+    # SQLite.execute(output, "DELETE FROM toml_component WHERE dp_id NOT IN(SELECT DISTINCT dp_id FROM data_product)")
+    SQLite.execute(output, "DELETE FROM toml_keyval WHERE comp_id NOT IN(SELECT DISTINCT comp_id FROM component)")
     println(" - finished, ", updated, " data products were updated.")
     return output
 end
@@ -201,7 +202,7 @@ SQLite Data Registry helper function. Aggregate measure column `msr` from table 
 
 **Parameters**
 - `cn`      -- SQLite.DB object.
-- `dims`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
+- `dims`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/"`.
 - `msr`     -- as above, optional search string for components names.
 - `tbl`     -- table or view name.
 """
@@ -231,7 +232,35 @@ function get_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::String, tbl::
     return output
 end
 
+# get_sql_args(has_do::Bool) = string("WHERE comp_type=? AND dp_name LIKE ?", has_do ? " AND data_obj LIKE ?" : "")
+## search dp
+function search_db_data(db::SQLite.DB, comp_type::String, data_product::String,
+    component, version, fuzzy_match::Bool, log_access::Bool, data_log_id::Int64)
+
+    sel_sql = "SELECT DISTINCT dp_id, comp_id, filepath, data_obj FROM dpc_view\n"
+    op = fuzzy_match ? "LIKE" : "="
+    fuzzy_str(str::String) = fuzzy_match ? string("%", str, "%") : str
+    sql_args = string("WHERE comp_type=? AND dp_name ", op, " ?", isnothing(component) ? "" : string(" AND comp_name ", op, " ?"))
+    isnothing(version) || (sql_args = string(sql_args, "AND dp_version=?"))
+    stmt = SQLite.Stmt(db, string(sel_sql, sql_args, " ORDER BY dp_version DESC"))
+    vals = Any[comp_type, fuzzy_str(data_product)]
+    isnothing(component) || push!(vals, string("%", component, "%"))
+    isnothing(version) ||  push!(vals, version)
+    ## execute
+    # println("executing: ", string(sel_sql, sql_args), "\n", vals)
+    df = SQLite.DBInterface.execute(stmt, vals) |> DataFrames.DataFrame
+    if DataFrames.nrow(df)==0
+        println("WARNING: no matching data products found for: ", data_product, isnothing(component) ? "" : string(" - ", component))
+        return nothing
+    else # log and return results:
+        log_access && log_data_access(db, data_log_id, "dpc_view", sql_args, vals)
+        return df
+    end
+end
+
+
 ## array handling: db metadata => Dict{String, Any}
+# ADD NET CDF HANDLING HERE ************
 function read_array(df::DataFrames.DataFrame, use_axis_arrays::Bool, verbose::Bool)
     if DataFrames.nrow(df)==1      # return individual component
         dpp::String = df[1, :filepath]
@@ -250,49 +279,53 @@ end
 
 ## array by data product / component name
 """
-    read_array(cn::SQLite.DB, data_product::String[, component::String]; use_axis_arrays=false, verbose=false)
+    read_array(db::SQLite.DB, data_product::String[, component::String]; ... )
 
 Load HDF5 array(s) data resource.
 
 SQLite Data Registry helper function. Optionally specify the individual component.
 
 **Parameters**
-- `cn`              -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
-- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
+- `db`              -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/"`.
 - `component`       -- [optionally] specify the component name.
+**Options**
+- `version`         -- optionally specify the version (else the latest version is read.)
+- `fuzzy_match`     -- set `false` for exact matches only.
 - `use_axis_arrays` -- set `true` to return the matching data as `AxisArray` types.
+- `log_access`      -- set `false` to supress data access logging.
+- `data_log_id`     -- (optionally) specify the data log id.
 """
-function read_array(cn::SQLite.DB, data_product::String, component=nothing;
-    use_axis_arrays::Bool=false, verbose::Bool=false, log_access=true, data_log_id=get_log_id(cn::SQLite.DB))
+function read_array(db::SQLite.DB, data_product::String, component=nothing;
+    version=nothing, fuzzy_match::Bool=true, use_axis_arrays::Bool=false,
+    verbose::Bool=false, log_access=true, data_log_id=get_log_id(db))
+
+    ## search for matching dp
+    search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
+    isnothing(search) && (return false)
+    return read_array(search, use_axis_arrays, verbose)
 
     ## prepare sql
-    sel_sql = "SELECT DISTINCT filepath, data_obj FROM h5_view\n"
-    sql_args = string("WHERE comp_type=? AND dp_name=?", isnothing(component) ? "" : " AND data_obj=?")
-    stmt = SQLite.Stmt(cn, string(sel_sql, sql_args))
-    vals = Any[ARRAY_OBJ_NAME, data_product]
-    isnothing(component) || push!(vals, component)
-    ## execute
-    df = SQLite.DBInterface.execute(stmt, vals) |> DataFrames.DataFrame
-    if DataFrames.nrow(df)==0
-        println("WARNING: no matching data products found for '", data_product, component, "'")
-        return nothing
-    else # log and return results:
-        log_access && log_data_access(cn, data_log_id, "h5_view", sql_args, vals)
-        return read_array(df, use_axis_arrays, verbose)
-    end
+    # sel_sql = "SELECT DISTINCT filepath, data_obj FROM dpc_view\n"
+    # # sql_args = string("WHERE comp_type=? AND dp_name LIKE ?", isnothing(component) ? "" : " AND data_obj LIKE ?")
+    # sql_args = get_sql_args(!isnothing(component))
+    # stmt = SQLite.Stmt(db, string(sel_sql, sql_args))
+    # vals = Any[ARRAY_OBJ_NAME, string("%", data_product, "%")]
+    # isnothing(component) || push!(vals, string("%", component, "%"))
+    # ## execute
+    # df = SQLite.DBInterface.execute(stmt, vals) |> DataFrames.DataFrame
+    # if DataFrames.nrow(df)==0
+    #     println("WARNING: no matching data products found for: ", data_product, isnothing(component) ? "" : string(" - ", component))
+    #     return nothing
+    # else # log and return results:
+    #     log_access && log_data_access(db, data_log_id, "dpc_view", sql_args, vals)
+    #     return read_array(df, use_axis_arrays, verbose)
+    # end
 end
 
-# function read_array(cn::SQLite.DB, data_product::String; use_axis_arrays::Bool=false, verbose::Bool=false)
-#     stmt = SQLite.Stmt(cn, search_arr_sql)
-#     df = SQLite.DBInterface.execute(stmt, (ARRAY_OBJ_NAME, data_product)) |> DataFrames.DataFrame
-#     DataFrames.nrow(df)==0 && println("WARNING: no matching data products found for '", data_product, "'")
-#     return read_array(df, use_axis_arrays, verbose)
-# end
-
 ## read .toml estimate
-const READ_EST_SQL = "SELECT * FROM toml_view\n"
 """
-    read_estimate(cn::SQLite.DB, data_product::String, [component::String]; data_type=nothing)
+    read_estimate(cn::SQLite.DB, data_product::String, [component::String]; ... )
 
 Read key-value pair, e.g. a point-estimate.
 
@@ -300,33 +333,30 @@ SQLite Data Registry helper function. Search TOML-based data resources stored in
 
 **Parameters**
 - `cn`              -- SQLite.DB object.
-- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
+- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/"`.
 - `component`       -- as above, [optional] search string for components names.
-- `key`             -- (optionally) specify to return .toml keys of a particular type, e.g. `"type"` or `"value"`.
-- `data_type`       -- (optionally) specify to return an array of this type instead of a DataFrame.
+**Options**
+- `version`         -- optionally specify the version (else the latest version is read.)
+- `fuzzy_match`     -- set `false` for exact matches only.
+- `key`             -- specify to return .toml keys of a particular type, e.g. `"type"` or `"value"`.
+- `data_type`       -- specify to return an array of this type instead of a DataFrame.
 - `log_access`      -- set `false` to supress data access logging.
 - `data_log_id`     -- (optionally) specify the data log id.
 """
-function read_estimate(cn::SQLite.DB, data_product::String, component=nothing;
-    key=nothing, data_type=nothing, log_access=true, data_log_id=get_log_id(cn::SQLite.DB))
+function read_estimate(db::SQLite.DB, data_product::String, component=nothing;
+    version=nothing, fuzzy_match::Bool=true,
+    key=nothing, data_type=nothing, log_access=true, data_log_id=get_log_id(db))
 
-    ## prepare sql
-    sql_args = string("WHERE dp_name LIKE ?", isnothing(component) ? "" : " AND comp_name LIKE ?", isnothing(key) ? "" : " AND key = ?")
-    # sql = string(READ_EST_SQL, "\nAND comp_name LIKE ?", isnothing(key) ? "" : " AND key = ?")
-    vals = Any[data_product]
-    isnothing(component) || push!(vals, component)
+    ## search for matching dp
+    search = search_db_data(db, TOML_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
+    isnothing(search) && (return false)
+    vals = Any[]
     isnothing(key) || push!(vals, key)
-    # isnothing(key) ? (data_product, component) : (data_product, component, key)
-    ## execute
-    output = SQLite.DBInterface.execute(cn, string(READ_EST_SQL, sql_args), vals) |> DataFrames.DataFrame
-    # - write access log:
-    log_access && log_data_access(cn, data_log_id, "toml_view", sql_args, vals)
-    ## FN THIS
-    # prepend!(vals, data_log_id)
-    # sql = "INSERT INTO access_log_data(log_id, dp_id, comp_id)\nSELECT ?, dp_id, comp_id FROM "
-    # sel_vw = "toml_view"
-    # SQLite.DBInterface.execute(cn, string(sql, sel_vw, "\n", sql_args), vals)
-
+    for i in eachindex(search[!, :dp_id])
+        push!(vals, search[i, :dp_id])
+    end
+    sql = string("SELECT * FROM toml_view\nWHERE ", isnothing(key) ? "" : "key=? AND ", "dp_id IN", get_query_str(DataFrames.nrow(search)))
+    output = SQLite.DBInterface.execute(db, sql, vals) |> DataFrames.DataFrame
     isnothing(data_type) && return output
     return parse.(data_type, output.val)
 end
@@ -342,22 +372,35 @@ end
 
 # - tables
 """
-    read_table(cn::SQLite.DB, data_product::String, component::String)
+    read_table(db::SQLite.DB, data_product::String, component::String)
 
 SQLite Data Registry helper function. Search and return [HDF5] table data as a `DataFrame`.
 
 **Parameters**
-- `cn`              -- SQLite.DB object.
-- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/%"`.
+- `db`              -- SQLite.DB object.
+- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/"`.
 - `component`       -- as above, [required] search string for components names.
+**Options**
+- `version`         -- optionally specify the version (else the latest version is read.)
+- `fuzzy_match`     -- set `false` for exact matches only.
+- `log_access`      -- set `false` to supress data access logging.
+- `data_log_id`     -- (optionally) specify the data log id.
 """
-function read_table(cn::SQLite.DB, data_product::String, component::String;
-    log_access=true, data_log_id=get_log_id(cn::SQLite.DB))
+function read_table(db::SQLite.DB, data_product::String, component::String;
+    version=nothing, fuzzy_match::Bool=true, log_access=true, data_log_id=get_log_id(db))
 
-    ##
-    tablename = get_table_name(data_product, component, DB_H5_TABLE_APX)
-    # - write access log:
-    # log_access && log_data_access(cn, data_log_id, "toml_view", sql_args, vals)
-    stmt = SQLite.Stmt(cn, string("SELECT * FROM ", tablename))
+    ## search for matching dp
+    search = search_db_data(db, TABLE_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
+    isnothing(search) && (return false)
+
+    ## get ids
+    # sql_stub = "SELECT * FROM dpc_view\n"
+    # sql_args = string("WHERE dp_name LIKE ?", isnothing(component) ? "" : " AND comp_name LIKE ?")
+    # vals = Any[data_product, component]
+    # df = SQLite.DBInterface.execute(db, string(sql_stub, sql_args), vals) |> DataFrames.DataFrame
+    # # - write access log:
+    # log_access && log_data_access(db, data_log_id, "dpc_view", sql_args, vals)
+    # tablename = get_table_name(data_product, component, DB_H5_TABLE_APX)
+    stmt = SQLite.Stmt(db, string("SELECT * FROM ", search[1,:data_obj]))
     return SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame
 end

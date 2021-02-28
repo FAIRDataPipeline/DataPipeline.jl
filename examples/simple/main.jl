@@ -54,13 +54,13 @@ db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_conf
 
 ## display parameter search
 # NB. based on *downloaded* data products
-sars_cov2_search = "human/infection/SARS-CoV-2/%"
+sars_cov2_search = "human/infection/SARS-CoV-2/"
 sars_cov2 = DataRegistryUtils.read_estimate(db, sars_cov2_search)
-println("\n search: human/infection/SARS-CoV-2/* := ", DataFrames.first(sars_cov2, 6),"\n")
+println("\n search: *human/infection/SARS-CoV-2/* := ", DataFrames.first(sars_cov2, 6),"\n")
 
 ## read some parameters and convert from hours => days
-inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", key="value", data_type=Float64)[1] / 24
-lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "latent-period", key="value", data_type=Float64)[1] / 24
+inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", key="value", data_type=Float64)[1] / 24
+lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "latent-period", key="value", data_type=Float64)[1] / 24
 
 
 ### 4. run model simulation ###

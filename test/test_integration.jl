@@ -25,7 +25,7 @@ Test.@testset "simulationdata" begin
         remove_accessfile()
         Test.@test !isfile(accessfile)
         db = DataRegistryUtils.fetch_data_per_yaml(config, dataout, use_sql=true, access_log_path=accessfile)
-        x = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", data_type=Float64)[1]
+        x = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", data_type=Float64)[1]
         Test.@test x == covid_inf_dur
         Test.@test isfile(accessfile)
         remove_accessfile()
@@ -35,7 +35,7 @@ Test.@testset "simulationdata" begin
     # ditto, via do-block
     # Test.@testset "Do-block usage" begin
     #     DataRegistryUtils.fetch_data_per_yaml(config, dataout, use_sql=true) do db
-    #         x = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "infectious-duration", data_type=Float64)[1]
+    #         x = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", data_type=Float64)[1]
     #         Test.@test x == covid_inf_dur
     #     end
     # end

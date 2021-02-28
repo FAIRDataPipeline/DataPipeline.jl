@@ -105,7 +105,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
 
     ## 2) PREV. LINE 57: read_estimate()
     # - specify data_type=Float64
-    symptom_pr = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/%", "symptom-probability", data_type=Float64)
+    symptom_pr = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "symptom-probability", data_type=Float64)
     println("\n2) read_estimate: symptom_pr := ", typeof(symptom_pr[1]), " : ", symptom_pr[1])
 
     ### Simulation.jl code  block B ###
@@ -133,7 +133,7 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
 
     ## 4) PREV. LINE 79-112: various read_estimate()
     # - i.e. search: human/infection/SARS-CoV-2/*
-    sars_cov2_search = "human/infection/SARS-CoV-2/%"
+    sars_cov2_search = "human/infection/SARS-CoV-2/"
     sars_cov2 = DataRegistryUtils.read_estimate(db, sars_cov2_search)
     println("\n4) search: human/infection/SARS-CoV-2/* := ", DataFrames.first(sars_cov2, 6))
 
@@ -148,9 +148,9 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
     # Time symptomatic
     T_sym = days(DataRegistryUtils.read_estimate(db, sars_cov2_search, "infectious-duration", data_type=Float64)[1]Unitful.hr) - T_presym
     # Time in hospital
-    T_hosp = DataRegistryUtils.read_estimate(db, "fixed-parameters/%", "T_hos", data_type=Float64)[1]days
+    T_hosp = DataRegistryUtils.read_estimate(db, "fixed-parameters/", "T_hos", data_type=Float64)[1]days
     # Time to recovery if symptomatic
-    T_rec = DataRegistryUtils.read_estimate(db, "fixed-parameters/%", "T_rec", data_type=Float64)[1]days
+    T_rec = DataRegistryUtils.read_estimate(db, "fixed-parameters/", "T_rec", data_type=Float64)[1]days
 
     ## 5) EXTRA:
     # - nb. uses custom view defined in simulation_views.sql
