@@ -22,30 +22,33 @@
 # end
 
 ## flatten Nd array and load as 2d table
-# - NB. TBO *****
-# function flat_load_array!(cn::SQLite.DB, dp_id::Int64, tablename::String, h5::HDF5.Group, verbose::Bool)
-#     arr = read_h5_array(h5)
-#     verbose && println(" - loading array : ", size(arr), " => ", tablename)
-#     nd = ndims(arr)                             # fetch columns names
-#     dim_titles = String[]
-#     for d in 1:nd
-#         push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
-#     end
-#     push!(dim_titles, DB_VAL_COL)               # measure column
-#     ## ddl / dml
-#     idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
-#     dims = Array{Array{Any,1}}(undef, nd)
-#     for d in 1:nd                               # fetch named dimensions
-#         dim_names = get_dim_names(h5, d, size(arr)[d])
-#         idx = Int64[t[d] for t in idc]
-#         dims[d] = dim_names[idx]                # 'named' dimension d
-#     end
-#     verbose && println(" - dims := ", typeof(dims))
-#     df = DataFrames.DataFrame(dims)             # convert to df
-#     df.val = [arr[i] for i in eachindex(arr)]   # add data
-#     DataFrames.rename!(df, Symbol.(dim_titles)) # column names
-#     load_component!(cn, dp_id, tablename, df)   # load to db
-# end
+# - exposed by load_array
+# - NB. TBO? **
+function flat_load_array!(cn::SQLite.DB, tablename::String, h5::HDF5.Group, verbose::Bool)
+    arr = read_h5_array(h5)
+    verbose && println(" - loading array : ", size(arr), " => ", tablename)
+    nd = ndims(arr)                             # fetch columns names
+    dim_titles = String[]
+    for d in 1:nd
+        push!(dim_titles, clean_path(get_dim_title(h5, d, verbose)))
+    end
+    push!(dim_titles, DB_VAL_COL)               # measure column
+    ## ddl / dml
+    idc = Tuple.(CartesianIndices(arr)[:])      # dimension indices
+    dims = Array{Array{Any,1}}(undef, nd)
+    for d in 1:nd                               # fetch named dimensions
+        dim_names = get_dim_names(h5, d, size(arr)[d])
+        idx = Int64[t[d] for t in idc]
+        dims[d] = dim_names[idx]                # 'named' dimension d
+    end
+    verbose && println(" - dims := ", typeof(dims))
+    df = DataFrames.DataFrame(dims)             # convert to df
+    df.val = [arr[i] for i in eachindex(arr)]   # add data
+    DataFrames.rename!(df, Symbol.(dim_titles)) # column names
+    # load_component!(cn, dp_id, tablename, df)   # load to db
+    SQLite.drop!(cn, tablename, ifexists=true)
+    SQLite.load!(d, cn, tablename)
+end
 # replacement:
 # - load data (indices + msr) > new tbl
 # - load named dims (exists and not int?)

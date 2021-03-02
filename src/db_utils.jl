@@ -232,7 +232,6 @@ function get_axis_array(cn::SQLite.DB, dims::Array{String,1}, msr::String, tbl::
     return output
 end
 
-# get_sql_args(has_do::Bool) = string("WHERE comp_type=? AND dp_name LIKE ?", has_do ? " AND data_obj LIKE ?" : "")
 ## search dp
 function search_db_data(db::SQLite.DB, comp_type::String, data_product::String,
     component, version, fuzzy_match::Bool, log_access::Bool, data_log_id::Int64)
@@ -304,23 +303,27 @@ function read_array(db::SQLite.DB, data_product::String, component=nothing;
     search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
     isnothing(search) && (return false)
     return read_array(search, use_axis_arrays, verbose)
+end
 
-    ## prepare sql
-    # sel_sql = "SELECT DISTINCT filepath, data_obj FROM dpc_view\n"
-    # # sql_args = string("WHERE comp_type=? AND dp_name LIKE ?", isnothing(component) ? "" : " AND data_obj LIKE ?")
-    # sql_args = get_sql_args(!isnothing(component))
-    # stmt = SQLite.Stmt(db, string(sel_sql, sql_args))
-    # vals = Any[ARRAY_OBJ_NAME, string("%", data_product, "%")]
-    # isnothing(component) || push!(vals, string("%", component, "%"))
-    # ## execute
-    # df = SQLite.DBInterface.execute(stmt, vals) |> DataFrames.DataFrame
-    # if DataFrames.nrow(df)==0
-    #     println("WARNING: no matching data products found for: ", data_product, isnothing(component) ? "" : string(" - ", component))
-    #     return nothing
-    # else # log and return results:
-    #     log_access && log_data_access(db, data_log_id, "dpc_view", sql_args, vals)
-    #     return read_array(df, use_axis_arrays, verbose)
-    # end
+## exposes flat_load_array!
+# - add optional alias?
+function load_array!(db::SQLite.DB, data_product::String, component=nothing;
+    version=nothing, fuzzy_match::Bool=true, alias=nothing,
+    verbose::Bool=false, log_access=true, data_log_id=get_log_id(db))
+
+    ## search for matching dp
+    search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
+    isnothing(search) && (return false)
+    # for i in 1:DataFrames.nrow(df)
+    i=1
+    ##
+    f = HDF5.h5open(search[i,:filepath])
+    h5 = f[search[i,:data_obj]]
+    HDF5.close(f)
+    tablename = string("flat_arr_", df[i, :dp_id])
+    flat_load_array!(db, tablename, h5, verbose)
+
+    return tablename
 end
 
 ## read .toml estimate
@@ -361,16 +364,7 @@ function read_estimate(db::SQLite.DB, data_product::String, component=nothing;
     return parse.(data_type, output.val)
 end
 
-# function read_estimate(cn::SQLite.DB, data_product::String; key=nothing, data_type=nothing)
-#     sql = string(READ_EST_SQL, isnothing(key) ? "" : " AND key = ?")
-#     vals = isnothing(key) ? (data_product, ) : (data_product, key)
-#     output = SQLite.DBInterface.execute(cn, sql, (data_product, )) |> DataFrames.DataFrame
-#     ## write access log here *******
-#     isnothing(data_type) && return output
-#     return parse.(data_type, output.val)
-# end
-
-# - tables
+## tables
 """
     read_table(db::SQLite.DB, data_product::String, component::String)
 

@@ -107,13 +107,15 @@ end
 
 ## audit e.g. data product
 """
-    registry_audit(url; trace = "both")
+    registry_audit(url; trace="both")
 
 Search the Data Registry for known issues with, e.g. data products, code repo releases or code runs.
 
+Any issues that impact upon provenance (i.e. [a subset of] the graph of Registry objects associated with this one) can also be displayed w.r.t. "inputs", "outputs" or "both".
+
 **Parameters**
 - `url`     -- the URL of e.g. a data product or code repo release in the Data Registry.
-- `trace`   -- `String`: `"inputs"`, `"outputs"` or `"both"` (the default.)
+- `trace`   -- `"inputs"`, `"outputs"` or `"both"` -- also the default.
 """
 function registry_audit(url::String; trace::String="both")
     function print_thing(resp, thing::String, lbl=thing)

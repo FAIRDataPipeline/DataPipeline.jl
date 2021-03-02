@@ -95,11 +95,12 @@ end
 # 9 - ftp://boydorr.gla.ac.uk/scrc/
 # 11 - github
 # 203 - https://data.scrc.uk/api/text_file/
+# https://data.scrc.uk/api/storage_root/4472/
 function get_storage_type(rt_url)
-    if (rt_url == string(API_ROOT, "storage_root/1/") || rt_url == string(API_ROOT, "storage_root/14/"))
-        return 1    # http / toml
+    if (rt_url == string(API_ROOT, "storage_root/1/") || rt_url == string(API_ROOT, "storage_root/14/") || rt_url == string(API_ROOT, "storage_root/4472/"))
+        return 1    # http
     elseif rt_url == string(API_ROOT, "storage_root/9/")
-        return 2    # ftp / hdf5
+        return 2    # ftp
     else
         println("ERROR: unknown storage root: ", rt_url)
         return -1
