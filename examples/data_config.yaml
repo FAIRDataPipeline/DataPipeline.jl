@@ -7,6 +7,7 @@ read:
   - where:  # estimates
       data_product: human/infection/SARS-CoV-2/infectious-duration
       component: infectious-duration
+      version: 0.1.0
   - where:
       data_product: human/infection/SARS-CoV-2/symptom-delay
       component: symptom-delay
@@ -15,5 +16,6 @@ read:
       component: latent-period
   - where:  # arrays
       data_product: records/SARS-CoV-2/scotland/cases_and_management
+      version: 0.20200825.0
   - where:  # table
       data_product: geography/scotland/lookup_table

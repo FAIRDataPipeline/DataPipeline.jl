@@ -80,7 +80,8 @@ Test.@testset "package tests" begin
 
         ### Example: read individual HDF5 or TOML file
         Test.@testset "read from file" begin
-            fp = "out/records/SARS-CoV-2/scotland/cases_and_management/0.20200825.0.h5"
+            # fp = "out/records/SARS-CoV-2/scotland/cases_and_management/0.20200825.0.h5"
+            fp = "out/2543d080-47de-4457-8036-4436806c759e"
             dp = DataRegistryUtils.read_data_product_from_file(fp, use_axis_arrays=true, verbose=false)
             component = dp["/test_result/date-cumulative"]
             Test.@test true

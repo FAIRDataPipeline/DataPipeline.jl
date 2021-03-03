@@ -92,8 +92,8 @@ Read HDF5, CSV or TOML file from local system.
 """
 function read_data_product_from_file(filepath::String; use_axis_arrays::Bool = false, verbose::Bool = false)
     verbose && println("processing file: ", filepath)
-    ## occursin(".h5", filepath)
     HDF5.ishdf5(filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
+    occursin(".h5", filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
     occursin(".toml", filepath) && (return TOML.parsefile(filepath))
     occursin(".tml", filepath) && (return TOML.parsefile(filepath))
     occursin(".csv", filepath) && (return CSV.read(filepath, DataFrames.DataFrame))

@@ -165,7 +165,7 @@ function load_data_per_yaml(md, db_path::String, force_refresh::Bool, verbose::B
             DataFrames.nrow(qr) == 0 || (return false)
         end                             # else load from scratch
         SQLite.execute(del_stmt, (metadata.dp_name, metadata.dp_version))
-        if HDF5.ishdf5(metadata.filepath) # occursin(".h5", filepath)
+        if HDF5.ishdf5(metadata.filepath)# || occursin(".h5", filepath)
             process_h5_file!(output, metadata.dp_name, metadata.filepath, insert_dp(), verbose)
         elseif (occursin(".toml", metadata.filepath) || occursin(".tml", metadata.filepath))
             process_toml_file!(output, metadata.filepath, insert_dp())
