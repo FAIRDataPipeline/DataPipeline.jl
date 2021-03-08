@@ -81,7 +81,7 @@ function load_component!(cn::SQLite.DB, dp_id::Int64, comp_name::String, comp_ty
 end
 
 ## load toml data product component
-function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
+function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int)
     d = TOML.parsefile(filepath)
     components = collect(keys(d))
     # stmt = SQLite.Stmt(cn, "INSERT INTO toml_component(dp_id, comp_name) VALUES(?, ?)")

@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS data_product(
 	sr_url TEXT,
 	sl_path TEXT,
 	description TEXT,
-	registered BOOLEAN DEFAULT FALSE,
+	registered INTEGER DEFAULT 0,
 	dp_url TEXT,
 	row_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS code_repo_rel(
 	crr_website TEXT,
 	storage_root_url NOT NULL,
 	storage_root_id NOT NULL,
-	registered BOOLEAN DEFAULT FALSE,
+	registered INTEGER DEFAULT 0,
 	crr_url TEXT,
 	row_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS code_run(
 	model_config TEXT NOT NULL,
 	run_desc TEXT NOT NULL,
 	ss_text TEXT NOT NULL,
-	registered DEFAULT FALSE,
+	registered INTEGER DEFAULT 0,
 	run_url TEXT,
 	row_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
