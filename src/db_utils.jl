@@ -12,7 +12,7 @@ const DB_CSV_TABLE_APX = "_csv"
 # const DB_VAL_COL = "val"
 
 ## values/in() sql helper
-function get_query_str(n::Int64)
+function get_query_str(n::Int)
     output = "("
     for i in 1:n
         output = string(output, "?,")
@@ -67,14 +67,14 @@ function init_yaml_db(db_path::String)
 end
 
 ## 'meta' load component from [h5] object d
-function meta_load_component!(cn::SQLite.DB, dp_id::Int64, comp_name::String, comp_type::String, data_obj::String, meta_obj::Bool=true)
+function meta_load_component!(cn::SQLite.DB, dp_id::Int, comp_name::String, comp_type::String, data_obj::String, meta_obj::Bool=true)
     stmt = SQLite.Stmt(cn, "INSERT INTO component(dp_id, comp_name, comp_type, meta_src, data_obj) VALUES(?,?,?,?,?)")
     SQLite.execute(stmt, (dp_id, comp_name, comp_type, meta_obj, data_obj))
     return SQLite.last_insert_rowid(cn)
 end
 
 ## load component from [h5] object d
-function load_component!(cn::SQLite.DB, dp_id::Int64, comp_name::String, comp_type::String, tablename::String, d)
+function load_component!(cn::SQLite.DB, dp_id::Int, comp_name::String, comp_type::String, tablename::String, d)
     SQLite.drop!(cn, tablename, ifexists=true)
     SQLite.load!(d, cn, tablename)
     return meta_load_component!(cn, dp_id, comp_name, comp_type, tablename, false)
@@ -106,7 +106,7 @@ function get_table_name(tablestub::String, gnm::String, apx::String)
 end
 
 ## recursively search and load table/array
-function process_h5_file_group!(cn::SQLite.DB, name::String, h5, dp_id::Int64, verbose::Bool)
+function process_h5_file_group!(cn::SQLite.DB, name::String, h5, dp_id::Int, verbose::Bool)
     gnm = HDF5.name(h5)
     if haskey(h5, TABLE_OBJ_NAME)
         tablestub = clean_path(name)
@@ -125,7 +125,7 @@ function process_h5_file_group!(cn::SQLite.DB, name::String, h5, dp_id::Int64, v
 end
 
 ## wrapper for recursive processing
-function process_h5_file!(cn::SQLite.DB, name::String, filepath::String, dp_id::Int64, verbose::Bool)
+function process_h5_file!(cn::SQLite.DB, name::String, filepath::String, dp_id::Int, verbose::Bool)
     # tablestub = clean_path(name)
     f = HDF5.h5open(filepath)
     process_h5_file_group!(cn, name, f, dp_id, verbose)
@@ -134,7 +134,7 @@ end
 
 ## tabular data
 # - NEED TO REDESIGN THIS FOR SEP DB *******
-function process_csv_file!(cn::SQLite.DB, filepath::String, dp_id::Int64)
+function process_csv_file!(cn::SQLite.DB, filepath::String, dp_id::Int)
     df = CSV.read(filepath, DataFrames.DataFrame)
     tablestub = clean_path(basename(filepath))
     tablename = string(tablestub, DB_CSV_TABLE_AP)
@@ -234,7 +234,7 @@ end
 
 ## search dp
 function search_db_data(db::SQLite.DB, comp_type::String, data_product::String,
-    component, version, fuzzy_match::Bool, log_access::Bool, data_log_id::Int64)
+    component, version, fuzzy_match::Bool, log_access::Bool, data_log_id::Int)
 
     sel_sql = "SELECT DISTINCT dp_id, comp_id, filepath, data_obj FROM dpc_view\n"
     op = fuzzy_match ? "LIKE" : "="

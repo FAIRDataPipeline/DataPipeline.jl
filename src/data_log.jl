@@ -18,7 +18,7 @@ function get_log_id(cn::SQLite.DB)
 end
 
 ## write data access record
-function log_data_access(cn::SQLite.DB, log_id::Int64, sel_vw::String, sql_args::String, vals) #get_log_id(cn::SQLite.DB)
+function log_data_access(cn::SQLite.DB, log_id::Int, sel_vw::String, sql_args::String, vals) #get_log_id(cn::SQLite.DB)
     prepend!(vals, log_id)
     sql = "INSERT INTO access_log_data(log_id, dp_id, comp_id)\nSELECT ?, dp_id, comp_id FROM "
     SQLite.DBInterface.execute(cn, string(sql, sel_vw, "\n", sql_args), vals)
@@ -26,7 +26,7 @@ end
 
 ## print log to file (internal)
 # data_log_path::String=string(rstrip(out_dir, '/'), "/access-log.yaml"),
-function print_data_log(cn::SQLite.DB, log_id::Int64, filepath::String)
+function print_data_log(cn::SQLite.DB, log_id::Int, filepath::String)
     ## log metadata (record data dir?)
     stmt = SQLite.Stmt(cn, "SELECT * FROM access_log WHERE log_id=?")
     df = SQLite.DBInterface.execute(stmt, (log_id, )) |> DataFrames.DataFrame
@@ -48,7 +48,7 @@ function print_data_log(cn::SQLite.DB, log_id::Int64, filepath::String)
 end
 
 ## finalise (i.e. timestamp) data log
-function finish_data_log(db::SQLite.DB, log_id::Int64=get_log_id(db::SQLite.DB); filepath::String=nothing)
+function finish_data_log(db::SQLite.DB, log_id::Int=get_log_id(db::SQLite.DB); filepath::String=nothing)
     ## check for active logs to finish
     sel_stmt = SQLite.Stmt(db, "SELECT *, (log_finished IS NULL) AS active FROM access_log WHERE log_id=?")
     df = SQLite.DBInterface.execute(sel_stmt, (log_id, )) |> DataFrames.DataFrame
