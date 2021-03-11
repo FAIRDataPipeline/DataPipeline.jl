@@ -12,7 +12,7 @@ const DB_CSV_TABLE_APX = "_csv"
 # const DB_VAL_COL = "val"
 
 ## values/in() sql helper
-function get_query_str(n::Int)
+function get_query_str(n::Integer)
     output = "("
     for i in 1:n
         output = string(output, "?,")
@@ -81,7 +81,7 @@ function load_component!(cn::SQLite.DB, dp_id::Integer, comp_name::String, comp_
 end
 
 ## load toml data product component
-function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Int)
+function process_toml_file!(cn::SQLite.DB, filepath::String, dp_id::Integer)
     d = TOML.parsefile(filepath)
     components = collect(keys(d))
     # stmt = SQLite.Stmt(cn, "INSERT INTO toml_component(dp_id, comp_name) VALUES(?, ?)")
@@ -134,7 +134,7 @@ end
 
 ## tabular data
 # - NEED TO REDESIGN THIS FOR SEP DB *******
-function process_csv_file!(cn::SQLite.DB, filepath::String, dp_id::Int)
+function process_csv_file!(cn::SQLite.DB, filepath::String, dp_id::Integer)
     df = CSV.read(filepath, DataFrames.DataFrame)
     tablestub = clean_path(basename(filepath))
     tablename = string(tablestub, DB_CSV_TABLE_AP)
@@ -234,7 +234,7 @@ end
 
 ## search dp
 function search_db_data(db::SQLite.DB, comp_type::String, data_product::String,
-    component, version, fuzzy_match::Bool, log_access::Bool, data_log_id::Int)
+    component, version, fuzzy_match::Bool, log_access::Bool, data_log_id::Integer)
 
     sel_sql = "SELECT DISTINCT dp_id, comp_id, filepath, data_obj FROM dpc_view\n"
     op = fuzzy_match ? "LIKE" : "="
