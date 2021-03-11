@@ -68,8 +68,8 @@ Commit staged [local] file to the ``data_product`` endpoint of the SCRC Data Reg
 - `staging_id`              -- data product id, obtained when the model was [pre-]registered.
 - `scrc_access_tkn`         -- access token (see https://data.scrc.uk/docs/.)
 """
-function commit_staged_data_product(db::SQLite.DB, staging_id::Int
-    , scrc_access_tkn::String, ftp_username=nothing, ftp_password=nothing)
+function commit_staged_data_product(db::SQLite.DB, staging_id::Integer,
+    scrc_access_tkn::String, ftp_username=nothing, ftp_password=nothing)
 
     sel_stmt = SQLite.Stmt(db, "SELECT * FROM data_product WHERE dp_id=?")
     df = SQLite.DBInterface.execute(sel_stmt, (staging_id, )) |> DataFrames.DataFrame
@@ -164,7 +164,7 @@ Upload model run to the ``code_run`` endpoint of the SCRC Data Registry.
 - `staging_id`              -- model id, obtained when the model was [pre-]registered.
 - `scrc_access_tkn`         -- access token (see https://data.scrc.uk/docs/.)
 """
-function commit_staged_model(db::SQLite.DB, staging_id::Int, scrc_access_tkn::String)
+function commit_staged_model(db::SQLite.DB, staging_id::Integer, scrc_access_tkn::String)
     sel_stmt = SQLite.Stmt(db, "SELECT * FROM code_repo_rel WHERE crr_id=?")
     df = SQLite.DBInterface.execute(sel_stmt, (staging_id, )) |> DataFrames.DataFrame
     if DataFrames.nrow(df)==0   # handle bad id
@@ -184,7 +184,7 @@ function commit_staged_model(db::SQLite.DB, staging_id::Int, scrc_access_tkn::St
 end
 
 ## register staged model
-# function register_staged_model(db::SQLite.DB, staging_id::Int, scrc_access_tkn::String)
+# function register_staged_model(db::SQLite.DB, staging_id::Integer, scrc_access_tkn::String)
 #     sel_stmt = SQLite.Stmt(db, "SELECT * FROM code_repo_rel WHERE crr_id=?")
 #     df = SQLite.DBInterface.execute(sel_stmt, (staging_id, )) |> DataFrames.DataFrame
 #     if DataFrames.nrow(df)==0
@@ -212,7 +212,7 @@ Stage a model run for subsequent upload to the ``code_run`` endpoint of the SCRC
 - `submission_script_text`  -- e.g. 'julia my/julia/code.jl'.
 - `model_run_description`   -- description of the model run.
 """
-function register_model_run(db::SQLite.DB, model_id::Int, model_config::String, submission_script_text::String, model_run_description::String)
+function register_model_run(db::SQLite.DB, model_id::Integer, model_config::String, submission_script_text::String, model_run_description::String)
     ins_stmt = SQLite.Stmt(db, "INSERT INTO code_run(crr_id, model_config, run_desc, ss_text) VALUES(?,?,?,?)")
     SQLite.DBInterface.execute(ins_stmt, (model_id, model_config, model_run_description, submission_script_text))
     return SQLite.last_insert_rowid(db)
@@ -234,7 +234,7 @@ Upload model run to the ``code_run`` endpoint of the SCRC Data Registry.
 - `staging_id`              -- run id, obtained when the run was [pre-]registered.
 - `scrc_access_tkn`         -- access token (see https://data.scrc.uk/docs/.)
 """
-function commit_staged_run(db::SQLite.DB, staging_id::Int, scrc_access_tkn::String)
+function commit_staged_run(db::SQLite.DB, staging_id::Integer, scrc_access_tkn::String)
     ## register / fetch model release url
     function get_crr_url(crr_id)
         sl_stmt = SQLite.Stmt(db, "SELECT * FROM code_repo_rel WHERE crr_id=?")
