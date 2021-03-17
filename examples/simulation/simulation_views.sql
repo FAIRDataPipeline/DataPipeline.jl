@@ -1,5 +1,4 @@
 DROP VIEW IF EXISTS scottish_population_view;
-
 CREATE VIEW scottish_population_view AS
 SELECT age_groups
 , CAST(substr(age_groups, 4, 5) AS INT) AS age

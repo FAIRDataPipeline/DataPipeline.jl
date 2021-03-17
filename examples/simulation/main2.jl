@@ -13,10 +13,10 @@ using DataFrames
 using Plots
 using SQLite
 
-##
 function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time; do_plot::Bool = false, do_download::Bool = true, save::Bool = false, savepath::String = pwd())
-    # Download and read in population sizes for Scotland
+    # load array (so we can use in sql view, giving it the alias "km_age_persons_arr" for convenience)
     DataRegistryUtils.load_array!(db, "human/demographics/population/scotland", "/grid1km/age/persons"; sql_alias="km_age_persons_arr")
+    # Download and read in population sizes for Scotland
     scotpop = get_3d_km_grid_axis_array(db, ["grid_x", "grid_y", "age_aggr"], "val", "scottish_population_view")
 
     # Read number of age categories
@@ -59,7 +59,7 @@ function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, t
     # Prob of developing symptoms
     p_s = fill(read_estimate(db,
         "human/infection/SARS-CoV-2/%",
-        "symptom-probability",
+        "symptom-probability";
         key="value",
         data_type=Float64)[1], age_categories)
 
@@ -83,6 +83,7 @@ function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, t
         db,
         "human/infection/SARS-CoV-2/latent-period",
         "latent-period",
+        key="value",
         data_type=Float64
     )[1] * Unitful.hr)
 
@@ -91,6 +92,7 @@ function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, t
         db,
         "human/infection/SARS-CoV-2/asymptomatic-period",
         "asymptomatic-period",
+        key="value",
         data_type=Float64
     )[1] * Unitful.hr)
     @show T_asym
@@ -102,6 +104,7 @@ function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, t
         db,
         "human/infection/SARS-CoV-2/infectious-duration",
         "infectious-duration",
+        key="value",
         data_type=Float64
     )[1] * Unitful.hr) - T_presym
     # Time in hospital
@@ -109,6 +112,7 @@ function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, t
         db,
         "fixed-parameters/T_hos",
         "T_hos",
+        key="value",
         data_type=Float64
     )[1] * days
     # Time to recovery if symptomatic
@@ -116,6 +120,7 @@ function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, t
         db,
         "fixed-parameters/T_rec",
         "T_rec",
+        key="value",
         data_type=Float64
     )[1] * days
 

@@ -298,7 +298,7 @@ SQLite Data Registry helper function. Optionally specify the individual componen
 - `data_log_id`     -- (optionally) specify the data log id.
 """
 function load_array!(db::SQLite.DB, data_product::String, component=nothing;
-    version=nothing, fuzzy_match::Bool=true, sql_alias=nothing,
+    version=nothing, fuzzy_match::Bool=true, sql_alias=nothing, 
     verbose::Bool=false, log_access=true, data_log_id=get_log_id(db))
 
     ## search for matching dp
@@ -311,6 +311,7 @@ function load_array!(db::SQLite.DB, data_product::String, component=nothing;
         tbl = search[1,:data_obj]
     end
     if !isnothing(sql_alias)
+        # SQLite.execute(db, string("DROP VIEW IF EXISTS ", sql_alias))
         sql = string("CREATE VIEW ", sql_alias, " AS\nSELECT * FROM ", tbl)
         try
             SQLite.execute(db, sql)
@@ -321,7 +322,6 @@ function load_array!(db::SQLite.DB, data_product::String, component=nothing;
     end
     return tbl
 end
-
 
 ## array by data product / component name
 """
