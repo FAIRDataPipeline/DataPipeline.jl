@@ -14,7 +14,6 @@ Test.@testset "package tests" begin
         submission_script = "julia examples/simple/main.jl"
 
         ### 4. download data products ###
-        # db = DataRegistryUtils.fetch_data_per_yaml(data_config, data_dir, verbose=false)
         db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config, verbose=false)
         Test.@test true
 
@@ -84,7 +83,7 @@ Test.@testset "package tests" begin
         ### Example: read individual HDF5 or TOML file
         Test.@testset "read from file" begin
             # fp = "out/records/SARS-CoV-2/scotland/cases_and_management/0.20200825.0.h5"
-            fp = "out/2543d080-47de-4457-8036-4436806c759e"
+            fp = "out/fefe14d6a63b4dc1666f93e7d95367977969bdf7"
             dp = DataRegistryUtils.read_data_product_from_file(fp, use_axis_arrays=true, verbose=false)
             component = dp["/test_result/date-cumulative"]
             Test.@test true
