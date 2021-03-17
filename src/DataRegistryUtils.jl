@@ -363,7 +363,7 @@ include("db_staging.jl")
 
 export initialise_local_registry, read_data_product_from_file
 export fetch_data_per_yaml  # deprecated
-export read_estimate, read_table, read_array
+export read_estimate, read_table, read_array, load_array!
 export initialise_data_log, finish_data_log
 export register_data_product, register_text_file
 export register_github_model, register_model_run

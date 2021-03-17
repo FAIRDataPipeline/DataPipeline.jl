@@ -64,10 +64,13 @@ Test.@testset "package tests" begin
             ## read array by dp
             some_arrays = DataRegistryUtils.read_array(data, dp)
             one_array = some_arrays[comp_name]
-            Test.@test true
+            Test.@test !isnothing(one_array)
             ## read array by component name
             one_array = DataRegistryUtils.read_array(data, dp, comp_name)
-            Test.@test true
+            Test.@test !isnothing(one_array)
+            ## read array as flat table
+            one_array = DataRegistryUtils.read_array(data, dp, comp_name; flatten=true)
+            Test.@test !isnothing(one_array)
         end
 
         ### Example: reading tables
@@ -75,7 +78,7 @@ Test.@testset "package tests" begin
             dp = "geography/scotland/lookup_table"
             comp_name = "/conversiontable/scotland"
             tbl = DataRegistryUtils.read_table(data, dp, comp_name)
-            Test.@test true
+            Test.@test !isnothing(tbl)
         end
 
         ### Example: read individual HDF5 or TOML file
@@ -89,9 +92,13 @@ Test.@testset "package tests" begin
 
         ### Example: custom SQL query
         Test.@testset "sql" begin
-            # db = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql = true)
-            x = DBInterface.execute(data, "SELECT * FROM data_product") |> DataFrame
-            Test.@test true
+            dp = "records/SARS-CoV-2/scotland/cases_and_management"
+            comp_name = "/test_result/date-cumulative"
+            ## load array as flat table
+            tbl_name = DataRegistryUtils.load_array!(data, dp, comp_name; sql_alias="some_view")
+            Test.@test tbl_name=="some_view"
+            x = DBInterface.execute(data, "SELECT * FROM some_view") |> DataFrame
+            Test.@test nrow(x) > 0
         end
     end
 end

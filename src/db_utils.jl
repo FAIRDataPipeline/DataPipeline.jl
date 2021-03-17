@@ -8,8 +8,7 @@ include("../db/ddl.sql")
 const DB_FLAT_ARR_APX = "_arr"
 const DB_H5_TABLE_APX = "_tbl"
 const DB_CSV_TABLE_APX = "_csv"
-
-# const DB_VAL_COL = "val"
+const DB_VAL_COL = "val" # value col of flat loaded arrays
 
 ## values/in() sql helper
 function get_query_str(n::Integer)
@@ -234,22 +233,24 @@ end
 
 ## search dp
 function search_db_data(db::SQLite.DB, comp_type::String, data_product::String,
-    component, version, fuzzy_match::Bool, log_access::Bool, data_log_id::Integer)
+    component, version, meta_src, fuzzy_match::Bool, log_access::Bool, data_log_id::Integer, msg::Bool=true)
 
     sel_sql = "SELECT DISTINCT dp_id, comp_id, filepath, data_obj FROM dpc_view\n"
     op = fuzzy_match ? "LIKE" : "="
     fuzzy_str(str::String) = fuzzy_match ? string("%", str, "%") : str
     sql_args = string("WHERE comp_type=? AND dp_name ", op, " ?", isnothing(component) ? "" : string(" AND comp_name ", op, " ?"))
     isnothing(version) || (sql_args = string(sql_args, "AND dp_version=?"))
+    isnothing(meta_src) || (sql_args = string(sql_args, "AND meta_src=?"))
     stmt = SQLite.Stmt(db, string(sel_sql, sql_args, " ORDER BY dp_version DESC"))
     vals = Any[comp_type, fuzzy_str(data_product)]
     isnothing(component) || push!(vals, string("%", component, "%"))
     isnothing(version) ||  push!(vals, version)
+    isnothing(meta_src) ||  push!(vals, meta_src)
     ## execute
     # println("executing: ", string(sel_sql, sql_args), "\n", vals)
     df = SQLite.DBInterface.execute(stmt, vals) |> DataFrames.DataFrame
     if DataFrames.nrow(df)==0
-        println("WARNING: no matching data products found for: ", data_product, isnothing(component) ? "" : string(" - ", component))
+        msg && println("WARNING: no matching data products found for: ", data_product, isnothing(component) ? "" : string(" - ", component))
         return nothing
     else # log and return results:
         log_access && log_data_access(db, data_log_id, "dpc_view", sql_args, vals)
@@ -276,9 +277,10 @@ function read_array(df::DataFrames.DataFrame, use_axis_arrays::Bool, verbose::Bo
     return output
 end
 
-## array by data product / component name
+include("array_proc.jl")
+## exposes flat_load_array!
 """
-    read_array(db::SQLite.DB, data_product::String[, component::String]; ... )
+    load_array!(db::SQLite.DB, data_product::String[, component::String]; ... )
 
 Load HDF5 array(s) data resource.
 
@@ -291,40 +293,78 @@ SQLite Data Registry helper function. Optionally specify the individual componen
 **Options**
 - `version`         -- optionally specify the version (else the latest version is read.)
 - `fuzzy_match`     -- set `false` for exact matches only.
+- `sql_alias`       -- optional alias for the database table.
+- `log_access`      -- set `false` to supress data access logging.
+- `data_log_id`     -- (optionally) specify the data log id.
+"""
+function load_array!(db::SQLite.DB, data_product::String, component=nothing;
+    version=nothing, fuzzy_match::Bool=true, sql_alias=nothing,
+    verbose::Bool=false, log_access=true, data_log_id=get_log_id(db))
+
+    ## search for matching dp
+    search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, false, fuzzy_match, log_access, data_log_id, false)
+    if isnothing(search)    # load flat table
+        search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, true, fuzzy_match, log_access, data_log_id)
+        isnothing(search) && (return nothing)
+        tbl = flat_load_array!(db, search, verbose)
+    else                    # already loaded
+        tbl = search[1,:data_obj]
+    end
+    if !isnothing(sql_alias)
+        sql = string("CREATE VIEW ", sql_alias, " AS\nSELECT * FROM ", tbl)
+        try
+            SQLite.execute(db, sql)
+            return sql_alias
+        catch e
+            println(" - SQL ERROR:\n -- ", e)
+        end
+    end
+    return tbl
+end
+
+
+## array by data product / component name
+"""
+    read_array(db::SQLite.DB, data_product::String[, component::String]; ... )
+
+Read HDF5 array data resource(s) -- optionally specify the individual component.
+
+**Parameters**
+- `db`              -- SQLite.DB object yielded by previous call to `fetch_data_per_yaml`.
+- `data_product`    -- data product search string, e.g. `"human/infection/SARS-CoV-2/"`.
+- `component`       -- [optionally] specify the component name.
+**Options**
+- `version`         -- optionally specify the version (else the latest version is read.)
+- `fuzzy_match`     -- set `false` for exact matches only.
+- `flatten`         -- set `true` for a flattened 2d table.
 - `use_axis_arrays` -- set `true` to return the matching data as `AxisArray` types.
 - `log_access`      -- set `false` to supress data access logging.
 - `data_log_id`     -- (optionally) specify the data log id.
 """
 function read_array(db::SQLite.DB, data_product::String, component=nothing;
-    version=nothing, fuzzy_match::Bool=true, use_axis_arrays::Bool=false,
+    version=nothing, fuzzy_match::Bool=true, flatten::Bool=false, use_axis_arrays::Bool=false,
     verbose::Bool=false, log_access=true, data_log_id=get_log_id(db))
 
     ## search for matching dp
-    search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
-    isnothing(search) && (return false)
-    return read_array(search, use_axis_arrays, verbose)
+    if flatten  # read as 2d flat table
+        search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, false, fuzzy_match, log_access, data_log_id, false)
+        if isnothing(search)    # load flat table
+            search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, true, fuzzy_match, log_access, data_log_id)
+            isnothing(search) && (return nothing)
+            tbl = flat_load_array!(db, search, verbose)
+        else                    # already loaded
+            tbl = search[1,:data_obj]
+        end
+        ## read data
+        stmt = SQLite.Stmt(db, string("SELECT * FROM ", tbl))
+        return (SQLite.DBInterface.execute(stmt) |> DataFrames.DataFrame)
+    else        # read array from file
+        search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, true, fuzzy_match, log_access, data_log_id)
+        isnothing(search) && (return nothing)
+        return read_array(search, use_axis_arrays, verbose)
+    end
 end
 
-## exposes flat_load_array!
-# - add optional alias?
-function load_array!(db::SQLite.DB, data_product::String, component=nothing;
-    version=nothing, fuzzy_match::Bool=true, alias=nothing,
-    verbose::Bool=false, log_access=true, data_log_id=get_log_id(db))
-
-    ## search for matching dp
-    search = search_db_data(db, ARRAY_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
-    isnothing(search) && (return false)
-    # for i in 1:DataFrames.nrow(df)
-    i=1
-    ##
-    f = HDF5.h5open(search[i,:filepath])
-    h5 = f[search[i,:data_obj]]
-    HDF5.close(f)
-    tablename = string("flat_arr_", df[i, :dp_id])
-    flat_load_array!(db, tablename, h5, verbose)
-
-    return tablename
-end
 
 ## read .toml estimate
 """
@@ -351,8 +391,8 @@ function read_estimate(db::SQLite.DB, data_product::String, component=nothing;
     key=nothing, data_type=nothing, log_access=true, data_log_id=get_log_id(db))
 
     ## search for matching dp
-    search = search_db_data(db, TOML_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
-    isnothing(search) && (return false)
+    search = search_db_data(db, TOML_OBJ_NAME, data_product, component, version, nothing, fuzzy_match, log_access, data_log_id)
+    isnothing(search) && (return nothing)
     vals = Any[]
     isnothing(key) || push!(vals, key)
     for i in eachindex(search[!, :dp_id])
@@ -384,8 +424,8 @@ function read_table(db::SQLite.DB, data_product::String, component::String;
     version=nothing, fuzzy_match::Bool=true, log_access=true, data_log_id=get_log_id(db))
 
     ## search for matching dp
-    search = search_db_data(db, TABLE_OBJ_NAME, data_product, component, version, fuzzy_match, log_access, data_log_id)
-    isnothing(search) && (return false)
+    search = search_db_data(db, TABLE_OBJ_NAME, data_product, component, version, nothing, fuzzy_match, log_access, data_log_id)
+    isnothing(search) && (return nothing)
 
     ## get ids
     # sql_stub = "SELECT * FROM dpc_view\n"

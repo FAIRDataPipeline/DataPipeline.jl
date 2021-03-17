@@ -1,31 +1,37 @@
-# ## try get dim titles, else give generic column name
-# # - deprecate this ***
-# function get_dim_title(h5, d::Int64, verbose::Bool)
-#     ttl = string("Dimension_", d, "_title")
-#     if haskey(h5, ttl)
-#         return replace(HDF5.read(h5[ttl])[1], " " => "_");
-#     else
-#         cn = string("col", d)
-#         verbose && println(" - nb. no metadata found for ", cn)
-#         return cn
-#     end
-# end
+## try get dim titles, else give generic column name
+# - deprecate this ***
+function get_dim_title(h5, d::Int64, verbose::Bool)
+    ttl = string("Dimension_", d, "_title")
+    if haskey(h5, ttl)
+        return replace(HDF5.read(h5[ttl])[1], " " => "_");
+    else
+        cn = string("col", d)
+        verbose && println(" - nb. no metadata found for ", cn)
+        return cn
+    end
+end
 ## try get dim labels, else give generic labels
 # - deprecate this? ***
-# function get_dim_names(h5, d::Int64, s::Int64)
-#     nms = string("Dimension_", d, "_names")
-#     if haskey(h5, nms)
-#         return HDF5.read(h5[nms]);
-#     else
-#         return String[string("grp", i) for i in 1:s]
-#     end
-# end
+function get_dim_names(h5, d::Int64, s::Int64)
+    nms = string("Dimension_", d, "_names")
+    if haskey(h5, nms)
+        return HDF5.read(h5[nms]);
+    else
+        return String[string("grp", i) for i in 1:s]
+    end
+end
 
 ## flatten Nd array and load as 2d table
 # - exposed by load_array
-# - NB. TBO? **
-function flat_load_array!(cn::SQLite.DB, tablename::String, h5::HDF5.Group, verbose::Bool)
-    arr = read_h5_array(h5)
+# - NB. fold in standard array loading? **
+function flat_load_array!(cn::SQLite.DB, search::DataFrames.DataFrame, verbose::Bool)
+    dp_id = search[1,:dp_id]
+    comp_id = search[1,:comp_id]
+    f = HDF5.h5open(search[1,:filepath])
+    h5 = f[search[1,:data_obj]]
+    tablename = string("flat_arr_", comp_id)
+    # arr = read_h5_array(h5)
+    arr = read_array(search, false, verbose)[ARRAY_OBJ_NAME]
     verbose && println(" - loading array : ", size(arr), " => ", tablename)
     nd = ndims(arr)                             # fetch columns names
     dim_titles = String[]
@@ -45,9 +51,14 @@ function flat_load_array!(cn::SQLite.DB, tablename::String, h5::HDF5.Group, verb
     df = DataFrames.DataFrame(dims)             # convert to df
     df.val = [arr[i] for i in eachindex(arr)]   # add data
     DataFrames.rename!(df, Symbol.(dim_titles)) # column names
-    # load_component!(cn, dp_id, tablename, df)   # load to db
-    SQLite.drop!(cn, tablename, ifexists=true)
-    SQLite.load!(d, cn, tablename)
+    ## load to db
+    load_component!(cn, dp_id, HDF5.name(h5), ARRAY_OBJ_NAME, tablename, df)
+    HDF5.close(f)
+    # SQLite.drop!(cn, tablename, ifexists=true)
+    # SQLite.load!(d, cn, tablename)
+    # upst = SQLite.Stmt(cn, "UPDATE component SET meta_src=?, data_obj=? WHERE comp_id=?")
+    # SQLite.execute(upst, (0, tablename, ))
+    return tablename
 end
 # replacement:
 # - load data (indices + msr) > new tbl

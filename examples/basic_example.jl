@@ -2,12 +2,29 @@ import DataRegistryUtils
 import SQLite
 import DataFrames
 
-#### loading data ####
-
+#### code snippets ####
 TEST_FILE = "examples/data_config.yaml"
 DATA_OUT = "out/"
 
+### loading data
 data = DataRegistryUtils.initialise_local_registry(DATA_OUT, data_config=TEST_FILE, verbose=false)
+
+### Example: reading arrays
+dp = "records/SARS-CoV-2/scotland/cases_and_management"
+comp_name = "/test_result/date-cumulative"
+
+## read array by dp
+some_arrays = DataRegistryUtils.read_array(data, dp)
+one_array = some_arrays[comp_name]
+println("type := ", typeof(one_array), " - keys := ", keys(one_array))
+
+## read array by component name
+one_array = DataRegistryUtils.read_array(data, dp, comp_name)
+println("type := ", typeof(one_array), " - keys := ", keys(one_array))
+
+## read array as flat table
+one_array = DataRegistryUtils.read_array(data, dp, comp_name; flatten=true)
+println("type := ", typeof(one_array), " - size := ", size(one_array))
 
 ### Example: read individual HDF5 or TOML file
 # fp = "out/records/SARS-CoV-2/scotland/cases_and_management/0.20200825.0.h5"

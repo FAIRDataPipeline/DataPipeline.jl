@@ -16,9 +16,12 @@ initialise_local_registry
 
 ### Reading data
 
+Note that arrays can be processed into flat 2d tables, using either `load_array!` or `read_array` with the `flatten=true`.
+
 ```@docs
 read_estimate
 read_array
+load_array!
 read_table
 read_data_product_from_file
 ```
