@@ -1,0 +1,4 @@
+name = "DataPipeline"
+uuid = "8d16fb18-2cc4-4fac-a8aa-1fa2ae84c6ac"
+authors = ["mjb3 <martinjosephburke@gmail.com>"]
+version = "0.1.0"

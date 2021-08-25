@@ -1,0 +1,18 @@
+run_metadata:
+  description: Write an array
+  local_data_registry_url: http://localhost:8000/api/
+  remote_data_registry_url: http://data.scrc.uk/api/
+  default_input_namespace: martinburke
+  default_output_namespace: martinburke
+  write_data_store: /media/martin/storage/projects/AtomProjects/DataPipeline.jl/examples/simple2/data/
+  local_repo: /media/martin/storage/projects/AtomProjects/DataPipeline.jl/
+  latest_commit: 221bfe8b52bbfb3b2dbdc23037b7dd94b49aaa70
+  remote_repo: https://github.com/FAIRDataPipeline/DataPipeline.jl
+  script: |-
+    R -f simple_working_examples/write_array.R /Users/SoniaM/datastore/coderun/20210511-231444/
+
+write:
+- data_product: test/array
+  description: test array with simple data
+  use:
+    version: 0.0.1

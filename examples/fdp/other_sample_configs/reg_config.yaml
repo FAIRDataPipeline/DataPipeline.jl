@@ -1,0 +1,74 @@
+run_metadata:
+  description: Register a file in the pipeline
+  local_data_registry_url: https://localhost:8000/api/
+  remote_data_registry_url: https://data.scrc.uk/api/
+  default_input_namespace: SCRC
+  default_output_namespace: soniamitchell
+  default_data_store: /Users/SoniaM/datastore/
+  local_repo: /Users/Soniam/Desktop/git/SCRC/SCRCdata
+  script: |-
+    R -f inst/SCRC/scotgov_management/submission_script.R {CONFIG_DIR}
+register:
+- external_object: management-data
+  source_name: Scottish Government Open Data Repository
+  source_abbreviation: Scottish Government Open Data Repository
+  source_website: https://statistics.gov.scot/
+  root_name: Scottish Government Open Data Repository
+  root: https://statistics.gov.scot/sparql.csv?query=
+  path: |
+    PREFIX qb: <http://purl.org/linked-data/cube#>
+    PREFIX data: <http://statistics.gov.scot/data/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX mp: <http://statistics.gov.scot/def/measure-properties/>
+    PREFIX dim: <http://purl.org/linked-data/sdmx/2009/dimension#>
+    PREFIX sdim: <http://statistics.gov.scot/def/dimension/>
+    PREFIX stat: <http://statistics.data.gov.uk/def/statistical-entity#>
+    SELECT ?featurecode ?featurename ?date ?measure ?variable ?count
+    WHERE {
+      ?indicator qb:dataSet data:coronavirus-covid-19-management-information;
+                  dim:refArea ?featurecode;
+                  dim:refPeriod ?period;
+                  sdim:variable ?varname;
+                  qb:measureType ?type.
+      {?indicator mp:count ?count.} UNION {?indicator mp:ratio ?count.}
+
+      ?featurecode <http://publishmydata.com/def/ontology/foi/displayName> ?featurename.
+      ?period rdfs:label ?date.
+      ?varname rdfs:label ?variable.
+      ?type rdfs:label ?measure.
+    }
+  title: Data associated with COVID-19
+  description: The data provide past data around COVID-19 for the daily updates provided by the Scottish Government.
+  unique_name: COVID-19 management information
+  product_name: records/SARS-CoV-2/scotland/cases-and-management
+  file_type: csv
+  release_date: {DATETIME}
+  version: 0.{DATETIME}.0
+  primary: True
+  accessibility: open
+
+write:
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/ambulance
+  description: Ambulance data
+  version: 0.{DATETIME}.0
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/calls
+  description: Calls data
+  version: 0.{DATETIME}.0
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/carehomes
+  description: Care homes data
+  version: 0.{DATETIME}.0
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/hospital
+  description: Hospital data
+  version: 0.{DATETIME}.0
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/mortality
+  description: Mortality data
+  version: 0.{DATETIME}.0
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/nhsworkforce
+  description: NHS workforce data
+  version: 0.{DATETIME}.0
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/schools
+  description: Schools data
+  version: 0.{DATETIME}.0
+- data_product: records/SARS-CoV-2/scotland/cases-and-management/testing
+  description: Testing data
+  version: 0.{DATETIME}.0

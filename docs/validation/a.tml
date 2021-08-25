@@ -1,0 +1,7 @@
+[asymptomatic-period]
+type = "point-estimate"
+value = 393355772
+
+[asymptomatic-period2]
+type = "point-estimate"
+value = 7109664917

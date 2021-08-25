@@ -1,0 +1,39 @@
+fail_on_hash_mismatch: True
+run_metadata:
+  description: A simple analysis
+  local_data_registry_url: https://localhost:8000/api/
+  remote_data_registry_url: https://data.scrc.uk/api/
+  default_input_namespace: SCRC
+  default_output_namespace: johnsmith
+  default_data_store: /datastore/
+  always_copy_to_store: False
+  local_repo: /Users/johnsmith/git/myproject/
+  # `script:` points to the submission script (relative to local_repo)
+  script: python path/submission_script.py {CONFIG_PATH}
+  # `script_path:` can be used instead of `script:`
+
+read:
+# Read version 1.0 of human/commutes
+- data_product: human/commutes
+  version: 1.0
+# Read human/health from the cache
+- data_product: human/health
+  cache: /local/file.h5
+# Read crummy_table with specific doi and title
+- external_object: crummy_table
+  doi: 10.1111/ddi.12887
+  title: Supplementary Table 2
+# Read secret_data with specific doi and title from the cache
+- external_object: secret_data
+  doi: 10.1111/ddi.12887
+  title: Supplementary Table 3
+  cache: /local/secret.csv
+# Read weird_lost_file (which perhaps has no metadata) with specific hash
+- object: weird_lost_file
+  hash: b5a514810b4cb6dc795848464572771f
+
+write:
+# Write beautiful_figure and increment version number
+- external_object: beautiful_figure
+  unique_name: My amazing figure
+  version: {MINOR}
