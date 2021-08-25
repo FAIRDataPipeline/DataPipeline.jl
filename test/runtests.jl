@@ -1,5 +1,5 @@
 ## package tests
-using DataRegistryUtils
+using DataPipeline
 using SQLite, DataFrames
 import Test
 
@@ -15,19 +15,19 @@ Test.@testset "package tests" begin
     #     submission_script = "julia examples/simple/main.jl"
     #
     #     ### 4. download data products ###
-    #     db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config, verbose=false)
+    #     db = DataPipeline.initialise_local_registry(data_dir, data_config=data_config, verbose=false)
     #     Test.@test true
     #
     #     ## display parameter search
     #     # NB. based on *downloaded* data products
     #     Test.@testset "read estimates" begin
     #         sars_cov2_search = "human/infection/SARS-CoV-2/"
-    #         sars_cov2 = DataRegistryUtils.read_estimate(db, sars_cov2_search)
+    #         sars_cov2 = DataPipeline.read_estimate(db, sars_cov2_search)
     #         println("\n search: human/infection/SARS-CoV-2/* := ", DataFrames.first(sars_cov2, 6),"\n")
     #
     #         ## read some parameters and convert from hours => days
-    #         inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", key="value", data_type=Float64)[1] / 24
-    #         lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "latent-period", key="value", data_type=Float64)[1] / 24
+    #         inf_period_days = DataPipeline.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", key="value", data_type=Float64)[1] / 24
+    #         lat_period_days = DataPipeline.read_estimate(db, "human/infection/SARS-CoV-2/", "latent-period", key="value", data_type=Float64)[1] / 24
     #         Test.@test true
     #     end
     # end
@@ -39,7 +39,7 @@ Test.@testset "package tests" begin
     #
     #     ### Example: no SQL
     #     # Test.@testset "read estimate (no sql)" begin
-    #     #     data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=false, use_axis_arrays=true)
+    #     #     data = DataPipeline.fetch_data_per_yaml(TEST_FILE, DATA_OUT, use_sql=false, use_axis_arrays=true)
     #     #     data_product = data["human/infection/SARS-CoV-2/symptom-delay"]
     #     #     component = data_product["symptom-delay"]
     #     #     component_type = component["type"]
@@ -48,8 +48,8 @@ Test.@testset "package tests" begin
     #     # end
     #
     #     ### refresh data
-    #     data = DataRegistryUtils.initialise_local_registry(DATA_OUT, data_config=TEST_FILE, verbose=false)
-    #     # data = DataRegistryUtils.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
+    #     data = DataPipeline.initialise_local_registry(DATA_OUT, data_config=TEST_FILE, verbose=false)
+    #     # data = DataPipeline.fetch_data_per_yaml(TEST_FILE, DATA_OUT)
     #     Test.@test true
     #
     #     ### Example: reading point estimates
@@ -62,14 +62,14 @@ Test.@testset "package tests" begin
     #         dp = "records/SARS-CoV-2/scotland/cases_and_management"
     #         comp_name = "/test_result/date-cumulative"
     #         ## read array by dp
-    #         some_arrays = DataRegistryUtils.read_array(data, dp)
+    #         some_arrays = DataPipeline.read_array(data, dp)
     #         one_array = some_arrays[comp_name]
     #         Test.@test !isnothing(one_array)
     #         ## read array by component name
-    #         one_array = DataRegistryUtils.read_array(data, dp, comp_name)
+    #         one_array = DataPipeline.read_array(data, dp, comp_name)
     #         Test.@test !isnothing(one_array)
     #         ## read array as flat table
-    #         one_array = DataRegistryUtils.read_array(data, dp, comp_name; flatten=true)
+    #         one_array = DataPipeline.read_array(data, dp, comp_name; flatten=true)
     #         Test.@test !isnothing(one_array)
     #     end
     #
@@ -77,7 +77,7 @@ Test.@testset "package tests" begin
     #     Test.@testset "read table" begin
     #         dp = "geography/scotland/lookup_table"
     #         comp_name = "/conversiontable/scotland"
-    #         tbl = DataRegistryUtils.read_table(data, dp, comp_name)
+    #         tbl = DataPipeline.read_table(data, dp, comp_name)
     #         Test.@test !isnothing(tbl)
     #     end
     #
@@ -85,7 +85,7 @@ Test.@testset "package tests" begin
     #     Test.@testset "read from file" begin
     #         # fp = "out/records/SARS-CoV-2/scotland/cases_and_management/0.20200825.0.h5"
     #         fp = "out/fefe14d6a63b4dc1666f93e7d95367977969bdf7"
-    #         dp = DataRegistryUtils.read_data_product_from_file(fp, use_axis_arrays=true, verbose=false)
+    #         dp = DataPipeline.read_data_product_from_file(fp, use_axis_arrays=true, verbose=false)
     #         component = dp["/test_result/date-cumulative"]
     #         Test.@test !isnothing(component)
     #     end
@@ -95,7 +95,7 @@ Test.@testset "package tests" begin
     #         dp = "records/SARS-CoV-2/scotland/cases_and_management"
     #         comp_name = "/test_result/date-cumulative"
     #         ## load array as flat table
-    #         tbl_name = DataRegistryUtils.load_array!(data, dp, comp_name; sql_alias="some_view")
+    #         tbl_name = DataPipeline.load_array!(data, dp, comp_name; sql_alias="some_view")
     #         Test.@test tbl_name=="some_view"
     #         x = DBInterface.execute(data, "SELECT * FROM some_view") |> DataFrame
     #         Test.@test nrow(x) > 0

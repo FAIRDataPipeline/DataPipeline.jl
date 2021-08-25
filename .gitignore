@@ -14,3 +14,4 @@ examples/simple2/xval/db.sqlite3_mb
 examples/simple2/xval/db.sqlite3_sm
 examples/simple2/.fair/*
 examples/simulation/Array_example.jld
+examples/mk/val
