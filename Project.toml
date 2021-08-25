@@ -1,7 +1,7 @@
 name = "DataPipeline"
 uuid = "8d16fb18-2cc4-4fac-a8aa-1fa2ae84c6ac"
 authors = ["mjb3 <martinjosephburke@gmail.com>"]
-version = "0.1.0"
+version = "0.51.1"
 
 [deps]
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
