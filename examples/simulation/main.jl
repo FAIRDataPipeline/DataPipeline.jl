@@ -277,4 +277,5 @@ function run_model_dr(times::Unitful.Time, interval::Unitful.Time, timestep::Uni
 end
 ## run
 times = 2months; interval = 1day; timestep = 1day
-run_model_dr(times, interval, timestep, do_plot=true, save=true data_dir="examples/simulation/data/")
+run_model_dr(times, interval, timestep, do_plot=true, save=true,
+             data_dir="examples/simulation/data/")
