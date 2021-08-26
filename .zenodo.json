@@ -1,0 +1,27 @@
+{
+    "title": "DataPipeline.jl - FAIR Data Pipeline in Julia",
+    "description": "Package for interfacing with the FAIR Data Pipeline in Julia",
+    "upload_type": "software",
+    "creators": [
+        {
+            "affiliation": "Biomathematics and Statstics Scotland",
+            "name": "Burke, Martin",
+            "orcid": ""
+        }
+    ],
+    "access_right": "open",
+    "license": "GPL-3+",
+    "related_identifiers": [
+        {
+            "scheme": "url",
+            "identifier": "https://github.com/FAIRDataPipeline/DataPipeline.jl",
+            "relation": "isIdenticalTo"
+        }
+    ],
+    "keywords": [
+        "FAIR",
+        "julia",
+        "data provenance",
+        "data pipeline"
+    ]
+}
