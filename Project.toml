@@ -22,3 +22,6 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
 CSV = "0.8"
+JSON = "0.21"
+HDF5 = "0.15"
+HTTP = "0.9"
