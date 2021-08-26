@@ -1,8 +1,9 @@
 # DataPipeline.jl
 **The [FAIR Data Pipeline][dp_docs] in Julia**
 
-[![](https://img.shields.io/badge/docs-DataPipeline.jl-blue)](https://fairdatapipeline.github.io/DataPipeline.jl/dev/)
+[![dev docs][docs-dev-img]][docs-dev-url]
 ![Package tests](https://github.com/FAIRDataPipeline/DataPipeline.jl/workflows/Tests/badge.svg)
+[![JuliaNightly][nightly-img]][nightly-url]
 
 ## Features
 - Conveniently download Data Products from the [SCRC Data Registry](https://data.scrc.uk/).
@@ -25,3 +26,8 @@ See the [package documentation][docs] for instructions and examples.
 [docs]: https://fairdatapipeline.github.io/DataPipeline.jl/stable/
 
 [dp_docs]: https://fairdatapipeline.github.io/docs/introduction/
+
+[docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
+[docs-dev-url]: https://fairdatapipeline.github.io/DataPipeline.jl/dev/
+[nightly-img]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/nightly.yaml/badge.svg
+[nightly-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/nightly.yaml
