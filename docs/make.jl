@@ -1,8 +1,7 @@
-using Documenter, DataPipeline
+using Documenter
+using DataPipeline
 
 makedocs(sitename="FAIRDataPipeline DataPipeline.jl docs")
 
-deploydocs(
-    repo = "github.com/FAIRDataPipeline/DataPipeline.jl.git",
-    devbranch = "main",
-)
+deploydocs(repo = "github.com/FAIRDataPipeline/DataPipeline.jl.git",
+           devbranch = "main")
