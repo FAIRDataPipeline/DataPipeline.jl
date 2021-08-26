@@ -213,7 +213,7 @@ code_release_id = DataPipeline.register_github_model(model_config, scrc_access_t
 Here we have used a .yaml configuration file but for illustration, the code is roughly equivalent to this:
 
 ``` julia
-model_name = "DRU simple example"
+model_name = "DataPipeline simple example"
 model_repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl"
 model_version = "0.0.1"
 model_description = " ... " (nb. insert description)

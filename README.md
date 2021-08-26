@@ -1,4 +1,5 @@
 # DataPipeline.jl
+
 **The [FAIR Data Pipeline][dp_docs] in Julia**
 
 [![main docs][docs-main-img]][docs-main-url]
@@ -7,6 +8,7 @@
 [![Zenodo][zenodo-badge]][zenodo-url]
 
 ## Features
+
 - Conveniently download Data Products from the [SCRC Data Registry](https://data.scrc.uk/).
 - File hash-based version checking: new data is downloaded only when necessary.
 - A SQLite layer for convenient pre-processing (typically aggregation, and the joining of disparate datasets based on common identifiers.)
@@ -16,7 +18,7 @@
 
 The package is now registered with General and can be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
-```
+```julia
 pkg> add DataPipeline
 ```
 
