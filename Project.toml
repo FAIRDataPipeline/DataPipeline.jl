@@ -19,3 +19,6 @@ SQLite = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
+
+[compat]
+DataFrames = "1"
