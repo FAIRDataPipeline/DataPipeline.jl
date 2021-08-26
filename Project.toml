@@ -21,6 +21,7 @@ UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
+SQLite = "1"
 AxisArrays = "0.4"
 NetCDF = "0.11"
 YAML = "0.4"
