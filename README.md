@@ -14,10 +14,10 @@
 
 ## Installation
 
-The [current version of the] package is not yet registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
+The package is now registered with General and can be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
 ```
-pkg> add https://github.com/FAIRDataPipeline/DataPipeline.jl
+pkg> add DataPipeline
 ```
 
 ## Usage
