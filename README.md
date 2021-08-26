@@ -2,8 +2,8 @@
 **The [FAIR Data Pipeline][dp_docs] in Julia**
 
 [![dev docs][docs-dev-img]][docs-dev-url]
-![Package tests](https://github.com/FAIRDataPipeline/DataPipeline.jl/workflows/Tests/badge.svg)
-[![JuliaNightly][nightly-img]][nightly-url]
+[![Package Testing][testing-img]][testing-url]
+[![Julia Nightly][nightly-img]][nightly-url]
 [![Zenodo][zenodo-badge]][zenodo-url]
 
 ## Features
@@ -30,6 +30,9 @@ See the [package documentation][docs] for instructions and examples.
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://fairdatapipeline.github.io/DataPipeline.jl/dev/
+
+[testing-img]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml/badge.svg
+[testing-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml
 
 [nightly-img]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/nightly.yaml/badge.svg
 [nightly-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/nightly.yaml
