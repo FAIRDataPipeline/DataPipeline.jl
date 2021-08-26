@@ -5,7 +5,7 @@ on:
     branches:
       - '*'
   schedule:
-    - cron: '55 12 * * *'  # Daily at 4 AM
+    - cron: '0 4 * * *'  # Daily at 4 AM
 
 jobs:
   CompatHelper:
