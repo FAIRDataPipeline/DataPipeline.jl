@@ -1,4 +1,4 @@
-Copyright (c) 2016-2021: Martin Burke and the Scottish COVID-19 Response Consortium.
+Copyright (c) 2021: Martin Burke and the Scottish COVID-19 Response Consortium.
 
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
