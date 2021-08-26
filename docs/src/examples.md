@@ -25,13 +25,13 @@ The example is also provided as working code (including the accompanying configu
 The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
 ```
-pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
+pkg> add https://github.com/ScottishCovidResponse/DataPipeline.jl
 ```
 
 ## 1. Preliminaries: import packages
 
 ``` julia
-import DataRegistryUtils    # pipeline stuff
+import DataPipeline    # pipeline stuff
 import DPOMPs               # simulation of epidemiological models
 import YAML                 # for reading model config file
 import Random               # other assorted packages used incidentally
@@ -47,15 +47,15 @@ data_config = "/examples/simple/data_config.yaml"       # (see 2b)
 submission_script = "julia examples/simple/main.jl"     # (see 2c)
 ```
 ### 2a. The *model_config.yaml* file
-The **'model config'** file concept is used throughout the SCRC data pipeline, (i.e. not just within this package.) In this example, it is used to store information about both the model code (step 3,) and the individual code run (step 6.) The example below is also given [here]("https://raw.githubusercontent.com/ScottishCovidResponse/DataRegistryUtils.jl/main/examples/simple/data_config.yaml").
+The **'model config'** file concept is used throughout the SCRC data pipeline, (i.e. not just within this package.) In this example, it is used to store information about both the model code (step 3,) and the individual code run (step 6.) The example below is also given [here]("https://raw.githubusercontent.com/ScottishCovidResponse/DataPipeline.jl/main/examples/simple/data_config.yaml").
 
 ``` yaml
 # model
 model_name: "DRU simple example"
-model_repo: "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
+model_repo: "https://github.com/ScottishCovidResponse/DataPipeline.jl"
 # NB. ^ because the example is part of this package - replace with your own repo
 model_version: "0.0.4"
-model_description: "A simple SEIR simulation for demonstrating use of the DataRegistryUtils.jl package."
+model_description: "A simple SEIR simulation for demonstrating use of the DataPipeline.jl package."
 model_website: "https://mjb3.github.io/DiscretePOMP.jl/stable/"
 
 # simulation parameters
@@ -118,15 +118,15 @@ Here we read some epidemiological parameters from the DR, so we can use them to 
 First, we process the `data_config` file, which (in this case) returns a variable representing a connection to a SQLite database. I.e. we download the data products:
 ``` julia
 data_dir = "/examples/simple/data/" # local directory where data is to be stored
-db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config)
+db = DataPipeline.initialise_local_registry(data_dir, data_config=data_config)
 ```
 
 ### 3b. Read some data
 Next, we read some parameters and convert them to the required units.
 
 ``` julia
-inf_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", key="value", data_type=Float64)[1] / 24
-lat_period_days = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "latent-period", key="value", data_type=Float64)[1] / 24
+inf_period_days = DataPipeline.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", key="value", data_type=Float64)[1] / 24
+lat_period_days = DataPipeline.read_estimate(db, "human/infection/SARS-CoV-2/", "latent-period", key="value", data_type=Float64)[1] / 24
 ```
 
 See [Code snippets](@ref) and the [Package manual](@ref) for information about reading other types of data product.
@@ -135,7 +135,7 @@ See [Code snippets](@ref) and the [Package manual](@ref) for information about r
 Once the data has been downloaded initially, it can be retrieved for offline access (e.g. no or slow internet connections) using the `offline_mode` option:
 
 ``` julia
-db = DataRegistryUtils.initialise_local_registry(data_dir, data_config=data_config, auto_logging=true, offline_mode=true)
+db = DataPipeline.initialise_local_registry(data_dir, data_config=data_config, auto_logging=true, offline_mode=true)
 ```
 
 The main functions for registering objects, such as model code, model runs, and data products, work by staging the data to a local database so they are also compatible with 'offline mode'. only the `commit_` functions require internet access, which can be run once access has been restored.
@@ -181,7 +181,7 @@ In order to register a given code run in the DR, we require a record of the data
 # initialise_data_log(db, offline_mode)
 
 ## this is necessary when we want a [human-*and*-machine-readable] file copy of the log
-log_id = DataRegistryUtils.finish_data_log(db; filepath=data_log)
+log_id = DataPipeline.finish_data_log(db; filepath=data_log)
 ```
 
 This is particularly important if we are planning on doing further work in the interim, such as if we want an accurate record of the access *time*. Logs should also handled manually (including initialisation) when working with multiple processes running on separate cores, but utilising the same filesystem/data resources.
@@ -207,18 +207,18 @@ const scrc_access_tkn = "token 123456"
 Back in the main file, we handle model code [release] registration by calling a function that automatically returns the existing `code_repo_release` URI if it is already registered, or a new one if not.
 
 ``` julia
-code_release_id = DataRegistryUtils.register_github_model(model_config, scrc_access_tkn)
+code_release_id = DataPipeline.register_github_model(model_config, scrc_access_tkn)
 ```
 
 Here we have used a .yaml configuration file but for illustration, the code is roughly equivalent to this:
 
 ``` julia
 model_name = "DRU simple example"
-model_repo = "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
+model_repo = "https://github.com/ScottishCovidResponse/DataPipeline.jl"
 model_version = "0.0.1"
 model_description = " ... " (nb. insert description)
 model_docs = "https://mjb3.github.io/DiscretePOMP.jl/stable/"
-code_release_id = DataRegistryUtils.register_github_model(model_name, model_version, model_repo, model_hash, scrc_access_tkn, model_description=model_description, model_website=model_docs)
+code_release_id = DataPipeline.register_github_model(model_name, model_version, model_repo, model_hash, scrc_access_tkn, model_description=model_description, model_website=model_docs)
 ```
 
 Finally, the resulting URI is in the form:
@@ -232,19 +232,19 @@ Next we register the results of this particular simulation by POSTing to the `co
 
 ``` julia
 model_run_description = "Just another SEIR simulation."
-model_run_id = DataRegistryUtils.register_model_run(model_config, submission_script, code_release_id, model_run_description, scrc_access_tkn)
+model_run_id = DataPipeline.register_model_run(model_config, submission_script, code_release_id, model_run_description, scrc_access_tkn)
 ```
 
 ## 7. Finally, commit objects to registry
 The final step is to commit the local changes we have made to the DR:
 ``` julia
-code_release_url = DataRegistryUtils.commit_staged_model(db, code_release_id, scrc_access_tkn)
-model_run_url = DataRegistryUtils.commit_staged_run(db, model_run_id, scrc_access_tkn)
-DataRegistryUtils.registry_commit_status(db)    # optional: display status
+code_release_url = DataPipeline.commit_staged_model(db, code_release_id, scrc_access_tkn)
+model_run_url = DataPipeline.commit_staged_run(db, model_run_id, scrc_access_tkn)
+DataPipeline.registry_commit_status(db)    # optional: display status
 ```
 
 ## Finished!
 
-That concludes the example. A complete working example of this code can be found [here](https://github.com/ScottishCovidResponse/DataRegistryUtils.jl/tree/main/examples/simple).
+That concludes the example. A complete working example of this code can be found [here](https://github.com/ScottishCovidResponse/DataPipeline.jl/tree/main/examples/simple).
 
 Please note that certain features, notably the registration of Data Products (i.e. model 'inputs' and 'outputs') is currently still a work in progress. See the home page for more information.

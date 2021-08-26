@@ -30,7 +30,7 @@ function print_data_log(cn::SQLite.DB, log_id::Integer, filepath::String)
     ## log metadata (record data dir?)
     stmt = SQLite.Stmt(cn, "SELECT * FROM access_log WHERE log_id=?")
     df = SQLite.DBInterface.execute(stmt, (log_id, )) |> DataFrames.DataFrame
-    run_md = Dict("file_type"=>"DataRegistryUtils.jl data access log",
+    run_md = Dict("file_type"=>"DataPipeline.jl data access log",
         "open_timestamp"=>df[1,:row_added], "close_timestamp"=>df[1,:log_finished],
         "offline_mode"=>df[1,:offline_mode])#, "data_directory"=>out_dir
 

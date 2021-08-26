@@ -1,5 +1,5 @@
 using Simulation
-using DataRegistryUtils
+using DataPipeline
 using Unitful
 using Unitful.DefaultSymbols
 using Simulation.Units
@@ -15,7 +15,7 @@ using SQLite
 
 function run_model(db::SQLite.DB, times::Unitful.Time, interval::Unitful.Time, timestep::Unitful.Time; do_plot::Bool = false, do_download::Bool = true, save::Bool = false, savepath::String = pwd())
     # load array (so we can use in sql view, giving it the alias "km_age_persons_arr" for convenience)
-    DataRegistryUtils.load_array!(db, "human/demographics/population/scotland", "/grid1km/age/persons"; sql_alias="km_age_persons_arr")
+    DataPipeline.load_array!(db, "human/demographics/population/scotland", "/grid1km/age/persons"; sql_alias="km_age_persons_arr")
     # Download and read in population sizes for Scotland
     scotpop = get_3d_km_grid_axis_array(db, ["grid_x", "grid_y", "age_aggr"], "val", "scottish_population_view")
 

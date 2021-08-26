@@ -2,14 +2,14 @@
 
 !!! note
 
-    See [here](https://scottishcovidresponse.github.io/) for the main SCRC documentation. This website is for the Julia package only.
+    See [here](https://fairdatapipeline.github.io/) for the main FAIR Data Pipeline documentation, and information about the SCRC. This website is for the Julia package only.
 
-**DataRegistryUtils.jl**  -  *the SCRC 'Data Pipeline' in Julia*
+**DataPipeline.jl**  -  *the SCRC 'Data Pipeline' in Julia*
 
 ## What is the SCRC data pipeline?
-Per the SCRC docs, the **Scottish COVID-19 Response Consortium [SCRC]** is a research consortia *"formed of dozens of individuals from over 30 academic and commercial organisations"* focussed on COVID-related research.
+Per the SCRC docs, the **Scottish COVID-19 Response Consortium [SCRC]** is a research consortia concisting *"of dozens of individuals from over 30 academic and commercial organisations"* formed in response to [RAMP: Rapid Assistance in Modelling the Pandemic](https://epcced.github.io/ramp/), a directive to the scientific community coordinated by the Royal Society.
 
-A key outcome of the project is to develop more epidemiological models of COVID-19 spread in order to develop a more robust and clearer understanding of the impacts of different exit strategies from lockdown - see the [SCRC docs](https://scottishcovidresponse.github.io/) for more information.
+A key outcome of the project is to develop more epidemiological models of COVID-19 spread in order to develop a more robust and clearer understanding of the impacts of different exit strategies from lockdown - see the [SCRC docs](https://fairdatapipeline.github.io/) for more information.
 
 As a working process developed by the SCRC, the *data pipeline* can be understood by considering the central kernel of its technological implementation: the **[Data Registry](https://data.scrc.uk/) (DR)**. Essentially it consists of a relational database, and a [RESTful API](https://data.scrc.uk/api/) for reading and writing to the database.
 
@@ -45,7 +45,7 @@ Hint: click [here](https://data.scrc.uk/static/images/schema.svg) to expand the 
 
 ## What does this package do?
 
-Similar to the [SCRCData package for R](https://scottishcovidresponse.github.io/docs/data_pipeline/R/) and the [data_pipeline_api package](https://scottishcovidresponse.github.io/docs/data_pipeline/python/) for Python, this package provides a language-specific automation layer [for the language-agnostic **RESTful API** that is used to interact with the DR.] It also handles the downloading (and pre-processing) of Data Products based on that [meta]data.
+Similar to the [SCRCData package for R](https://fairdatapipeline.github.io/docs/API/R/) and the [data_pipeline_api package](https://fairdatapipeline.github.io/docs/API/python/) for Python, this package provides a language-specific automation layer [for the language-agnostic **RESTful API** that is used to interact with the DR.] It also handles the downloading (and pre-processing) of Data Products based on that [meta]data.
 
 Key features include:
 - Convenient Data Products downloads, specified by a given 'data config' .yaml file.
@@ -64,7 +64,7 @@ The SQLite layer is optional - the data can also be returned as a set of nested 
 The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
 ```
-pkg> add https://github.com/ScottishCovidResponse/DataRegistryUtils.jl
+pkg> add https://github.com/FAIRDataPipeline/DataPipeline.jl
 ```
 
 ## Further development work

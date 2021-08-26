@@ -10,21 +10,33 @@ function insert_storage_location(path::String, hash::String, description::String
 end
 
 ## check storage location
-function search_storage_location(path::String, hash::String, root_id::String)
+# function search_storage_location(path::String, hash::String, root_id::String)
+#     tf_sr_id = get_id_from_root(root_id, STR_ROOT)
+#     search_url = string(API_ROOT, "storage_location/?path=", HTTP.escapeuri(path), "&hash=", hash, "&storage_root=", tf_sr_id)
+#     C_DEBUG_MODE && println("SEARCHING: ", search_url)
+#     return http_get_json(search_url)
+# end
+
+## pathless storage location search
+function search_storage_location(hash::String, root_id::String, public::Bool)
     tf_sr_id = get_id_from_root(root_id, STR_ROOT)
-    search_url = string(API_ROOT, "storage_location/?path=", HTTP.escapeuri(path), "&hash=", hash, "&storage_root=", tf_sr_id)
+    search_url = string(API_ROOT, "storage_location/?hash=", hash, "&storage_root=", tf_sr_id, "&public=", public)
+    C_DEBUG_MODE && println("SEARCHING: ", search_url)
     return http_get_json(search_url)
 end
 
 ## check repo release key (name and version)
 function search_code_repo_release(name::String, version::String)
     search_url = string(API_ROOT, "code_repo_release/?name=", HTTP.escapeuri(name), "&version=", HTTP.escapeuri(version))
+    C_DEBUG_MODE && println("SEARCHING: ", search_url)
     return http_get_json(search_url)
 end
 
 ## check data products
 function search_data_product(namespace::String, name::String, version::String)
-    search_url = string(API_ROOT, "data_product/?namespace=", HTTP.escapeuri(namespace), "&name=", HTTP.escapeuri(name), "&version=", HTTP.escapeuri(version))
+    v = version==VERSION_LATEST ? "" : string("&version=", HTTP.escapeuri(version))
+    search_url = string(API_ROOT, "data_product/?namespace=", get_ns_id(namespace), "&name=", HTTP.escapeuri(name), v)
+    C_DEBUG_MODE && println("SEARCHING: ", search_url)
     return http_get_json(search_url)
 end
 
@@ -101,7 +113,6 @@ function commit_github_model(model_name::String, model_version::String, model_re
         println("NB. code repo release := ", crr_chk["results"][1]["url"])
         return crr_chk["results"][1]["url"]
     end
-
 end
 
 ## no-SQL register by config file -> for workflow using fetch_registered_model_id()

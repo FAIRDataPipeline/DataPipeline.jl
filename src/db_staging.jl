@@ -284,7 +284,7 @@ function registry_commit_status(db::SQLite.DB)
     sl_stmt = SQLite.Stmt(db, string("SELECT * FROM crr_view")) # WHERE registered=FALSE
     df = SQLite.DBInterface.execute(sl_stmt) |> DataFrames.DataFrame
     println(df)
-    DataFrames.nrow(df)==0 || println("Hint: use `DataRegistryUtils.commit_all(...)` to commit staged objects.")
+    DataFrames.nrow(df)==0 || println("Hint: use `DataPipeline.commit_all(...)` to commit staged objects.")
 end
 # h = ["θ", "E[θ]", ":σ", "E[f(θ)]", ":σ", "SRE", "SRE975"]
 #         PrettyTables.pretty_table(d, h)

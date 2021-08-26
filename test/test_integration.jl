@@ -1,4 +1,4 @@
-# import DataRegistryUtils
+# import DataPipeline
 # import SQLite
 # import DataFrames
 # import Test
@@ -16,7 +16,7 @@ Test.@testset "simulationdata" begin
 
     # parameter estimate from file
     Test.@testset "File usage" begin
-        prm = DataRegistryUtils.read_data_product_from_file("test/parameter/example.toml")
+        prm = DataPipeline.read_data_product_from_file("test/parameter/example.toml")
         Test.@test prm["example-estimate"]["value"] == 1.0
     end
 
@@ -24,8 +24,8 @@ Test.@testset "simulationdata" begin
     Test.@testset "Database usage" begin
         remove_accessfile()
         Test.@test !isfile(accessfile)
-        db = DataRegistryUtils.fetch_data_per_yaml(config, dataout, use_sql=true, access_log_path=accessfile)
-        x = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", data_type=Float64)[1]
+        db = DataPipeline.fetch_data_per_yaml(config, dataout, use_sql=true, access_log_path=accessfile)
+        x = DataPipeline.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", data_type=Float64)[1]
         Test.@test x == covid_inf_dur
         Test.@test isfile(accessfile)
         remove_accessfile()
@@ -34,8 +34,8 @@ Test.@testset "simulationdata" begin
 
     # ditto, via do-block
     # Test.@testset "Do-block usage" begin
-    #     DataRegistryUtils.fetch_data_per_yaml(config, dataout, use_sql=true) do db
-    #         x = DataRegistryUtils.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", data_type=Float64)[1]
+    #     DataPipeline.fetch_data_per_yaml(config, dataout, use_sql=true) do db
+    #         x = DataPipeline.read_estimate(db, "human/infection/SARS-CoV-2/", "infectious-duration", data_type=Float64)[1]
     #         Test.@test x == covid_inf_dur
     #     end
     # end
@@ -47,7 +47,7 @@ Test.@testset "simulationdata" begin
         remove_accessfile()
         # remove_data()
         Test.@test !isfile(accessfile)
-        db = DataRegistryUtils.fetch_data_per_yaml(dataconfig, dataout, use_sql=true, sql_file=view_sql, access_log_path=accessfile)
+        db = DataPipeline.fetch_data_per_yaml(dataconfig, dataout, use_sql=true, sql_file=view_sql, access_log_path=accessfile)
         #     @test_broken size(scotpop) == (465, 691, 10)
         rs = SQLite.DBInterface.execute(db, "SELECT max(grid_x), max(grid_y) FROM scottish_population_view") |> DataFrames.DataFrame
         Test.@test rs[1,1] == 465

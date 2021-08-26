@@ -55,6 +55,9 @@ function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, ve
         # d = read_h5_array(h5)
         d = HDF5.read(h5)
         output_dict[gnm] = d
+    elseif typeof(h5) == HDF5.Dataset
+        d = HDF5.read(h5)
+        output_dict[gnm] = d        
     else    # group - recurse
         for g in keys(h5)
             process_h5_file_group!(output_dict, h5[g], use_axis_arrays, verbose)
@@ -80,6 +83,7 @@ end
 #     return TOML.parsefile(filepath)
 # end
 
+## NB. NEED TO REWORK THIS TO ACCOUNT
 """
     read_data_product_from_file(filepath; use_axis_arrays = false, verbose = false)
 
@@ -102,7 +106,7 @@ function read_data_product_from_file(filepath::String; use_axis_arrays::Bool = f
 end
 
 ## test
-# DATA_DIR = "/home/martin/AtomProjects/DataRegistryUtils.jl/out/"
+# DATA_DIR = "/home/martin/AtomProjects/DataPipeline.jl/out/"
 # println(typeof(process_h5_file(string(DATA_DIR, "geography/scotland/lookup_table/1.0.1.h5"))))
 # println(read_data_product(string(DATA_DIR, "master/EERA/fixed-parameters/T_hos/0.1.0.toml")))
 # read_data_product(string(DATA_DIR, "human/demographics/population/scotland/1.0.1.h5"))

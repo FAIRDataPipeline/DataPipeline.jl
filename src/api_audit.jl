@@ -1,4 +1,5 @@
 ### what's my file
+# NB. THIS IS NOW BROKEN DUE TO CHANGES TO THE DR SCHEMA ***********
 function whats_my_hash(fh::String)
     search_url = string(API_ROOT, "storage_location/?hash=", fh)
     return http_get_json(search_url)
@@ -26,6 +27,7 @@ function whats_my_file(path::String; show_path=false)
         for i in eachindex(resp["results"])
             ## get object
             sl = resp["results"][i]["url"]
+            println("SL: ", resp["results"][i])
             obj_url = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl, SL_ROOT))
             obj_resp = http_get_json(obj_url)["results"][1]
             dp_resp = http_get_json(obj_resp["data_product"])

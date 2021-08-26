@@ -1,8 +1,8 @@
-using Documenter, DataRegistryUtils
+using Documenter, DataPipeline
 
-makedocs(sitename="[SCRC] DataRegistryUtils.jl docs")
+makedocs(sitename="[SCRC] DataPipeline.jl docs")
 
 deploydocs(
-    repo = "github.com/ScottishCovidResponse/DataRegistryUtils.jl.git",
+    repo = "github.com/FAIRDataPipeline/DataPipeline.jl.git",
     devbranch = "main",
 )

@@ -1,9 +1,9 @@
 # model
 model_name: "DRU simple example"
-model_repo: "https://github.com/ScottishCovidResponse/DataRegistryUtils.jl"
+model_repo: "https://github.com/ScottishCovidResponse/DataPipeline.jl"
 # NB. ^ because the example is part of this package - replace with your own repo
 model_version: "0.0.6"
-model_description: "A simple SEIR simulation for demonstrating use of the DataRegistryUtils.jl package [v0.4.1]"
+model_description: "A simple SEIR simulation for demonstrating use of the DataPipeline.jl package [v0.4.1]"
 model_website: "https://mjb3.github.io/DiscretePOMP.jl/stable/"
 # NB. ^ in this case, the simulation model is borrowed from a different package with its own website
 
