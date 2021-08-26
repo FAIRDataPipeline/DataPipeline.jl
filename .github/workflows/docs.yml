@@ -4,21 +4,31 @@ on:
   push:
     branches:
       - main
-    tags: '*'
+    tags:
+      - '*'
   pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@latest
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up julia
+        uses: julia-actions/setup-julia@latest
         with:
-          version: '1.5'
+          version: '1'
+          arch: x64
       - name: Install dependencies
-        run: julia --project=docs/ -e 'using Pkg; Pkg.add("YAML"); Pkg.add("DataFrames"); Pkg.add(url="https://github.com/mjb3/DiscretePOMP.jl"); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+        run: |
+            import Pkg
+            Pkg.develop(Pkg.PackageSpec(path=pwd()))
+            Pkg.instantiate()
+            Pkg.add(url="https://github.com/mjb3/DiscretePOMP.jl")
+        shell: julia --project=docs/ --color=yes {0}
       - name: Build and deploy
+        run: |
+          julia --project=docs/ --color=yes docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # For authentication with GitHub Actions token
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }} # For authentication with SSH deploy key
-        run: julia --project=docs/ docs/make.jl

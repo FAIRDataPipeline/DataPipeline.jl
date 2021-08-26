@@ -1,6 +1,6 @@
 using Documenter, DataPipeline
 
-makedocs(sitename="[SCRC] DataPipeline.jl docs")
+makedocs(sitename="FAIRDataPipeline DataPipeline.jl docs")
 
 deploydocs(
     repo = "github.com/FAIRDataPipeline/DataPipeline.jl.git",
