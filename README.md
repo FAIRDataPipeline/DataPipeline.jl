@@ -1,7 +1,7 @@
 # DataPipeline.jl
 **The [FAIR Data Pipeline][dp_docs] in Julia**
 
-![Documentation](https://github.com/FAIRDataPipeline/DataPipeline.jl/workflows/Documentation/badge.svg)
+[![](https://img.shields.io/badge/docs-DataPipeline.jl-blue)](https://fairdatapipeline.github.io/DataPipeline.jl/)
 ![Package tests](https://github.com/FAIRDataPipeline/DataPipeline.jl/workflows/Tests/badge.svg)
 
 ## Features
