@@ -21,7 +21,6 @@
     "keywords": [
         "FAIR",
         "julia",
-        "data provenance",
-        "data pipeline"
+        "data"
     ]
 }
