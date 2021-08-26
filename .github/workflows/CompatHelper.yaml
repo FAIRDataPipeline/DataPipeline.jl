@@ -5,7 +5,7 @@ on:
     branches:
       - dev
   schedule:
-    - cron: '42 13 * * *'  # Daily at 4 AM
+    - cron: '48 12 * * *'  # Daily at 4 AM
 
 jobs:
   CompatHelper:
