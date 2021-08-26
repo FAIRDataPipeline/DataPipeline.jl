@@ -1,5 +1,3 @@
-## formerly Scotland_run_dru.jl
-
 using Simulation
 using Unitful
 using Unitful.DefaultSymbols

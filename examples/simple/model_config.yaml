@@ -1,6 +1,6 @@
 # model
-model_name: "DRU simple example"
-model_repo: "https://github.com/ScottishCovidResponse/DataPipeline.jl"
+model_name: "DataPipeline simple example"
+model_repo: "https://github.com/FAIRDataPipeline/DataPipeline.jl"
 # NB. ^ because the example is part of this package - replace with your own repo
 model_version: "0.0.6"
 model_description: "A simple SEIR simulation for demonstrating use of the DataPipeline.jl package [v0.4.1]"

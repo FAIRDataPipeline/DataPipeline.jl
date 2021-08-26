@@ -1,6 +1,5 @@
 ### new interface for FAIR data pipeline ###
-# - implements: https://scottishcovidresponse.github.io/docs/data_pipeline/interface/
-# - UPDATED 29/6: https://fairdatapipeline.github.io/docs/interface/example0/
+# - implements: https://fairdatapipeline.github.io/docs/interface/example0/
 
 ## BASELINE FDP FUNCTIONALITY:
 # fdp pull config.yaml
