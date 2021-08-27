@@ -1,0 +1,1 @@
+var DOCUMENTER_CURRENT_VERSION = "v0.50.8-zenodotest6";
