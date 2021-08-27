@@ -4,7 +4,7 @@
 
 | **Documentation** | **Build Status**           | **DOI**                    |
 |:-----------------:|:--------------------------:|:--------------------------:|
-| [![stable docs][docs-stable-img]][docs-main-url] | [![Package Testing][testing-img]][testing-url] | [![Zenodo][zenodo-badge]][zenodo-url] |
+| [![stable docs][docs-stable-img]][docs-stable-url] | [![Package Testing][testing-img]][testing-url] | [![Zenodo][zenodo-badge]][zenodo-url] |
 | [![dev docs][docs-dev-img]][docs-dev-url] | [![Julia Nightly][nightly-img]][nightly-url] | |
 
 ## Features
