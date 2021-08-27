@@ -2,10 +2,10 @@
 
 **The [FAIR Data Pipeline][dp_docs] in Julia**
 
-[![main docs][docs-main-img]][docs-main-url]
-[![Package Testing][testing-img]][testing-url]
-[![Julia Nightly][nightly-img]][nightly-url]
-[![Zenodo][zenodo-badge]][zenodo-url]
+| **Documentation** | **Build Status**           | **DOI**                    |
+|:-----------------:|:--------------------------:|:--------------------------:|
+| [![stable docs][docs-stable-img]][docs-main-url] | [![Package Testing][testing-img]][testing-url] | [![Zenodo][zenodo-badge]][zenodo-url] |
+| [![dev docs][docs-dev-img]][docs-dev-url] | [![Julia Nightly][nightly-img]][nightly-url] | |
 
 ## Features
 
@@ -30,8 +30,11 @@ See the [package documentation][docs] for instructions and examples.
 
 [dp_docs]: https://fairdatapipeline.github.io/docs/introduction/
 
-[docs-main-img]: https://img.shields.io/badge/docs-main-blue.svg
-[docs-main-url]: https://fairdatapipeline.github.io/DataPipeline.jl/main/
+[docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
+[docs-stable-url]: https://fairdatapipeline.github.io/DataPipeline.jl/stable/
+
+[docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
+[docs-dev-url]: https://fairdatapipeline.github.io/DataPipeline.jl/dev/
 
 [testing-img]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml/badge.svg
 [testing-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml
