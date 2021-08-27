@@ -7,10 +7,10 @@ Depth = 3
 
 ## Getting started - package installation
 
-The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
+The package is now registered in General, so can be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
 ```
-pkg> add https://github.com/ScottishCovidResponse/DataPipeline.jl
+pkg> add DataPipeline
 ```
 
 ```  julia

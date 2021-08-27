@@ -1,4 +1,4 @@
 # NEWS
 
-- v0.50.8
-  - Register Zenodo doi
+- v0.51.0
+  - Register new name with General

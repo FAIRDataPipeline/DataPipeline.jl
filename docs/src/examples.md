@@ -25,7 +25,7 @@ The example is also provided as working code (including the accompanying configu
 The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
 ```
-pkg> add https://github.com/ScottishCovidResponse/DataPipeline.jl
+pkg> add https://github.com/FAIRDataPipeline/DataPipeline.jl
 ```
 
 ## 1. Preliminaries: import packages
@@ -47,12 +47,12 @@ data_config = "/examples/simple/data_config.yaml"       # (see 2b)
 submission_script = "julia examples/simple/main.jl"     # (see 2c)
 ```
 ### 2a. The *model_config.yaml* file
-The **'model config'** file concept is used throughout the SCRC data pipeline, (i.e. not just within this package.) In this example, it is used to store information about both the model code (step 3,) and the individual code run (step 6.) The example below is also given [here]("https://raw.githubusercontent.com/ScottishCovidResponse/DataPipeline.jl/main/examples/simple/data_config.yaml").
+The **'model config'** file concept is used throughout the SCRC data pipeline, (i.e. not just within this package.) In this example, it is used to store information about both the model code (step 3,) and the individual code run (step 6.) The example below is also given [here]("https://raw.githubusercontent.com/FAIRDataPipeline/DataPipeline.jl/main/examples/simple/data_config.yaml").
 
 ``` yaml
 # model
-model_name: "DRU simple example"
-model_repo: "https://github.com/ScottishCovidResponse/DataPipeline.jl"
+model_name: "DataPipeline simple example"
+model_repo: "https://github.com/FAIRDataPipeline/DataPipeline.jl"
 # NB. ^ because the example is part of this package - replace with your own repo
 model_version: "0.0.4"
 model_description: "A simple SEIR simulation for demonstrating use of the DataPipeline.jl package."
@@ -213,8 +213,8 @@ code_release_id = DataPipeline.register_github_model(model_config, scrc_access_t
 Here we have used a .yaml configuration file but for illustration, the code is roughly equivalent to this:
 
 ``` julia
-model_name = "DRU simple example"
-model_repo = "https://github.com/ScottishCovidResponse/DataPipeline.jl"
+model_name = "DataPipeline simple example"
+model_repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl"
 model_version = "0.0.1"
 model_description = " ... " (nb. insert description)
 model_docs = "https://mjb3.github.io/DiscretePOMP.jl/stable/"
@@ -245,6 +245,6 @@ DataPipeline.registry_commit_status(db)    # optional: display status
 
 ## Finished!
 
-That concludes the example. A complete working example of this code can be found [here](https://github.com/ScottishCovidResponse/DataPipeline.jl/tree/main/examples/simple).
+That concludes the example. A complete working example of this code can be found [here](https://github.com/FAIRDataPipeline/DataPipeline.jl/tree/main/examples/simple).
 
 Please note that certain features, notably the registration of Data Products (i.e. model 'inputs' and 'outputs') is currently still a work in progress. See the home page for more information.
