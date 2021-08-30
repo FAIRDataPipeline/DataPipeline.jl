@@ -1,5 +1,5 @@
 run_metadata:
-  description: An empty code run
+  description: Write an array
   local_data_registry_url: http://localhost:8000/api/
   remote_data_registry_url: http://data.scrc.uk/api/
   default_input_namespace: martinburke
@@ -9,3 +9,9 @@ run_metadata:
   latest_commit: 221bfe8b52bbfb3b2dbdc23037b7dd94b49aaa70
   remote_repo: https://github.com/FAIRDataPipeline/DataPipeline.jl
   script: julia examples/simple2/main.jl
+
+write:
+- data_product: test/array
+  description: test array with simple data
+  use:
+    version: 0.0.1
