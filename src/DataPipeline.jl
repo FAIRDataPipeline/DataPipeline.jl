@@ -73,15 +73,15 @@ function http_get_json(url::String)
     end
 end
 
-### upload to data registry
+## upload to data registry
 function http_post_data(table::String, data, scrc_access_tkn::String)
     url = string(API_ROOT, table, "/")
     headers = Dict("Authorization"=>scrc_access_tkn, "Content-Type" => "application/json")
     body = JSON.json(data)
-    println(" POSTing data to := ", url, ": \n ", body)
+    C_DEBUG_MODE && println(" POSTing data to := ", url, ": \n ", body)
     r = HTTP.request("POST", url, headers=headers, body=body)
     resp = JSON.parse(String(r.body))
-    println(" - response: \n ", resp)
+    C_DEBUG_MODE && println(" - response: \n ", resp)
     return resp
 end
 
