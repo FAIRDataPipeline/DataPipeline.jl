@@ -4,8 +4,13 @@
 
 | **Documentation** | **Build Status**           | **DOI**                    |
 |:-----------------:|:--------------------------:|:--------------------------:|
-| [![stable docs][docs-stable-img]][docs-stable-url] | [![Package Testing][testing-img]][testing-url] | [![Zenodo][zenodo-badge]][zenodo-url] |
-| [![dev docs][docs-dev-img]][docs-dev-url] | [![Julia Nightly][nightly-img]][nightly-url] | |
+| [![stable docs][docs-stable-img]][docs-stable-url] | [![Package Testing][testing-img]][testing-url] [![Julia Nightly][nightly-img]][nightly-url] | [![Zenodo][zenodo-badge]][zenodo-url] |
+| [![dev docs][docs-dev-img]][docs-dev-url] | [![codecov][codecov-img]][codecov-url] | |
+
+
+
+
+
 
 ## Features
 
@@ -41,6 +46,9 @@ See the [package documentation][docs] for instructions and examples.
 
 [nightly-img]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/nightly.yaml/badge.svg
 [nightly-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/nightly.yaml
+
+[codecov-img]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl/branch/main/graph/badge.svg?token=3toeFS7C7I
+[codecov-url]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl
 
 [zenodo-badge]: https://zenodo.org/badge/302237736.svg
 [zenodo-url]: https://zenodo.org/badge/latestdoi/302237736
