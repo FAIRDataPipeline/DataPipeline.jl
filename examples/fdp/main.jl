@@ -51,7 +51,7 @@ function get_model()
     tm = [-1 1 0 0 0; 0 -1 1 0 0; 0 0 -1 1 0; 0 0 -1 0 1]
     fnt = BayesianWorkflows.generate_trans_fn(tm)
     # - initial condition
-    fnic() = [1000, 0, 10, 0, 0]
+    fnic(parameters::Vector{Float64}) = [1000, 0, 10, 0, 0]
     # - observation function
     function obs_fn!(y::BayesianWorkflows.Observation, population::Array{Int64,1}, parameters::Array{Float64,1})
         di = Distributions.Binomial(population[INFECTIOUS], PROB_DETECTION_I)
