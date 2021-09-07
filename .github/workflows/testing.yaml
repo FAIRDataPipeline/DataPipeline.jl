@@ -36,6 +36,10 @@ jobs:
         arch: ${{ matrix.arch }}
     - name: Build package
       uses: julia-actions/julia-buildpkg@master
+    - name: Install local registry
+      run: /bin/bash -c "$(curl -fsSL https://data.scrc.uk/static/localregistry.sh)"
+    - name: Initialise local registry
+      run: .fair/registry/scripts/start_fair_registry
     - name: Running
       uses: julia-actions/julia-runtest@master
     - name: Process coverage
