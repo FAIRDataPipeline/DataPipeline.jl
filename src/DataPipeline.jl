@@ -18,6 +18,7 @@ const API_ROOT = string(LOCAL_DR_STEM, ":8000", "/api/")
 
 const NS_ROOT = string(API_ROOT, "namespace/")
 const STR_ROOT = string(LOCAL_DR_PORTLESS, "storage_root/")
+const STR_MATCH = Regex(string(LOCAL_DR_STEM, ".*storage_root/"))
 const SL_ROOT = string(LOCAL_DR_PORTLESS, "storage_location/")
 const TF_ROOT = string(API_ROOT, "text_file/")
 # const OBJ_ROOT = string(API_ROOT, "object/")
@@ -48,6 +49,10 @@ include("api_audit.jl")         # DR audits
 ## function get id from uri
 function get_id_from_root(url::String, root::String)
     return replace(replace(url, root => ""), "/" => "")
+end
+
+function get_id_from_root(url::String, root::Regex)
+    return replace(replace(url, root => s""), "/" => "")
 end
 
 ## get file hash
