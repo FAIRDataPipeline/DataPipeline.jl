@@ -19,7 +19,7 @@ end
 
 ## pathless storage location search
 function search_storage_location(hash::String, root_id::String, public::Bool)
-    tf_sr_id = get_id_from_root(root_id, STR_ROOT)
+    tf_sr_id = get_id_from_root(root_id, STR_MATCH)
     search_url = string(API_ROOT, "storage_location/?hash=", hash, "&storage_root=", tf_sr_id, "&public=", public)
     C_DEBUG_MODE && println("SEARCHING: ", search_url)
     return http_get_json(search_url)
