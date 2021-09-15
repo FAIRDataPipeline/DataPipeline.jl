@@ -7,34 +7,34 @@ import Random
 import Test
 
 ## tests
-Test.@testset "package tests" begin
-    ## 1. Empty code run
-    Test.@testset "empty code run" begin
-        wc = "examples/simple2/working_config1.yaml"
-        handle = initialise(wc)
-        finalise(handle; comments="Empty code run example.")
-        Test.@test true
-    end
+# Test.@testset "package tests" begin
+#     ## 1. Empty code run
+#     Test.@testset "empty code run" begin
+#         wc = "examples/simple2/working_config1.yaml"
+#         handle = initialise(wc)
+#         finalise(handle; comments="Empty code run example.")
+#         Test.@test true
+#     end
 
-    ## 2. Write data product (HDF5)
-    Test.@testset "write array" begin
-        wc = "examples/simple2/working_config2.yaml"
-        handle = initialise(wc)
-        Random.seed!(0)
-        tmp = reshape(rand(10), 2, :)       # create an array
-        write_array(handle, tmp, "test/array", "component1/a/s/d/f/s")
-        finalise(handle; comments="Write HDF5 example.")
-        Test.@test true
-    end
+#     ## 2. Write data product (HDF5)
+#     Test.@testset "write array" begin
+#         wc = "examples/simple2/working_config2.yaml"
+#         handle = initialise(wc)
+#         Random.seed!(0)
+#         tmp = reshape(rand(10), 2, :)       # create an array
+#         write_array(handle, tmp, "test/array", "component1/a/s/d/f/s")
+#         finalise(handle; comments="Write HDF5 example.")
+#         Test.@test true
+#     end
 
-    ## 3. Read data product (HDF5)
-    Test.@testset "write array" begin
-        wc = "examples/simple2/working_config3.yaml"
-        handle = initialise(wc)
-        tmp2 = read_array(handle, "test/array", "component1/a/s/d/f/s")
-        finalise(handle; comments="Read HDF5 example.")
-        Test.@test tmp==tmp2
-    end
+#     ## 3. Read data product (HDF5)
+#     Test.@testset "write array" begin
+#         wc = "examples/simple2/working_config3.yaml"
+#         handle = initialise(wc)
+#         tmp2 = read_array(handle, "test/array", "component1/a/s/d/f/s")
+#         finalise(handle; comments="Read HDF5 example.")
+#         Test.@test tmp==tmp2
+#     end
 
     # ## simple example s2; s4
     # Test.@testset "simple example" begin
@@ -131,4 +131,4 @@ Test.@testset "package tests" begin
     #         Test.@test nrow(x) > 0
     #     end
     # end
-end
+# end
