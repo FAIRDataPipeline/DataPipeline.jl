@@ -38,9 +38,12 @@ jobs:
       uses: julia-actions/julia-buildpkg@master
     - name: Install local registry
       run: /bin/bash -c "$(curl -fsSL https://data.scrc.uk/static/localregistry.sh)"
-    - uses: actions/setup-python@v2
+    
+    - name: Set up python
+      uses: actions/setup-python@v2
         with:
           python-version: '3.x'
+          architecture: 'x64'
     - name: Checkout FAIRDataPipeline/FAIR-CLI
         uses: actions/checkout@v2
         with:
