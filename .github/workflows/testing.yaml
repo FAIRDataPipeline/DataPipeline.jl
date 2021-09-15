@@ -29,9 +29,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
-    - uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
     - name: Set up julia
       uses: julia-actions/setup-julia@v1
       with:
@@ -41,6 +38,9 @@ jobs:
       uses: julia-actions/julia-buildpkg@master
     - name: Install local registry
       run: /bin/bash -c "$(curl -fsSL https://data.scrc.uk/static/localregistry.sh)"
+    - uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
     - name: Checkout FAIRDataPipeline/FAIR-CLI
         uses: actions/checkout@v2
         with:
