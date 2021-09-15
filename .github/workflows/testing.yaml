@@ -26,6 +26,7 @@ jobs:
         experimental:
           - false
       fail-fast: false
+      
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
@@ -63,6 +64,7 @@ jobs:
         source .venv/bin/activate
         cd ${{ github.workspace }}
         fair init --ci
+
     - name: Running
       uses: julia-actions/julia-runtest@master
     - name: Process coverage
