@@ -597,4 +597,21 @@ function SEIRS_model(initial_state::Dict, timesteps::Int64, years::Int64,
  
    return results
 end
+
+function plot_SEIRS(results::DataFrames.DataFrame)
+   # Left plot
+   x = results.time / 365.25
+   y1 = Matrix(results[:, 2:5]) .* 100
+   p1 = plot(x, y1, label = ["S" "E" "I" "R"], lw = 3)
+   xlabel!("Years")
+   ylabel!("Relative group size (%)")
+
+   # Right plot
+   y2 = y1[:, 2:3]
+   p2 = plot(x, y2, label = ["E" "I"], lw = 3)
+   xlabel!("Years")
+   ylabel!("Relative group size (%)")
+
+   # Join plots together
+   Plots.plot(p1, p2, plot_title = "SEIRS model trajectories")
 end
