@@ -51,14 +51,11 @@ end
 
 ## registry token
 function get_access_token(user_id::Int=1)
-   # fp = "~/.fair/registry/token" # NB. v THIS IS A HACK **
-   # fp = "/home/martin/.fair/registry/token"
-   # token = open(fp) do file
-   #    return read(file, String)
-   # end
-   # return string("token ", token)
-   qr = registry_query("SELECT key FROM authtoken_token WHERE user_id=?", (user_id, ))
-   return string("token ", qr[1,1])
+   fp = expanduser("~/.fair/registry/token")
+   token = open(fp) do file
+     read(file, String)
+   end
+   return string("token ", chomp(token))
 end
 
 ### upload to data registry
