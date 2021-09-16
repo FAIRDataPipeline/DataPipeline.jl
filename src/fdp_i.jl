@@ -62,7 +62,7 @@ end
 # - NB. what about user ID? Always == 1?
 function http_post_data(endpoint::String, data)
     url = string(API_ROOT, endpoint, "/")
-    headers = Dict("Authorization"=>get_access_token(), "Content-Type" => "application/json")
+    headers = Dict("Authorization" => get_access_token(), "Content-Type" => "application/json")
     body = JSON.json(data)
     C_DEBUG_MODE && println(" POSTing data to := ", url, ": \n ", body)
     r = HTTP.request("POST", url, headers=headers, body=body)
