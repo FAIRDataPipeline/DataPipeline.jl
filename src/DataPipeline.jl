@@ -7,6 +7,8 @@ import FTPClient
 import SHA
 import Dates
 import CSV
+import DataFrames
+using Plots
 # import PrettyTables
 
 const C_DEBUG_MODE = false
@@ -450,5 +452,6 @@ export read_array, read_table, read_estimate, read_distribution
 export write_array, write_table, write_estimate, write_distribution
 export link_read, link_write
 export raise_issue
+export SEIRS_model, plot_SEIRS
 
 end # module
