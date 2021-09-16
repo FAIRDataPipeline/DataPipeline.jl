@@ -597,3 +597,4 @@ function SEIRS_model(initial_state::Dict, timesteps::Int64, years::Int64,
  
    return results
 end
+end
