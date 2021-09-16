@@ -194,28 +194,32 @@ Read [working] config.yaml file. Returns a `DataRegistryHandle` containing:
 - the object id for this file
 - the object id for the submission script file
 """
-function initialise(config_file::String, submission_script=string("julia ", @__FILE__); code_repo=nothing, working_dir=pwd())
-   C_CF_DESC = "Working config file."
-   C_SS_DESC = "Submission script (Julia.)"
-   C_RR_DESC = "Remote code repository."
+function initialise(config_file::String, submission_script::String; code_repo=nothing)
+   # Read working config file
    print("processing config file: ", config_file)
    config = YAML.load_file(config_file)
-   ## submission script
-   sst = ifnull_prop(config["run_metadata"], "script", submission_script)
-   ss = get_text_file(sst)    #
-   storage_root_uri = get_local_sroot(working_dir)
-   cf_obj_uri = register_object(config_file, get_file_hash(config_file), C_CF_DESC, storage_root_uri, true)
-   ss_obj_uri = register_object(ss, get_file_hash(ss), C_SS_DESC, storage_root_uri, true)
+
+   # Register datastore 
+   datastore = config["run_metadata"]["write_data_store"]
+   storage_root_uri = get_local_sroot(datastore)
+
+   # Register config file
+   config_obj_uri = register_object(config_file, get_file_hash(config_file), "Working config file.", storage_root_uri, true)
+   
+   # Register submission script   
+   script_obj_uri = register_object(submission_script, get_file_hash(submission_script), "Submission script (Julia.)", storage_root_uri, true)
+   
+   # Register remote repository
    rr = ifnull_prop(config["run_metadata"], "remote_repo", "")
    if length(rr) == 0
       crr_obj_uri = nothing      # TEMP: code_repo[_release]
    else
       rrsr = get_local_sroot(dirname(rr))
       lc = ifnull_prop(config["run_metadata"], "latest_commit", "na")
-      crr_obj_uri = register_object(basename(rr), lc, C_RR_DESC, rrsr, true)
+      crr_obj_uri = register_object(basename(rr), lc, "Remote code repository.", rrsr, true)
    end
    println(" - pipeline initialised.")
-   return DataRegistryHandle(config, cf_obj_uri, ss_obj_uri, crr_obj_uri, working_dir, [], [])
+   return DataRegistryHandle(config, config_obj_uri, script_obj_uri, crr_obj_uri, storage_root_uri, [], [])
 end
 
 """
