@@ -403,13 +403,35 @@ end
 
 ##
 """
-    link_write(handle, filepath, data_product)
+   link_write(handle, filepath, data_product)
 
 Registers a file-based data product based on information provided in the working config file, e.g. for writing external objects.
 """
-function link_write(handle::DataRegistryHandle, filepath::String, data_product::String; public::Bool=true)
-   ## API call to LDR (register)
-   return register_data_product(handle, data_product, filepath, public, nothing)
+function link_write(handle::DataRegistryHandle, data_product::String)
+   # Get metadata
+   wmd = DataPipeline.get_dp_metadata(handle, data_product, "write")
+   data_store = handle.config["run_metadata"]["write_data_store"]
+   use_namespace = get(wmd["use"], "namespace", handle.config["run_metadata"]["default_output_namespace"])
+   use_data_product = get(wmd["use"], "data_product", data_product)
+   use_version = wmd["use"]["version"]
+   public = get(wmd["use"], "public", handle.config["run_metadata"]["public"])
+   filetype = wmd["file_type"]
+   description = wmd["description"]
+
+   # Create storage location
+   filename = "xxxxxxxxxx.$filetype"
+   directory = joinpath(data_store, use_namespace, use_data_product)
+
+   # Create directory
+   mkpath(directory)
+   path = joinpath(directory, filename)
+
+   # Add metadata to handle
+   metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, "use_version" => use_version, "path" => path, "public" => public, "description" => description)
+   handle.outputs[data_product] = metadata
+
+   # Return path
+   return path
 end
 
 ## write file and register data product
