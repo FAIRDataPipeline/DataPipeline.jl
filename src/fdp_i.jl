@@ -194,7 +194,7 @@ Read [working] config.yaml file. Returns a `DataRegistryHandle` containing:
 - the object id for this file
 - the object id for the submission script file
 """
-function initialise(config_file::String, submission_script::String; code_repo=nothing)
+function initialise(config_file::String, submission_script::String)
    # Read working config file
    print("processing config file: ", config_file)
    config = YAML.load_file(config_file)
@@ -253,21 +253,35 @@ end
 
 ## read dp and return sl - for internal use
 function read_data_product(handle::DataRegistryHandle, data_product::String, component)
+   # Get metadata
    rmd = get_dp_metadata(handle, data_product, "read")
-   data_product = ifnull_prop(rmd["use"], "data_product", data_product)
-   namespace = ifnull_prop(rmd["use"], "namespace", ifnull_prop(handle.config["run_metadata"], "default_input_namespace"))
-   version = ifnull_prop(rmd["use"], "version", VERSION_LATEST)
-   resp = search_data_product(namespace, data_product, version)
-   if resp["count"] == 0
-      msg = string("no data products found matching: ", data_product, " :-(ns: ", namespace, " - v: ", version, ")")
+   use_data_product = get(rmd["use"], "data_product", data_product)
+   use_namespace = get(rmd["use"], "namespace", handle.config["run_metadata"]["default_input_namespace"])
+   use_version = rmd["use"]["version"]
+   
+   # Is the data product already in the registry?
+   resp = search_data_product(use_namespace, use_data_product, use_version)
+   
+   if resp["count"] == 0 
+      # If the data product isn't in the registry, throw an error
+      msg = string("no data products found matching: ", use_data_product, " :-(ns: ", use_namespace, " - v: ", use_version, ")")
       throw(ReadWriteException(msg))
-   else
-      idx = version==VERSION_LATEST ? get_most_recent_index(resp) : 1
-      println("data product found: ", data_product, " (url: ", resp["results"][idx]["url"], ")")
-      # add object components to handle:
-      add_object_component!(handle.inputs, resp["results"][idx]["object"], false, component)
-      sl = get_storage_loc(resp["results"][idx]["object"])
-      return replace(string(sl.sr_root, sl.sl_path), FILE_SR_STEM => "")
+   else 
+      # Get object entry
+      @assert length(resp["results"]) == 1
+      obj_url = resp["results"][1]["object"]
+      obj_entry = http_get_json(obj_url)
+      println("data product found: ", use_data_product, " (url: ", resp["results"][1]["url"], ")")
+      # Get storage location
+      sl = get_storage_loc(obj_url)
+      root = replace(sl.sr_root, "file://" => "")
+      path = joinpath(root, sl.sl_path)
+      # Add metadata to handle
+      add_object_component!(handle.inputs, resp["results"][1]["object"], false, component)
+      #a = Dict("data_product" = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, "use_version" => use_version))
+      push!(handle.inputs, resp["components"][i])
+      # Return storage locationz
+      return path
    end
 end
 
