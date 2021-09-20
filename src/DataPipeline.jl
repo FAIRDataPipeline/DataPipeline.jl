@@ -157,24 +157,27 @@ end
 
 ## get storage location
 function get_storage_loc(obj_url)
-    resp = http_get_json(obj_url)                       # object
-    obj_desc = resp["description"]
-    resp = http_get_json(resp["storage_location"])      # storage location
-    sl_path = resp["path"]
-    sl_hash = resp["hash"]
-    sr_url = resp["storage_root"]
-    resp = http_get_json(sr_url)                        # storage root
-    return (sr_root=resp["root"], sr_url=sr_url, sl_path=sl_path, sl_hash=sl_hash,
+    obj_entry = http_get_json(obj_url)                       # object
+    obj_desc = obj_entry["description"]
+    sl_entry = http_get_json(obj_entry["storage_location"])      # storage location
+    sl_path = sl_entry["path"]
+    sl_hash = sl_entry["hash"]
+    sr_url = sl_entry["storage_root"]
+    sr_entry = http_get_json(sr_url)                        # storage root
+    return (sr_root=sr_entry["root"], sr_url=sr_url, sl_path=sl_path, sl_hash=sl_hash,
         description=obj_desc) #, rt_tp=get_storage_type(sr_url)
 end
 
 ## get object_component
 function add_object_component!(array::Array, obj_url::String, post_component::Bool, component=nothing)
+    # Post component to registry
     if post_component && !isnothing(component)  # post component
         body = (object=obj_url, name=component)
         rc = http_post_data("object_component", body)
     end
-    resp = http_get_json(obj_url)               # object
+    # Get object entry
+    resp = DataPipeline.http_get_json(obj_url)  # object
+    # Get component entry
     for i in length(resp["components"])         # all components
         if !post_component && !isnothing(component)
             rc = http_get_json(resp["components"][i])
