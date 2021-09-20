@@ -59,10 +59,7 @@ end
 
 ## get file hash
 function get_file_hash(fp::String)
-    fhash = open(fp) do f
-        # return bytes2hex(SHA.sha1(f))
-        return bytes2hex(SHA.sha2_256(f))
-    end
+    fhash = bytes2hex(SHA.sha2_256(fp))
     return fhash
 end
 
