@@ -204,18 +204,20 @@ function initialise(config_file::String, submission_script::String)
    storage_root_uri = get_local_sroot(datastore)
 
    # Register config file
-   config_obj_uri = register_object(config_file, get_file_hash(config_file), "Working config file.", storage_root_uri, true)
+   config_hash = get_file_hash(config_file)
+   config_obj_uri = register_object(config_file, config_hash, "Working config file.", storage_root_uri, true)
    
    # Register submission script   
-   script_obj_uri = register_object(submission_script, get_file_hash(submission_script), "Submission script (Julia.)", storage_root_uri, true)
+   script_hash = get_file_hash(submission_script)
+   script_obj_uri = register_object(submission_script, script_hash, "Submission script (Julia.)", storage_root_uri, true)
    
    # Register remote repository
-   rr = ifnull_prop(config["run_metadata"], "remote_repo", "")
+   rr = get(config["run_metadata"], "remote_repo", "")
    if length(rr) == 0
       crr_obj_uri = nothing      # TEMP: code_repo[_release]
    else
       rrsr = get_local_sroot(dirname(rr))
-      lc = ifnull_prop(config["run_metadata"], "latest_commit", "na")
+      lc = get(config["run_metadata"], "latest_commit", "na")
       crr_obj_uri = register_object(basename(rr), lc, "Remote code repository.", rrsr, true)
    end
    println(" - pipeline initialised.")
