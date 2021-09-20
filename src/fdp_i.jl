@@ -264,7 +264,42 @@ end
 Returns the file path of a data product that has been registered in the local data registry, either directly or via the CLI.
 """
 function link_read(handle::DataRegistryHandle, data_product::String)
-   return read_data_product(handle, data_product, nothing)
+   # Get metadata
+   rmd = DataPipeline.get_dp_metadata(handle, data_product, "read")
+   use_data_product = get(rmd["use"], "data_product", data_product)
+   use_namespace = get(rmd["use"], "namespace", handle.config["run_metadata"]["default_input_namespace"])
+   use_version = rmd["use"]["version"]
+   
+   # Is the data product already in the registry?
+   resp = DataPipeline.search_data_product(use_namespace, use_data_product, use_version)
+   
+   if resp["count"] == 0 
+      # If the data product isn't in the registry, throw an error
+      msg = string("no data products found matching: ", use_data_product, " :-(ns: ", use_namespace, " - v: ", use_version, ")")
+      throw(ReadWriteException(msg))
+   else 
+      # Get object entry
+      @assert length(resp["results"]) == 1
+      obj_url = resp["results"][1]["object"]
+      println("data product found: ", use_data_product, " (url: ", resp["results"][1]["url"], ")")
+       
+      # Get component url 
+      object_entry = DataPipeline.http_get_json(obj_url)
+      component_url = object_entry["components"]
+      @assert length(component_url) == 1
+
+      # Get storage location
+      sl = get_storage_loc(obj_url)
+      root = replace(sl.sr_root, "file://" => "")
+      path = joinpath(root, sl.sl_path)
+      
+      # Add metadata to handle
+      metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, "use_version" => use_version, "component_url" => component_url)
+      handle.inputs[data_product] = metadata
+      
+      # Return storage location
+      return path
+   end
 end
 #- If the alias is already recorded in the handle, returns the path. If not, find the location of the file referenced by its alias.
 
