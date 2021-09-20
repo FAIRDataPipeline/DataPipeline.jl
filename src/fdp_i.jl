@@ -405,49 +405,56 @@ end
 
 ## register [generic] data product
 # NB. need to add outputs to handle prior to this point ***
-function register_data_product(handle::DataRegistryHandle, data_product::String, filepath::String, public::Bool, component) #component::String,
-   C_DF_DESC = "Data product registered using DataPipeline.jl."
-   C_DF_VERSION = "0.0.1"
-   wmd = get_dp_metadata(handle, data_product, "write")
-   out_dir = ifnull_prop(handle.config["run_metadata"], "write_data_store", handle.working_dir)
-   storage_root_uri = get_local_sroot(out_dir)
-   data_product = ifnull_prop(wmd["use"], "data_product", data_product)
-   namespace = ifnull_prop(wmd["use"], "namespace", ifnull_prop(handle.config["run_metadata"], "default_output_namespace"))
-   version = ifnull_prop(wmd["use"], "version", C_DF_VERSION)
-   resp = search_data_product(namespace, data_product, version)
-   hash = get_file_hash(filepath)
-   if resp["count"] == 0   # register object
-      description = ifnull_prop(wmd, "description", C_DF_DESC)
-      # - move file
-      new_fp = string(namespace, "/", data_product, "/")
-      new_dir = string(out_dir, new_fp)
-      C_DEBUG_MODE && println("MOVING:\n", filepath, "\n", new_dir)
-      isdir(dirname(new_dir)) || mkpath(dirname(new_dir))
-      new_filepath = string(new_dir, hash)
-      mv(filepath, new_filepath; force=true)
-      obj_url = register_object(string(new_fp, hash), hash, description, storage_root_uri, public)
-      ## register dp
-      ns_url = get_ns_url(namespace)
-      body = (namespace=ns_url, name=data_product, object=obj_url, version=version)
-      resp = http_post_data("data_product", body)
-      println("nb. new data product registered as ", resp["url"])
-      add_object_component!(handle.outputs, obj_url, true, component)
-      return resp["url"]
-   else  ## check hash and throw error if different
-      url = resp["results"][1]["url"]
-      obj_url = resp["results"][1]["object"]
-      resp = http_get_json(obj_url)
-      resp = http_get_json(resp["storage_location"])
-      if hash == resp["hash"]
-         println("nb. data product already registered as ", url)
-         # add_object_component!(handle.outputs, obj_url)
-         return url
-      else
-         println("HASH: ", hash, " vs:\n", resp)
-         msg = string("a different data product is already registered to that namespace and version: ", url)
-         throw(ReadWriteException(msg))
-      end
-   end
+function register_data_product(handle::DataRegistryHandle, data_product::String)#, component::String) 
+   # Get metadata
+   wmd = handle.outputs[data_product]
+   datastore = handle.config["run_metadata"]["write_data_store"]
+   storage_root_uri = DataPipeline.get_local_sroot(datastore)
+   use_data_product = wmd["use_dp"]
+   use_namespace = wmd["use_namespace"]
+   use_version = wmd["use_version"]
+   filepath = wmd["path"]
+
+   # Get hash
+   resp = DataPipeline.search_data_product(use_namespace, use_data_product, wmd["use_version"])
+   hash = DataPipeline.get_file_hash(filepath)
+   
+   # if resp["count"] == 0   
+   
+   # Rename file
+   oldname = split.(basename(filepath), ".")[1]
+   new_filepath = replace(filepath, oldname => hash)
+   mv(filepath, new_filepath)
+
+   # Register Object
+   obj_url = DataPipeline.register_object(new_filepath, hash, wmd["description"], storage_root_uri, wmd["public"])
+   
+   # Register DataProduct
+   ns_url = DataPipeline.get_ns_url(use_namespace)
+   body = (namespace=ns_url, name=use_data_product, object=obj_url, version=use_version)
+   resp = DataPipeline.http_post_data("data_product", body)
+   
+   obj_entry = DataPipeline.http_get_json(obj_url)
+   component_url = obj_entry["components"]
+   @assert length(component_url) == 1
+
+   return component_url
+   
+   # else  ## check hash and throw error if different
+   #    url = resp["results"][1]["url"]
+   #    obj_url = resp["results"][1]["object"]
+   #    resp = http_get_json(obj_url)
+   #    resp = http_get_json(resp["storage_location"])
+   #    if hash == resp["hash"]
+   #       println("nb. data product already registered as ", url)
+   #       # add_object_component!(handle.outputs, obj_url)
+   #       return url
+   #    else
+   #       println("HASH: ", hash, " vs:\n", resp)
+   #       msg = string("a different data product is already registered to that namespace and version: ", url)
+   #       throw(ReadWriteException(msg))
+   #    end
+   # end
 end
 
 ##
