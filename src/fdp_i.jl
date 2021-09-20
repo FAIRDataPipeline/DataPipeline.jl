@@ -148,12 +148,13 @@ function register_object(path::String, hash::String, description::String, root_u
 end
 
 ## called by finalise
-function register_code_run(handle::DataRegistryHandle, description::String)
+function register_code_run(handle::DataRegistryHandle, inputs, outputs)
     rt = Dates.now()
-    # inputs = []
-    # outputs = []
+    coderun_description = handle.config["run_metadata"]["description"]
+
     ## prepare submission
-    body = (run_date=rt, description=description, model_config=handle.config_obj, submission_script=handle.script_obj, inputs=handle.inputs, outputs=handle.outputs)
+    body = (run_date=rt, description=coderun_description, model_config=handle.config_obj, 
+            submission_script=handle.script_obj, inputs=inputs, outputs=outputs)
     if !isnothing(handle.repo_obj)
       # body["code_repo"] = handle.repo_obj
       body = (;body..., code_repo=handle.repo_obj)
