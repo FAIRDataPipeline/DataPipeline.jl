@@ -228,13 +228,27 @@ end
 Complete (i.e. finish) code run.
 """
 function finalise(handle::DataRegistryHandle; comments::String="Julia code run.")
-   ## register code run
-   cr_desc = ifnull_prop(handle.config["run_metadata"], "description", comments)
-   url = register_code_run(handle, cr_desc)
+
+   # Register outputs
+   inputs = []
+   for (key, value) in handle.inputs
+      dp_url = handle.inputs[key]["component_url"]
+      append!(inputs, dp_url)
+   end
+   
+   # Register outputs
+   outputs = []
+   for (key, value) in handle.outputs
+      dp_url = register_data_product(handle, key)
+      append!(outputs, dp_url)
+   end
+   
+   # Register code run
+   url = DataPipeline.register_code_run(handle, inputs, outputs)
    println("finished - code run locally registered as: ", url, "\n")
-   output = (code_run=url, config_obj=handle.config_obj, script_obj=handle.script_obj)
-   isnothing(handle.repo_obj) && (return output)
-   return (; output..., repo_obj=handle.repo_obj)
+   #output = (code_run=url, config_obj=handle.config_obj, script_obj=handle.script_obj)
+   #isnothing(handle.repo_obj) && (return output)
+   #return (; output..., repo_obj=handle.repo_obj)
 end
 
 ## read dp and return sl - for internal use
