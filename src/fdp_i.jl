@@ -219,7 +219,7 @@ function initialise(config_file::String, submission_script::String)
       crr_obj_uri = register_object(basename(rr), lc, "Remote code repository.", rrsr, true)
    end
    println(" - pipeline initialised.")
-   return DataRegistryHandle(config, config_obj_uri, script_obj_uri, crr_obj_uri, storage_root_uri, [], [])
+   return DataRegistryHandle(config, config_obj_uri, script_obj_uri, crr_obj_uri, storage_root_uri, Dict(), Dict())
 end
 
 """
