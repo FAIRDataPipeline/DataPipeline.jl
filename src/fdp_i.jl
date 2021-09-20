@@ -19,10 +19,10 @@ struct DataRegistryHandle
    config_obj::String   # config file object id
    script_obj::String   # submission script object file id
    repo_obj             # code repo object file id (optional)
-   working_dir          # working directory for this session
-   # user_id           # [local registry] user_id
-   inputs::Array
-   outputs::Array
+   write_data_store::String          
+   # user_id            # [local registry] user_id
+   inputs::Dict
+   outputs::Dict
 end
 # - NB. FAIR RUN [server] gets called by user using CI tool
 
