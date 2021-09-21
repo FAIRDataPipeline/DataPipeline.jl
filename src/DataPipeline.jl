@@ -107,17 +107,17 @@ function http_post_data(endpoint::String, data)
     end
 end
 
-# function http_get_data(table::String, data)
-#     url = string(API_ROOT, table, "/")
-#     token = get_access_token()
-#     headers = Dict("Authorization"=>token, "Content-Type" => "application/json")
-#     body = JSON.json(data)
-#     r = HTTP.request("GET", url, headers=headers, body=body)
-#     resp = JSON.parse(String(r.body))
-#     results = resp["results"]
-#     @assert length(results) == 1
-#     return results[1]["url"]
-# end
+function http_get_data(table::String, data)
+    url = string(API_ROOT, table, "/")
+    token = get_access_token()
+    headers = Dict("Authorization"=>token, "Content-Type" => "application/json")
+    body = JSON.json(data)
+    r = HTTP.request("GET", url, headers=headers, body=body)
+    resp = JSON.parse(String(r.body))
+    results = resp["results"]
+    @assert length(results) == 1
+    return results[1]["url"]
+end
 
 """
     convert_query(data)
