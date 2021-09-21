@@ -104,7 +104,8 @@ function http_post_data(endpoint::String, data)
     elseif r["count"] == 0
         r = HTTP.request("POST", url, headers=headers, body=body)
         resp = String(r.body)
-        entry_url = JSON.parse(resp)
+        json_resp = JSON.parse(resp)
+        entry_url = json_resp["url"]
     end
 
     return entry_url
