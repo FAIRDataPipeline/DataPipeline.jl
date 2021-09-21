@@ -58,26 +58,6 @@ function get_access_token()
    return string("token ", chomp(token))
 end
 
-### upload to data registry
-# - NB. what about user ID? Always == 1?
-function http_post_data(endpoint::String, data)
-   url = string(API_ROOT, endpoint, "/")
-   headers = Dict("Authorization" => DataPipeline.get_access_token(), "Content-Type" => "application/json")
-   body = JSON.json(data)
-   C_DEBUG_MODE && println(" POSTing data to := ", url, ": \n ", body)
-   
-   try
-      r = HTTP.request("POST", url, headers=headers, body=body)
-      resp = String(r.body)
-      C_DEBUG_MODE && println(" - Response: \n ", resp)
-      return JSON.parse(resp)
-   catch y
-      r = HTTP.get(url)
-      return r
-   end
-
-end
-
 ## register code repo release (i.e. model code)
 # - PP per meeting 29/6
 # function register_code_repo(name::String, version::String, repo::String,
