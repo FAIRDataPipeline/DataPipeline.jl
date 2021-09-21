@@ -97,11 +97,31 @@ function get_storage_location(path::String, hash::String, root_id::String, publi
 end
 
 """
+    register_object(path, hash, description, root_uri, public)
+
+Register object in local registry and return the URL of the entry.
+"""
+function register_object(path::String, hash::String, description::String, root_uri::String; public::Bool=true)
+   # Register storage location
+   storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, "storage_root" => root_uri)
+   storage_loc_uri = DataPipeline.http_post_data("storage_location", storage_loc_query)
+
+   # Get author URL
+   authors_url = DataPipeline.get_author_url()
+
+   # Register object
+   object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url])
+   object_url = DataPipeline.http_post_data("object", object_query)
+
+   return object_url
+end
+
+"""
     register_object(path, hash, description, root_uri, file_type, public)
 
 Register object in local registry and return the URL of the entry.
 """
-function register_object(path::String, hash::String, description::String, root_uri::String; file_type::Union{String, Nothing}=nothing, public::Bool=true)
+function register_object(path::String, hash::String, description::String, root_uri::String, file_type::String; public::Bool=true)
    # Register storage location
    storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, "storage_root" => root_uri)
    storage_loc_uri = DataPipeline.http_post_data("storage_location", storage_loc_query)
@@ -110,16 +130,10 @@ function register_object(path::String, hash::String, description::String, root_u
    authors_url = DataPipeline.get_author_url()
 
    # Register / get file_type entry
-   if(!isnothing(file_type))
-      file_type_url = DataPipeline.http_post_data("file_type", Dict("extension" => file_type))
-   end
+   file_type_url = DataPipeline.http_post_data("file_type", Dict("extension" => file_type))
 
    # Register object
-   if(isnothing(file_type))
-      object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url])
-   else 
-      object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url], "file_type" => file_type_url)
-   end
+   object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url], "file_type" => file_type_url)
    object_url = DataPipeline.http_post_data("object", object_query)
 
    return object_url
@@ -223,11 +237,11 @@ function initialise(config_file::String, submission_script::String)
    
    # Register config file
    config_hash = DataPipeline.get_file_hash(config_file)
-   config_obj_uri = DataPipeline.register_object(config_file, config_hash, "Working config file.", storage_root_uri, file_type="yaml")
+   config_obj_uri = DataPipeline.register_object(config_file, config_hash, "Working config file.", storage_root_uri, "yaml")
    
    # Register submission script   
    script_hash = DataPipeline.get_file_hash(submission_script)
-   script_obj_uri = DataPipeline.register_object(submission_script, script_hash, "Submission script (Julia.)", storage_root_uri, file_type="sh")
+   script_obj_uri = DataPipeline.register_object(submission_script, script_hash, "Submission script (Julia.)", storage_root_uri, "sh")
 
    # Register remote repository
    remote_repo = config["run_metadata"]["remote_repo"]
@@ -249,7 +263,7 @@ end
 
 Complete (i.e. finish) code run.
 """
-function finalise(handle::DataRegistryHandle; comments::String="Julia code run.")
+function finalise(handle::DataRegistryHandle)
 
    # Register outputs
    inputs = []
