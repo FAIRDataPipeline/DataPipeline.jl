@@ -57,13 +57,21 @@ function get_id_from_root(url::String, root::Regex)
     return replace(replace(url, root => s""), "/" => "")
 end
 
-## get file hash
+"""
+    get_file_hash(fp)
+
+Get file hash
+"""
 function get_file_hash(fp::String)
     fhash = bytes2hex(SHA.sha2_256(fp))
     return fhash
 end
 
-## read data registry
+"""
+    http_get_json(url)
+
+Read data registry
+"""
 function http_get_json(url::String)
     url = replace(url, LOCAL_DR_PORTLESS => API_ROOT)
     try
