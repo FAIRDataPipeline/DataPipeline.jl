@@ -50,7 +50,7 @@ function registry_query(q::String, vals=nothing)
 end
 
 ## registry token
-function get_access_token(user_id::Int=1)
+function get_access_token()
    fp = expanduser("~/.fair/registry/token")
    token = open(fp) do file
      read(file, String)
