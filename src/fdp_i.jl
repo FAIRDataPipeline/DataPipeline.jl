@@ -153,7 +153,11 @@ function register_object(path::String, hash::String, description::String, root_u
    return object_url
 end
 
-## called by finalise
+"""
+    register_code_run(handle, inputs, outputs)
+
+Register code run
+"""
 function register_code_run(handle::DataRegistryHandle, inputs, outputs)
     rt = Dates.now()
     coderun_description = handle.config["run_metadata"]["description"]
@@ -187,7 +191,11 @@ function get_text_file(sst::String)
    return temp_fp
 end
 
+"""
+    get_author_url()
 
+Get author url
+"""
 function get_author_url()
    users_url = DataPipeline.http_get_data("users", Dict("username" => "admin"))
    users_id = DataPipeline.extract_id(users_url)
