@@ -1,13 +1,13 @@
 module DataPipeline
 
-import YAML
-import HTTP
-import JSON
-import FTPClient
-import SHA
-import Dates
-import CSV
-import DataFrames
+using YAML
+using HTTP
+using JSON
+using FTPClient
+using SHA
+using Dates
+using CSV
+using DataFrames
 using URIs
 using Plots
 
@@ -101,6 +101,7 @@ function http_post_data(endpoint::String, data)
 
     if r["count"] == 1
         entry_url = r["results"][1]["url"]
+
     elseif r["count"] == 0
         r = HTTP.request("POST", url, headers=headers, body=body)
         resp = String(r.body)
