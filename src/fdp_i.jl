@@ -168,6 +168,15 @@ function get_text_file(sst::String)
    return temp_fp
 end
 
+
+function get_author_url()
+   users_url = DataPipeline.http_get_data("users", Dict("username" => "admin"))
+   users_id = DataPipeline.extract_id(users_url)
+   user_author_url = DataPipeline.http_get_data("user_author", Dict("user" => users_id))
+   author_entry = DataPipeline.http_get_json(user_author_url)
+   author_url = author_entry["author"]
+   return author_url
+end
 ## replacement for fetch_data_per_yaml
 ## 1. download data/metadata from RDR and register: sources
 # fdp pull config_file
