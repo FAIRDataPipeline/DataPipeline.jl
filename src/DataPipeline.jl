@@ -89,6 +89,28 @@ function http_post_data(table::String, data, scrc_access_tkn::String)
     return resp
 end
 
+
+"""
+    convert_query(data)
+
+Convert dictionary to url query.
+"""
+function convert_query(data::Dict) 
+    url = "?"
+    for (key, value) in data
+        if isa(value, Bool)
+            query = value
+        elseif all(contains.(value, API_ROOT))
+            query = extract_id(value)
+            query = isa(query, Vector) ? join(query, ",") : query
+        else
+            query = URIs.escapeuri(value)
+        end
+        url = "$url$key=$query&"
+    end
+    url = chop(url, tail = 1)
+    return url
+end
 ## register stuff:
 include("api_upload.jl")
 
