@@ -58,36 +58,8 @@ function get_access_token()
    return string("token ", chomp(token))
 end
 
-## register code repo release (i.e. model code)
-# - PP per meeting 29/6
-# function register_code_repo(name::String, version::String, repo::String,
-#    hash::String, scrc_access_tkn::String, description::String,
-#    website::String, storage_root_url::String, storage_root_id::String)
-#
-#    ## UPDATED: check name/version
-#    crr_chk = search_code_repo_release(name, version)
-#    sl_path = replace(repo, storage_root_url => "")
-#    if crr_chk["count"] == 0
-#       obj_id = insert_storage_location(sl_path, hash, description, storage_root_id, scrc_access_tkn)
-#       ## register release
-#       body = (name=name, version=version, object=obj_id, website=website)
-#       resp = http_post_data("code_repo_release", body, scrc_access_tkn)
-#       println("NB. new code repo release registered. URI := ", resp["url"])
-#       return resp["url"]
-#    else
-#       ## check repo is the same
-#       # NB. check SR match?
-#       resp = http_get_json(crr_chk["results"][1]["object"])
-#       resp = http_get_json(resp["storage_location"])
-#       sl_path  == resp["path"] || println("WARNING: repo mismatch detected := ", sl_path, " != ", resp["path"])
-#       println("NB. code repo release := ", crr_chk["results"][1]["url"])
-#       return crr_chk["results"][1]["url"]
-#    end
-# end
-
 ## register storage root
 function register_storage_root(path_root::String, is_local::Bool)
-   # il = is_local ? "True" : "False"
    body = Dict("root"=>path_root, "local"=>is_local)
    resp = http_post_data("storage_root", body)
    return resp["url"]
