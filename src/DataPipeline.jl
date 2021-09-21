@@ -8,8 +8,8 @@ import SHA
 import Dates
 import CSV
 import DataFrames
+using URIs
 using Plots
-# import PrettyTables
 
 const C_DEBUG_MODE = false
 # const API_ROOT = "https://data.scrc.uk/api/"
