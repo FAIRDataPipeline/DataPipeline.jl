@@ -124,14 +124,33 @@ function get_storage_location(path::String, hash::String, root_id::String, publi
    end
 end
 
-## register and return object uri
-# NB. what about authors / filetype?
-function register_object(path::String, hash::String, description::String, root_uri::String, public::Bool)
-   sl_uri = get_storage_location(path, hash, root_uri, public)
-   ## add object
-   body = (description=description, storage_location=sl_uri)
-   resp = http_post_data("object", body)
-   return resp["url"]
+"""
+    register_object(path, hash, description, root_uri, file_type, public)
+
+Register object in local registry and return the URL of the entry.
+"""
+function register_object(path::String, hash::String, description::String, root_uri::String; file_type::Union{String, Nothing}=nothing, public::Bool=true)
+   # Register storage location
+   storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, "storage_root" => root_uri)
+   storage_loc_uri = DataPipeline.http_post_data("storage_location", storage_loc_query)
+
+   # Get author URL
+   authors_url = DataPipeline.get_author_url()
+
+   # Register / get file_type entry
+   if(!isnothing(file_type))
+      file_type_url = DataPipeline.http_post_data("file_type", Dict("extension" => file_type))
+   end
+
+   # Register object
+   if(isnothing(file_type))
+      object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url])
+   else 
+      object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url], "file_type" => file_type_url)
+   end
+   object_url = DataPipeline.http_post_data("object", object_query)
+
+   return object_url
 end
 
 ## called by finalise
