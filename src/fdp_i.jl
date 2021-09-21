@@ -140,23 +140,23 @@ function register_object(path::String, hash::String, description::String, root_u
 end
 
 """
-    register_code_run(handle, inputs, outputs)
+    patch_code_run(handle, inputs, outputs)
 
 Register code run
 """
-function register_code_run(handle::DataRegistryHandle, inputs, outputs)
-    rt = Dates.now()
-    coderun_description = handle.config["run_metadata"]["description"]
-
-    ## prepare submission
-    body = (run_date=rt, description=coderun_description, model_config=handle.config_obj, 
-            submission_script=handle.script_obj, inputs=inputs, outputs=outputs)
-    if !isnothing(handle.repo_obj)
-      # body["code_repo"] = handle.repo_obj
-      body = (;body..., code_repo=handle.repo_obj)
-    end
-    resp = http_post_data("code_run", body)
-    return resp["url"]
+function patch_code_run(handle::DataRegistryHandle, inputs, outputs)
+   coderun_url = handle.code_run_obj
+   token = DataPipeline.get_access_token()
+   headers = Dict("Authorization" => token, "Content-Type" => "application/json")
+   data = Dict("inputs" => inputs, "outputs" => outputs)
+   body = JSON.json(data)
+  
+   r = HTTP.request("PATCH", coderun_url, headers=headers, body=body)
+   resp = String(r.body)
+   json_resp = JSON.parse(resp)
+   entry_url = json_resp["url"]
+   
+    return entry_url
 end
 
 ## yaml config ifnull helper
