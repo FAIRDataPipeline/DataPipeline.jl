@@ -239,8 +239,9 @@ function initialise(config_file::String, submission_script::String)
    repo_obj_url = DataPipeline.register_object(remote_repo, latest_commit, "Remote code repository.", repo_root_uri, public=false)
 
    # Write to handle
-   DataRegistryHandle(config, config_obj_uri, script_obj_uri, repo_obj_url, storage_root_uri, Dict(), Dict())
    println(" - pipeline initialised.")
+
+   return DataRegistryHandle(config, config_obj_uri, script_obj_uri, repo_obj_url, storage_root_uri, Dict(), Dict())
 end
 
 """
