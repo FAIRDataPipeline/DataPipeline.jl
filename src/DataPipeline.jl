@@ -85,16 +85,26 @@ function http_get_json(url::String)
     end
 end
 
-## upload to data registry
-function http_post_data(table::String, data, scrc_access_tkn::String)
-    url = string(API_ROOT, table, "/")
-    headers = Dict("Authorization"=>scrc_access_tkn, "Content-Type" => "application/json")
+"""
+    http_post_data(endpoint, data)
+
+Upload to data registry
+"""
+function http_post_data(endpoint::String, data)
+    url = string(API_ROOT, endpoint, "/")
+    headers = Dict("Authorization" => DataPipeline.get_access_token(), "Content-Type" => "application/json")
     body = JSON.json(data)
     C_DEBUG_MODE && println(" POSTing data to := ", url, ": \n ", body)
-    r = HTTP.request("POST", url, headers=headers, body=body)
-    resp = JSON.parse(String(r.body))
-    C_DEBUG_MODE && println(" - response: \n ", resp)
-    return resp
+    
+    try
+       r = HTTP.request("POST", url, headers=headers, body=body)
+       resp = String(r.body)
+       C_DEBUG_MODE && println(" - Response: \n ", resp)
+       return JSON.parse(resp)
+    catch y
+       r = HTTP.get(url)
+       return r
+    end
 end
 
 # function http_get_data(table::String, data)
