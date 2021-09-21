@@ -177,6 +177,27 @@ function get_author_url()
    author_url = author_entry["author"]
    return author_url
 end
+
+"""
+    extract_id(url)
+
+Extract id from url
+"""
+function extract_id(url)
+   if !isa(url, Vector)
+      tmp = match(r".*/([0-9]*)/", url)
+      return String(tmp[1])
+   else
+      output = Char[]
+      for i in url
+         tmp = match(r".*/([0-9]*)/", i)
+         append!(output, tmp[1])
+      end
+      return output
+   end
+end
+
+
 ## replacement for fetch_data_per_yaml
 ## 1. download data/metadata from RDR and register: sources
 # fdp pull config_file
