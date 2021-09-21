@@ -15,12 +15,13 @@
 ## produced by initialise
 # NB. add code run id
 struct DataRegistryHandle
-   config::Dict         # working config file data
-   config_obj::String   # config file object id
-   script_obj::String   # submission script object file id
-   repo_obj             # code repo object file id (optional)
+   config::Dict            # working config file data
+   config_obj::String      # config file object id
+   script_obj::String      # submission script object file id
+   repo_obj::String        # code repo object file id (optional)
    write_data_store::String          
-   # user_id            # [local registry] user_id
+   # user_id               # [local registry] user_id
+   code_run_obj::String
    inputs::Dict
    outputs::Dict
 end
@@ -130,7 +131,11 @@ function register_object(path::String, hash::String, description::String, root_u
    authors_url = DataPipeline.get_author_url()
 
    # Register / get file_type entry
-   file_type_url = DataPipeline.http_post_data("file_type", Dict("extension" => file_type))
+   file_type_url = DataPipeline.get_entry("file_type", Dict("extension" => file_type))
+
+   if isnothing(file_type_url)
+      file_type_url = DataPipeline.http_post_data("file_type", Dict("name" => file_type, "extension" => file_type))
+   end
 
    # Register object
    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url], "file_type" => file_type_url)
@@ -183,9 +188,9 @@ end
 Get author url
 """
 function get_author_url()
-   users_url = DataPipeline.http_get_data("users", Dict("username" => "admin"))
+   users_url = DataPipeline.get_entry("users", Dict("username" => "admin"))
    users_id = DataPipeline.extract_id(users_url)
-   user_author_url = DataPipeline.http_get_data("user_author", Dict("user" => users_id))
+   user_author_url = DataPipeline.get_entry("user_author", Dict("user" => users_id))
    author_entry = DataPipeline.http_get_json(user_author_url)
    author_url = author_entry["author"]
    return author_url
@@ -252,10 +257,19 @@ function initialise(config_file::String, submission_script::String)
    latest_commit = config["run_metadata"]["latest_commit"]
    repo_obj_url = DataPipeline.register_object(remote_repo, latest_commit, "Remote code repository.", repo_root_uri, public=false)
 
-   # Write to handle
-   println(" - pipeline initialised.")
+   # Register code run
+   rt = Dates.now()
+   rt = Dates.format(rt, "yyyy-mm-dd HH:MM:SS")
+   coderun_description = config["run_metadata"]["description"]
+   body = Dict("run_date" => rt, "description" => coderun_description, "code_repo" => repo_obj_url, "model_config" => config_obj_uri, 
+   "submission_script" => script_obj_uri)
 
-   return DataRegistryHandle(config, config_obj_uri, script_obj_uri, repo_obj_url, storage_root_uri, Dict(), Dict())
+   coderun_url = DataPipeline.http_post_data("code_run", body)
+
+   println(" - pipeline initialised.")
+   
+   # Write to handle
+   return DataRegistryHandle(config, config_obj_uri, script_obj_uri, repo_obj_url, storage_root_uri, coderun_url, Dict(), Dict())
 end
 
 """
@@ -275,12 +289,12 @@ function finalise(handle::DataRegistryHandle)
    # Register outputs
    outputs = []
    for (key, value) in handle.outputs
-      dp_url = register_data_product(handle, key)
+      dp_url = DataPipeline.register_data_product(handle, key)
       append!(outputs, dp_url)
    end
    
    # Register code run
-   url = DataPipeline.register_code_run(handle, inputs, outputs)
+   url = DataPipeline.patch_code_run(handle, inputs, outputs)
    println("finished - code run locally registered as: ", url, "\n")
    #output = (code_run=url, config_obj=handle.config_obj, script_obj=handle.script_obj)
    #isnothing(handle.repo_obj) && (return output)
@@ -458,30 +472,36 @@ end
 function register_data_product(handle::DataRegistryHandle, data_product::String)#, component::String) 
    # Get metadata
    wmd = handle.outputs[data_product]
+   storage_root_uri = handle.write_data_store
    datastore = handle.config["run_metadata"]["write_data_store"]
-   storage_root_uri = DataPipeline.get_local_sroot(datastore)
    use_data_product = wmd["use_dp"]
    use_namespace = wmd["use_namespace"]
    use_version = wmd["use_version"]
    filepath = wmd["path"]
 
    # Get hash
-   resp = DataPipeline.search_data_product(use_namespace, use_data_product, wmd["use_version"])
    hash = DataPipeline.get_file_hash(filepath)
    
-   # if resp["count"] == 0   
+   # Does data product already exist?
+   resp = DataPipeline.search_data_product(use_namespace, use_data_product, wmd["use_version"])
+
+   exists = resp["count"] != 0
    
    # Rename file
    oldname = split.(basename(filepath), ".")[1]
    new_filepath = replace(filepath, oldname => hash)
-   mv(filepath, new_filepath)
+   isfile(filepath) ? mv(filepath, new_filepath, force = true) : nothing
+   new_path = replace(new_filepath, datastore => "")
+
+   # Get file type
+   file_type = String(split.(new_path, ".")[2])
 
    # Register Object
-   obj_url = DataPipeline.register_object(new_filepath, hash, wmd["description"], storage_root_uri, wmd["public"])
+   obj_url = DataPipeline.register_object(new_path, hash, wmd["description"], storage_root_uri, file_type, public=wmd["public"])
    
    # Register DataProduct
    ns_url = DataPipeline.get_ns_url(use_namespace)
-   body = (namespace=ns_url, name=use_data_product, object=obj_url, version=use_version)
+   body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, "version" => use_version)
    resp = DataPipeline.http_post_data("data_product", body)
    
    obj_entry = DataPipeline.http_get_json(obj_url)

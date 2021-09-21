@@ -74,8 +74,10 @@ Read data registry
 """
 function http_get_json(url::String)
     url = replace(url, LOCAL_DR_PORTLESS => API_ROOT)
+    token = DataPipeline.get_access_token()
+    headers = Dict("Authorization" => token, "Content-Type" => "application/json")
     try
-        r = HTTP.request("GET", url)
+        r = HTTP.request("GET", url, headers)
         return JSON.parse(String(r.body))
     catch e
         msg = "couldn't connect to local web server... have you run the start script?"
@@ -86,12 +88,12 @@ function http_get_json(url::String)
 end
 
 """
-    http_post_data(endpoint, data)
+    http_post_data(table, data)
 
 Upload to data registry
 """
-function http_post_data(endpoint::String, data)
-    url = string(API_ROOT, endpoint, "/")
+function http_post_data(table::String, data::Dict)
+    url = string(API_ROOT, table, "/")
     token = DataPipeline.get_access_token()
     headers = Dict("Authorization" => token, "Content-Type" => "application/json")
     body = JSON.json(data)
@@ -112,16 +114,35 @@ function http_post_data(endpoint::String, data)
     return entry_url
 end
 
-function http_get_data(table::String, data)
+"""
+    get_entry(table, data)
+
+Use query to get entry from local registry
+"""
+function get_entry(table::String, data::Dict)
     url = string(API_ROOT, table, "/")
-    token = get_access_token()
-    headers = Dict("Authorization"=>token, "Content-Type" => "application/json")
-    body = JSON.json(data)
-    r = HTTP.request("GET", url, headers=headers, body=body)
-    resp = JSON.parse(String(r.body))
-    results = resp["results"]
-    @assert length(results) == 1
-    return results[1]["url"]
+    query = convert_query(data)
+    r = DataPipeline.http_get_json("$url$query")
+
+    if r["count"] == 0 
+        return nothing
+    else        
+        entry_url = r["results"][1]["url"]
+        return entry_url
+    end
+end
+
+"""
+    get_entry(table, data)
+
+Use query to check whether entry exists in local registry
+"""
+function check_exists(table::String, data::Dict)
+    url = string(API_ROOT, table, "/")
+    query = convert_query(data)
+    r = DataPipeline.http_get_json("$url$query")
+    exists = r["count"]==0 ? false : true
+    return exists
 end
 
 """
