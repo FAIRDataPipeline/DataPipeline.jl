@@ -238,27 +238,29 @@ function initialise(config_file::String, submission_script::String)
 
    # Register datastore 
    datastore = config["run_metadata"]["write_data_store"]
-   storage_root_uri = get_local_sroot(datastore)
-
+   storage_root_query = Dict("root" => datastore, "local" => true)
+   storage_root_uri = DataPipeline.http_post_data("storage_root", storage_root_query)
+   
    # Register config file
-   config_hash = get_file_hash(config_file)
-   config_obj_uri = register_object(config_file, config_hash, "Working config file.", storage_root_uri, true)
+   config_hash = DataPipeline.get_file_hash(config_file)
+   config_obj_uri = DataPipeline.register_object(config_file, config_hash, "Working config file.", storage_root_uri, file_type="yaml")
    
    # Register submission script   
-   script_hash = get_file_hash(submission_script)
-   script_obj_uri = register_object(submission_script, script_hash, "Submission script (Julia.)", storage_root_uri, true)
-   
+   script_hash = DataPipeline.get_file_hash(submission_script)
+   script_obj_uri = DataPipeline.register_object(submission_script, script_hash, "Submission script (Julia.)", storage_root_uri, file_type="sh")
+
    # Register remote repository
-   rr = get(config["run_metadata"], "remote_repo", "")
-   if length(rr) == 0
-      crr_obj_uri = nothing      # TEMP: code_repo[_release]
-   else
-      rrsr = get_local_sroot(dirname(rr))
-      lc = get(config["run_metadata"], "latest_commit", "na")
-      crr_obj_uri = register_object(basename(rr), lc, "Remote code repository.", rrsr, true)
-   end
+   remote_repo = config["run_metadata"]["remote_repo"]
+   repo_root = match(r"([a-z]*://[a-z]*.[a-z]*/).*", remote_repo)[1]
+   remote_repo = replace(remote_repo, repo_root => "")
+   repo_root_query = Dict("root" => repo_root, "local" => false)
+   repo_root_uri = DataPipeline.http_post_data("storage_root", repo_root_query)
+   latest_commit = config["run_metadata"]["latest_commit"]
+   repo_obj_url = DataPipeline.register_object(remote_repo, latest_commit, "Remote code repository.", repo_root_uri, public=false)
+
+   # Write to handle
+   DataRegistryHandle(config, config_obj_uri, script_obj_uri, repo_obj_url, storage_root_uri, Dict(), Dict())
    println(" - pipeline initialised.")
-   return DataRegistryHandle(config, config_obj_uri, script_obj_uri, crr_obj_uri, storage_root_uri, Dict(), Dict())
 end
 
 """
