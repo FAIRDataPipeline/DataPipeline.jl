@@ -425,9 +425,12 @@ function get_dp_metadata(handle::DataRegistryHandle, data_product::String, secti
    throw(ConfigFileException(msg))
 end
 
-## register [generic] data product
-# NB. need to add outputs to handle prior to this point ***
-function register_data_product(handle::DataRegistryHandle, data_product::String)#, component::String) 
+"""
+    register_data_product(handle, data_product)
+
+Register data product (from `link_write()`)
+"""
+function register_data_product(handle::DataRegistryHandle, data_product::String)
    # Get metadata
    wmd = handle.outputs[data_product]
    storage_root_uri = handle.write_data_store
@@ -492,6 +495,8 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    #    end
    # end
 end
+
+
 
 ##
 """
