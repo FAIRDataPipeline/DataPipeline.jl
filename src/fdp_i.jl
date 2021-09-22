@@ -464,13 +464,19 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, "version" => use_version)
    resp = DataPipeline.http_post_data("data_product", body)
    
-   obj_entry = DataPipeline.http_get_json(obj_url)
-   component_url = obj_entry["components"]
-   @assert length(component_url) == 1
+   if isnothing(use_component)
+      obj_entry = DataPipeline.http_get_json(obj_url)
+      component_url = obj_entry["components"]
+      @assert length(component_url) == 1
+      component_url = component_url[1]
+   else
+      component_query = Dict("object" => obj_url, "name" => use_component)
+      component_url = DataPipeline.http_post_data("object_component", component_query)
+   end
 
    return component_url
-   
-   # else  ## check hash and throw error if different
+
+     # else  ## check hash and throw error if different
    #    url = resp["results"][1]["url"]
    #    obj_url = resp["results"][1]["object"]
    #    resp = http_get_json(obj_url)
