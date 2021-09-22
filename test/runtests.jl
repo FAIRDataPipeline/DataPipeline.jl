@@ -1,18 +1,18 @@
-## package tests
-using DataPipeline
-# using SQLite, DataFrames
-import CSV
-import DataFrames
-import Random
-import Test
+module TestDataPipeline
 
-## tests
+using DataPipeline
+using CSV
+using DataFrames
+using Random
+using Test
+
 # Test.@testset "package tests" begin
 #     ## 1. Empty code run
 #     Test.@testset "empty code run" begin
-#         wc = "examples/simple2/working_config1.yaml"
-#         handle = initialise(wc)
-#         finalise(handle; comments="Empty code run example.")
+#         script = "script_location"
+#         config = "examples/simple2/working_config1.yaml"
+#         handle = initialise(config, script)
+#         finalise(handle)
 #         Test.@test true
 #     end
 
@@ -132,3 +132,6 @@ import Test
     #     end
     # end
 # end
+
+    # end
+end
