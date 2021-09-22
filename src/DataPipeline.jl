@@ -1,3 +1,10 @@
+"""
+    DataPipeline package
+
+The `DataPipeline` package provides a language-specific automation layer for the  
+language-agnostic RESTful API that is used to interact with the Data Registry.
+"""
+
 module DataPipeline
 
 using YAML
@@ -117,8 +124,6 @@ export read_estimate, read_table, read_array, load_array!
 export initialise_data_log, finish_data_log
 export register_data_product, register_text_file
 export register_github_model, register_model_run
-# export stage_github_model, stage_model_run
-# export register_staged_model, register_staged_run
 export commit_staged_data_product
 export commit_staged_model, commit_staged_run
 export registry_commit_status, commit_all
@@ -129,6 +134,8 @@ export read_array, read_table, read_estimate, read_distribution
 export write_array, write_table, write_estimate, write_distribution
 export link_read, link_write
 export raise_issue
-export SEIRS_model, plot_SEIRS, convert_query
+
+include("model.jl")
+export SEIRS_model, plot_SEIRS
 
 end # module
