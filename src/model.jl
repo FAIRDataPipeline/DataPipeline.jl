@@ -68,3 +68,8 @@ function plot_SEIRS(results::DataFrames.DataFrame)
    # Join plots together
    Plots.plot(p1, p2, plot_title = "SEIRS model trajectories")
 end
+
+function get_parameter(data, parameter)
+   output = filter(row -> row.param == parameter, data).value[1]
+   return output
+end
