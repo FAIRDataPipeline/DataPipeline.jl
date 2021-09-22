@@ -46,15 +46,15 @@ include("api_audit.jl")         # DR audits
 
 ## get storage location
 function get_storage_loc(obj_url)
-    obj_entry = http_get_json(obj_url)                       # object
-    obj_desc = obj_entry["description"]
-    sl_entry = http_get_json(obj_entry["storage_location"])      # storage location
-    sl_path = sl_entry["path"]
-    sl_hash = sl_entry["hash"]
-    sr_url = sl_entry["storage_root"]
-    sr_entry = http_get_json(sr_url)                        # storage root
-    return (sr_root=sr_entry["root"], sr_url=sr_url, sl_path=sl_path, sl_hash=sl_hash,
-        description=obj_desc) #, rt_tp=get_storage_type(sr_url)
+    obj_entry = http_get_json(obj_url)
+    storage_loc_entry = http_get_json(obj_entry["storage_location"])
+    storage_loc_path = storage_loc_entry["path"]
+    storage_root_url = storage_loc_entry["storage_root"]
+    storage_root_entry = http_get_json(storage_root_url)    
+    storage_root = storage_root_entry["root"]
+    root = replace(storage_root, "file://" => "")
+    path = joinpath(root, storage_loc_path)
+    return path
 end
 
 ## get object_component
