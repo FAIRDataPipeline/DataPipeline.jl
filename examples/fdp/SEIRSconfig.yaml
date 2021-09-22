@@ -1,0 +1,31 @@
+run_metadata:
+  default_input_namespace: sonia
+  description: SEIRS Model
+  script: R -f examples/fdp/seirs_sim.jl.R
+
+register:
+- namespace: PSU
+  full_name: Pennsylvania State University
+  website: https://ror.org/04p491231
+
+- external_object: SEIRS_model/parameters
+  namespace: PSU
+  root: https://raw.githubusercontent.com/
+  path: FAIRDataPipeline/rSimpleModel/main/inst/extdata/static_params_SEIRS.csv
+  title: Static parameters of the model
+  description: Static parameters of the model
+  unique_name: SEIRS model parameters - Static parameters of the model
+  alternate_identifier_type: SEIRS_model_params
+  file_type: csv
+  release_date: 2020-06-01T12:00
+  version: "1.0.0"
+  primary: True
+
+write:
+- data_product: SEIRS_model/results/model_output
+  description: SEIRS model results
+  file_type: csv
+
+- data_product: SEIRS_model/results/figure
+  description: SEIRS output plot
+  file_type: pdf
