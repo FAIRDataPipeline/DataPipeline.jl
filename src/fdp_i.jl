@@ -326,9 +326,8 @@ function link_read(handle::DataRegistryHandle, data_product::String)
       @assert length(component_url) == 1
 
       # Get storage location
-      sl = get_storage_loc(obj_url)
-      root = replace(sl.sr_root, "file://" => "")
-      path = joinpath(root, sl.sl_path)
+      path = DataPipeline.get_storage_loc(obj_url)
+      path = replace(path, "file://" => "")
       
       # Add metadata to handle
       metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, "use_version" => use_version, "component_url" => component_url)
