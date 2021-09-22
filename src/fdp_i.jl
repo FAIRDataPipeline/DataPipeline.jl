@@ -12,22 +12,6 @@
 # - stop using: ~/.fair/registry/scripts/stop_fair_registry
 # - view tcp using: sudo netstat -ntap | grep LISTEN
 
-## produced by initialise
-# NB. add code run id
-struct DataRegistryHandle
-   config::Dict            # working config file data
-   config_obj::String      # config file object id
-   script_obj::String      # submission script object file id
-   repo_obj::String        # code repo object file id (optional)
-   write_data_store::String          
-   # user_id               # [local registry] user_id
-   code_run_obj::String
-   inputs::Dict
-   outputs::Dict
-end
-# - NB. FAIR RUN [server] gets called by user using CI tool
-
-##
 struct ReadWriteException <: Exception
    msg::String
 end
@@ -307,27 +291,38 @@ function get_object_components(url::String)
    end
 end
 
-## register issue with data product; component; externalobject; or script
-"""
-    raise_issue(handle; ... )
 
-Register issue with data product; component; external object; or script.
 
-Pass the object URI as a named parameter[s], e.g. `raise_issue(handle; data_product=dp, component=comp)`.
+## get object_component
+# function add_object_component!(array::Array, obj_url::String, post_component::Bool, component=nothing)
+#     # Post component to registry
+#     if post_component && !isnothing(component)  # post component
+#         body = (object=obj_url, name=component)
+#         rc = http_post_data("object_component", body)
+#     end
+#     # Get object entry
+#     resp = DataPipeline.http_get_json(obj_url)  # object
+#     # Get component entry
+#     for i in length(resp["components"])         # all components
+#         if !post_component && !isnothing(component)
+#             rc = http_get_json(resp["components"][i])
+#             # println("TESTING: ", rc["name"], " VS. ", component)
+#             rc["name"] == component && push!(array, resp["components"][i])
+#         else
+#             push!(array, resp["components"][i])
+#         end
+#     end
+# end
 
-**Optional parameters**
-- `data_product`
-- `component`
-- `external_object`
-- `script`
-"""
-function raise_issue(handle::DataRegistryHandle, url::String, description::String, severity=0)#data_product=nothing, component=nothing, external_object=nothing, script=nothing
-   ## 1. API call to LDR (retrieve metadata)
-   c = get_object_components(url)
-   # println(c)
-   ## 2. register issue to LDR
-   body = (severity=severity, description=description, component_issues=c)
-   resp = http_post_data("issue", body)
-   println("nb. issue registered as ", resp["url"])
-   return resp["url"]
+## get storage location
+function get_storage_loc(obj_url)
+   obj_entry = http_get_json(obj_url)
+   storage_loc_entry = http_get_json(obj_entry["storage_location"])
+   storage_loc_path = storage_loc_entry["path"]
+   storage_root_url = storage_loc_entry["storage_root"]
+   storage_root_entry = http_get_json(storage_root_url)    
+   storage_root = storage_root_entry["root"]
+   root = replace(storage_root, "file://" => "")
+   path = joinpath(root, storage_loc_path)
+   return path
 end
