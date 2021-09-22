@@ -123,7 +123,7 @@ function link_read(handle::DataRegistryHandle, data_product::String)
 end
 
 """
-    read_array(handle, data_product, [component])
+    read_array(handle, data_product[, component])
 
 Read [array] data product.
 - note that it must already have been downloaded from the remote data store using `fdp pull`.
@@ -139,7 +139,7 @@ function read_array(handle::DataRegistryHandle, data_product::String, component=
 end
 
 """
-    read_table(handle, data_product; component, version)
+    read_table(handle, data_product[, component])
 
 Read [table] data product.
 - note that it must already have been downloaded from the remote data store using `fdp pull`.
@@ -178,7 +178,7 @@ function read_distribution(handle::DataRegistryHandle, data_product::String, com
 end
 
 """
-   link_write(handle, filepath, data_product)
+   link_write(handle, data_product)
 
 Registers a file-based data product based on information provided in the working config file, e.g. for writing external objects.
 """
@@ -210,11 +210,11 @@ function link_write(handle::DataRegistryHandle, data_product::String)
 end
 
 """
-    write_array(handle, data, data_product, component; public)
+    write_array(handle, data, data_product, component)
 
 Write an array as a component to an hdf5 file.
 """
-function write_array(handle::DataRegistryHandle, data::Array, data_product::String, component::String; public::Bool=true)
+function write_array(handle::DataRegistryHandle, data::Array, data_product::String, component::String)
    # Get storage location and write to metadata to handle
    path = resolve_write(handle, data_product, component, "h5")
    
@@ -227,12 +227,12 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
 end
 
 """
-    write_table(handle, table, data_product)
+    write_table(handle, data, data_product, component)
 
 Write a table as a component to an hdf5 file.
 """
-function write_table(handle::DataRegistryHandle, table, data_product::String)
-   write_array(handle, table, data_product, component)
+function write_table(handle::DataRegistryHandle, data, data_product::String, component::String)
+   write_array(handle, data, data_product, component)
 end
 
 """
@@ -240,7 +240,7 @@ end
 
 Write a point estimate as a component to a toml file.
 """
-function write_estimate(handle::DataRegistryHandle, value, data_product::String, component::String; public::Bool=true)
+function write_estimate(handle::DataRegistryHandle, value, data_product::String, component::String)
    data = Dict(component => Dict{String,Any}("value" => value, "type" => "point-estimate"))
    return write_keyval(handle, data, data_product, component)
 end
@@ -250,7 +250,7 @@ end
 
 Write a distribution as a component to a toml file.
 """
-function write_distribution(handle::DataRegistryHandle, distribution::String, parameters, data_product::String, component::String; public::Bool=true)
+function write_distribution(handle::DataRegistryHandle, distribution::String, parameters, data_product::String, component::String)
    data = Dict(component => Dict{String,Any}("distribution"=>distribution, "parameters"=>parameters, "type"=>"distribution"))
    return write_keyval(handle, data, data_product, component)
 end

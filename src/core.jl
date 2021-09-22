@@ -11,13 +11,13 @@ struct DataRegistryHandle
  end
 
 """
-    convert_query(data)
+    convert_query(query)
 
 Convert dictionary to url query.
 """
-function convert_query(data::Dict) 
+function convert_query!(query::Dict) 
     url = "?"
-    for (key, value) in data
+    for (key, value) in query
         if isa(value, Bool)
             query = value
         elseif all(contains.(value, API_ROOT))
@@ -33,13 +33,13 @@ function convert_query(data::Dict)
 end
 
 """
-    get_entry(table, data)
+    get_entry(table, query)
 
 Use query to get entry from local registry
 """
-function get_entry(table::String, data::Dict)
+function get_entry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    query = convert_query(data)
+    convert_query!(query)
     r = DataPipeline.http_get_json("$url$query")
 
     if r["count"] == 0
@@ -52,23 +52,23 @@ function get_entry(table::String, data::Dict)
 end
 
 """
-    get_url(table, data)
+    get_url(table, query)
 
 Use query to get entry url from local registry
 """
-function get_url(table::String, data::Dict)
-    entry = DataPipeline.get_entry(table, data)
+function get_url(table::String, query::Dict)
+    entry = DataPipeline.get_entry(table, query)
     output = isnothing(entry) ? nothing : entry["url"] 
     return output
 end
 
 """
-    get_id(table, data)
+    get_id(table, query)
 
 Use query to get entry id from local registry
 """
-function get_id(table::String, data::Dict)
-    url = DataPipeline.get_url(table, data)
+function get_id(table::String, query::Dict)
+    url = DataPipeline.get_url(table, query)
     output = isnothing(url) ? nothing :  extract_id(url)
     return output
 end
@@ -93,13 +93,13 @@ function extract_id(url)
 end
 
 """
-    check_exists(table, data)
+    check_exists(table, query)
 
 Use query to check whether entry exists in local registry
 """
-function check_exists(table::String, data::Dict)
+function check_exists(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    query = convert_query(data)
+    convert_query!(query)
     r = DataPipeline.http_get_json("$url$query")
     exists = r["count"]==0 ? false : true
     return exists
@@ -110,13 +110,13 @@ end
 
 Upload to data registry
 """
-function http_post_data(table::String, data::Dict)
+function http_post_data(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
     token = DataPipeline.get_access_token()
     headers = Dict("Authorization" => token, "Content-Type" => "application/json")
-    body = JSON.json(data)
+    body = JSON.json(query)
     
-    query = convert_query(data)
+    convert_query!(query)
     r = DataPipeline.http_get_json("$url$query")
 
     if r["count"] == 1
@@ -153,12 +153,12 @@ function http_get_json(url::String)
 end
 
 """
-    get_file_hash(fp)
+    get_file_hash(filepath)
 
 Get file hash
 """
-function get_file_hash(fp::String)
-    fhash = bytes2hex(SHA.sha2_256(fp))
+function get_file_hash(filepath::String)
+    fhash = bytes2hex(SHA.sha2_256(filepath))
     return fhash
 end
 

@@ -22,7 +22,7 @@ struct ConfigFileException <: Exception
 end
 
 """
-    register_object(path, hash, description, root_uri, public)
+    register_object(path, hash, description, root_uri[, public])
 
 Register object in local registry and return the URL of the entry.
 """
@@ -42,7 +42,7 @@ function register_object(path::String, hash::String, description::String, root_u
 end
 
 """
-    register_object(path, hash, description, root_uri, file_type, public)
+    register_object(path, hash, description, root_uri, file_type[, public])
 
 Register object in local registry and return the URL of the entry.
 """
@@ -101,7 +101,11 @@ function get_author_url()
    return author_url
 end
 
-## read dp and return sl - for internal use
+"""
+    read_data_product(handle, data_product, component)
+
+Read dp and return sl - for internal use
+"""
 function read_data_product(handle::DataRegistryHandle, data_product::String, component::String)
    # Get metadata
    rmd = DataPipeline.get_dp_metadata(handle, data_product, "read")
@@ -136,6 +140,11 @@ function read_data_product(handle::DataRegistryHandle, data_product::String, com
    end
 end
 
+"""
+    read_toml(handle, data_product, component)
+
+Read toml file
+"""
 function read_toml(handle::DataRegistryHandle, data_product::String, component)
    ## 1. API call to LDR
    tmp = read_data_product(handle, data_product, component)
@@ -279,7 +288,11 @@ function write_keyval(handle::DataRegistryHandle, data::Dict, data_product::Stri
    return nothing
 end
 
-## get object associated with entity
+"""
+    get_object_components(url)
+
+get object associated with entity
+"""  
 function get_object_components(url::String)
    resp = http_get_json(url)
    haskey(resp, "whole_object") && (return [url])
@@ -314,9 +327,13 @@ end
 #     end
 # end
 
-## get storage location
-function get_storage_loc(obj_url)
-   obj_entry = http_get_json(obj_url)
+"""
+    get_storage_loc(url)
+
+Get storage location
+""" 
+function get_storage_loc(object_url)
+   obj_entry = http_get_json(object_url)
    storage_loc_entry = http_get_json(obj_entry["storage_location"])
    storage_loc_path = storage_loc_entry["path"]
    storage_root_url = storage_loc_entry["storage_root"]
