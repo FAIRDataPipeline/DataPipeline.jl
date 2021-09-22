@@ -2,12 +2,13 @@ run_metadata:
   description: Write distribution
   local_data_registry_url: http://localhost:8000/api/
   remote_data_registry_url: http://data.scrc.uk/api/
-  default_input_namespace: martinburke
-  default_output_namespace: martinburke
-  write_data_store: /media/martin/storage/projects/AtomProjects/DataPipeline.jl/examples/simple2/data/
+  default_input_namespace: testing
+  default_output_namespace: testing
+  write_data_store: /Users/Soniam/.fair/datastore/
   local_repo: /media/martin/storage/projects/AtomProjects/DataPipeline.jl/
   latest_commit: 221bfe8b52bbfb3b2dbdc23037b7dd94b49aaa70
   remote_repo: https://github.com/FAIRDataPipeline/DataPipeline.jl
+  public: true
   script: julia examples/simple2/main.jl
 
 write:

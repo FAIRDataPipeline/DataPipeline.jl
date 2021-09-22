@@ -1,75 +1,45 @@
-### SEIRD model example
-import BayesianWorkflows
-import Distributions
-import Random
+### SEIRS model example
 
-Random.seed!(0)
+using DataPipeline
+using CSV
+using DataFrames
+using Plots
 
-## define model
-function get_model()
-    MODEL_NAME = "SEIRDs"
-    N_EVENT_TYPES = 4
-    # - discrete state space
-    SUSCEPTIBLE = 1
-    EXPOSED = 2
-    INFECTIOUS = 3
-    RECOVERED = 4
-    DEATH = 5
-    ALIVE = 1:4
-    OBSERVED_STATES = [INFECTIOUS, DEATH]
-    # - observation probabilities
-    PROB_DETECTION_I = 0.6
-    PROB_DETECTION_D = 0.95
-    # - model parameters
-    T_ZERO = 0  # I.E. NO INITIAL INFECTION TIME PARAMETER (ASSUME t0=0.0)
-    CONTACT = 1
-    LATENCY = 2
-    RECOVER = 3
-    BIRTH_DEATH = 4
-    # - rate function
-    function seird_rf(output, parameters::Vector{Float64}, population::Vector{Int64})
-        output[1] = parameters[CONTACT] * population[SUSCEPTIBLE] * population[INFECTIOUS] / sum(population[ALIVE])
-        output[2] = parameters[LATENCY] * population[EXPOSED]
-        output[3] = parameters[RECOVER] * population[INFECTIOUS]
-        output[4] = 2 * parameters[BIRTH_DEATH] * sum(population[ALIVE])
-    end
-    # - transition matrix and function
-    tm = [-1 1 0 0 0; 0 -1 1 0 0; 0 0 -1 1 0]
-    function transition!(population::Vector{Int64}, evt_type::Int64)
-        if evt_type == 4        # birth/death:
-            if rand(1:2) == 1   # birth
-                population[SUSCEPTIBLE] += 1
-            else                # death - sample population
-                population[Distributions.wsample(population)] -= 1
-                population[DEATH] += 1
-            end
-        else                    # disease model:
-            population .+= tm[evt_type, :]
-        end
-    end
-    # - initial condition
-    fnic(parameters::Vector{Float64}) = [1000, 0, 10, 0, 0]
-    # - observation function
-    function obs_fn!(y::BayesianWorkflows.Observation, population::Array{Int64,1}, parameters::Vector{Float64 })
-        di = Distributions.Binomial(population[INFECTIOUS], PROB_DETECTION_I)
-        dd = Distributions.Binomial(population[DEATH], PROB_DETECTION_D)
-        y.val[OBSERVED_STATES] .= [rand(di), rand(dd)]
-    end
-    # - observation model
-    function obs_model(y::BayesianWorkflows.Observation, population::Array{Int64,1}, theta::Array{Float64,1})
-        d = Distributions.Binomial.(population[OBSERVED_STATES], [PROB_DETECTION_I, PROB_DETECTION_D])
-        return Distributions.logpdf(Distributions.Product(d), y.val[OBSERVED_STATES])
-    end
-    # - construct model and return
-    return BayesianWorkflows.DPOMPModel(MODEL_NAME, N_EVENT_TYPES, seird_rf, fnic, transition!, obs_model, obs_fn!, T_ZERO)
-end
 
-## simulate and return some 'observations'
-function run_simulation()
-    model = get_model()
-    parameters = [0.04, 0.04, 0.02, 0.0002]
-    x = BayesianWorkflows.gillespie_sim(model, parameters; tmax=1000.0, num_obs=30)
-    println(BayesianWorkflows.plot_trajectory(x))
-    return x.observations
-end
-run_simulation()
+#ENV["FDP_CONFIG_DIR"] = "/var/folders/0f/fj5r_1ws15x4jzgnm27h_y6h0000gr/T/tmpsyf75usy/data_store/jobs/2021-09-20_19_27_47_620298"
+
+# Initialise code run
+config_file = joinpath(ENV["FDP_CONFIG_DIR"], "config.yaml")
+submission_script = joinpath(ENV["FDP_CONFIG_DIR"], "script.sh")
+handle = initialise(config_file, submission_script)
+
+# Read model parameters
+path = link_read(handle, "SEIRS_model/parameters")
+static_params = CSV.read(path, DataFrames.DataFrame)
+alpha = filter(row -> row.param == "alpha", static_params).value[1]
+beta = filter(row -> row.param == "beta", static_params).value[1]
+inv_gamma = filter(row -> row.param == "inv_gamma", static_params).value[1]
+inv_omega = filter(row -> row.param == "inv_omega", static_params).value[1]
+inv_mu = filter(row -> row.param == "inv_mu", static_params).value[1]
+inv_sigma = filter(row -> row.param == "inv_sigma", static_params).value[1]
+
+# Set initial state
+timesteps = 1000
+years = 5
+initial_state = Dict("S" => 0.999, "E" => 0.001, "I" => 0, "R" => 0)
+
+# Run the model
+results = SEIRS_model(initial_state, timesteps, years, alpha, beta, 
+inv_gamma, inv_omega, inv_mu, inv_sigma)
+
+g = plot_SEIRS(results)
+
+# Save outputs to data store
+path = link_write(handle, "SEIRS_model/results/model_output")
+CSV.write(path, results)
+
+path = link_write(handle, "SEIRS_model/results/figure")
+savefig(g, path)
+
+# Register code run in local registry
+finalise(handle)
