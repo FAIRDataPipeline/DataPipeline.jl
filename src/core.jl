@@ -1,3 +1,15 @@
+struct DataRegistryHandle
+    config::Dict            # working config file data
+    config_obj::String      # config file object id
+    script_obj::String      # submission script object file id
+    repo_obj::String        # code repo object file id (optional)
+    write_data_store::String          
+    # user_id               # [local registry] user_id
+    code_run_obj::String
+    inputs::Dict
+    outputs::Dict
+ end
+
 """
     convert_query(data)
 
