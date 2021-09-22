@@ -254,3 +254,28 @@ function write_distribution(handle::DataRegistryHandle, distribution::String, pa
    data = Dict(component => Dict{String,Any}("distribution"=>distribution, "parameters"=>parameters, "type"=>"distribution"))
    return write_keyval(handle, data, data_product, component)
 end
+
+## register issue with data product; component; externalobject; or script
+"""
+    raise_issue(handle; ... )
+
+Register issue with data product; component; external object; or script.
+
+Pass the object URI as a named parameter[s], e.g. `raise_issue(handle; data_product=dp, component=comp)`.
+
+**Optional parameters**
+- `data_product`
+- `component`
+- `external_object`
+- `script`
+"""
+function raise_issue(handle::DataRegistryHandle, url::String, description::String, severity=0)#data_product=nothing, component=nothing, external_object=nothing, script=nothing
+   ## 1. API call to LDR (retrieve metadata)
+   c = get_object_components(url)
+   # println(c)
+   ## 2. register issue to LDR
+   body = (severity=severity, description=description, component_issues=c)
+   resp = http_post_data("issue", body)
+   println("nb. issue registered as ", resp["url"])
+   return resp["url"]
+end
