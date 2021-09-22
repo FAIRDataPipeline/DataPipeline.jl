@@ -1,7 +1,7 @@
 run_metadata:
-  default_input_namespace: sonia
+  default_input_namespace: testing
   description: SEIRS Model
-  script: R -f examples/fdp/seirs_sim.jl.R
+  script: julia examples/fdp/seirs_sim.jl
 
 register:
 - namespace: PSU

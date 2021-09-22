@@ -1,5 +1,4 @@
 ### SEIRS model example
-
 using DataPipeline
 using CSV
 using DataFrames
