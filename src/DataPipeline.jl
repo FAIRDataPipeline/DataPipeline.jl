@@ -32,6 +32,14 @@ const DF_MODEL_REL_DESC = "Julia model."
 const DF_MR_SUB_SCR_DESC = "Submission script."
 const FILE_SR_STEM = "file://"
 
+include("core.jl")
+export convert_query
+export http_get_json, get_entry, get_url, get_id
+export extract_id
+export check_exists
+export http_post_data
+export get_file_hash, get_access_token
+
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits
