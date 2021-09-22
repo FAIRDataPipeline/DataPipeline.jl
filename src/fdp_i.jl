@@ -433,6 +433,7 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    storage_root_uri = handle.write_data_store
    datastore = handle.config["run_metadata"]["write_data_store"]
    use_data_product = wmd["use_dp"]
+   use_component = get(wmd, "use_component", nothing)
    use_namespace = wmd["use_namespace"]
    use_version = wmd["use_version"]
    filepath = wmd["path"]
