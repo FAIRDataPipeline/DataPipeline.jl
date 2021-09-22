@@ -16,12 +16,12 @@ handle = initialise(config_file, submission_script)
 # Read model parameters
 path = link_read(handle, "SEIRS_model/parameters")
 static_params = CSV.read(path, DataFrames.DataFrame)
-alpha = filter(row -> row.param == "alpha", static_params).value[1]
-beta = filter(row -> row.param == "beta", static_params).value[1]
-inv_gamma = filter(row -> row.param == "inv_gamma", static_params).value[1]
-inv_omega = filter(row -> row.param == "inv_omega", static_params).value[1]
-inv_mu = filter(row -> row.param == "inv_mu", static_params).value[1]
-inv_sigma = filter(row -> row.param == "inv_sigma", static_params).value[1]
+alpha = get_parameter(static_params, "alpha")
+beta = get_parameter(static_params, "beta")
+inv_gamma = get_parameter(static_params, "inv_gamma")
+inv_omega = get_parameter(static_params, "inv_omega")
+inv_mu = get_parameter(static_params, "inv_mu")
+inv_sigma = get_parameter(static_params, "inv_sigma")
 
 # Set initial state
 timesteps = 1000
