@@ -37,42 +37,32 @@ struct ConfigFileException <: Exception
    msg::String
 end
 
-## registry query
-function registry_query(q::String, vals=nothing)
-   db_path = string(homedir(), "/.fair/registry/db.sqlite3")
-   db = SQLite.DB(db_path)
-   sel_stmt = SQLite.Stmt(db, q)
-   if isnothing(vals)
-      df = SQLite.DBInterface.execute(sel_stmt, vals) |> DataFrames.DataFrame
-   else
-      df = SQLite.DBInterface.execute(sel_stmt, vals) |> DataFrames.DataFrame
-   end
-   return df
-end
+"""
+    register_storage_root()
 
-## registry token
-function get_access_token()
-   fp = expanduser("~/.fair/registry/token")
-   token = open(fp) do file
-     read(file, String)
-   end
-   return string("token ", chomp(token))
-end
-
-## register storage root
+Register storage root
+"""
 function register_storage_root(path_root::String, is_local::Bool)
    body = Dict("root"=>path_root, "local"=>is_local)
    resp = http_post_data("storage_root", body)
    return resp["url"]
 end
 
-## check storage location
+"""
+    search_storage_root()
+
+Check storage location
+"""
 function search_storage_root(path::String, is_local::Bool)
     search_url = string(API_ROOT, "storage_root/?root=", HTTP.escapeuri(path), "&local=", is_local)
     return http_get_json(search_url)
 end
 
-## return default SR URI
+"""
+    get_local_sroot()
+
+Return default SR URI
+"""
 function get_local_sroot(path::String) #, handle::DataRegistryHandle
    file_path = string(FILE_SR_STEM, path)
    resp = search_storage_root(file_path, true)
@@ -83,7 +73,11 @@ function get_local_sroot(path::String) #, handle::DataRegistryHandle
    end
 end
 
-## register/retrieve storage location and return uri
+"""
+    get_storage_location()
+
+Register/retrieve storage location and return uri
+"""
 function get_storage_location(path::String, hash::String, root_id::String, public::Bool)
    # resp = search_storage_location(path, hash, root_id)
    resp = search_storage_location(hash, root_id, public)
@@ -131,15 +125,15 @@ function register_object(path::String, hash::String, description::String, root_u
    authors_url = DataPipeline.get_author_url()
 
    # Register / get file_type entry
-   file_type_url = DataPipeline.get_entry("file_type", Dict("extension" => file_type))
-
+   file_type_url = DataPipeline.get_url("file_type", Dict("extension" => file_type))
+   ft_query = Dict("name" => file_type, "extension" => file_type)
    if isnothing(file_type_url)
-      file_type_url = DataPipeline.http_post_data("file_type", Dict("name" => file_type, "extension" => file_type))
+      file_type_url = http_post_data("file_type", ft_query)
    end
 
    # Register object
    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url], "file_type" => file_type_url)
-   object_url = DataPipeline.http_post_data("object", object_query)
+   object_url = http_post_data("object", object_query)
 
    return object_url
 end
@@ -151,7 +145,7 @@ Register code run
 """
 function patch_code_run(handle::DataRegistryHandle, inputs, outputs)
    coderun_url = handle.code_run_obj
-   token = DataPipeline.get_access_token()
+   token = get_access_token()
    headers = Dict("Authorization" => token, "Content-Type" => "application/json")
    data = Dict("inputs" => inputs, "outputs" => outputs)
    body = JSON.json(data)
@@ -164,55 +158,17 @@ function patch_code_run(handle::DataRegistryHandle, inputs, outputs)
     return entry_url
 end
 
-## yaml config ifnull helper
-function ifnull_prop(data::Dict, property::String, ifnull::String="default")
-   if haskey(data, property)
-      return data[property]
-   else
-      return ifnull
-   end
-end
-
-## used for submission script
-function get_text_file(sst::String)
-   temp_fp = tempname()
-   ssf = open(temp_fp, "w")
-   write(ssf, sst)
-   close(ssf)
-   return temp_fp
-end
-
 """
     get_author_url()
 
 Get author url
 """
 function get_author_url()
-   users_url = DataPipeline.get_entry("users", Dict("username" => "admin"))
-   users_id = DataPipeline.extract_id(users_url)
-   user_author_url = DataPipeline.get_entry("user_author", Dict("user" => users_id))
+   users_id = DataPipeline.get_id("users", Dict("username" => "admin"))
+   user_author_url = DataPipeline.get_url("user_author", Dict("user" => users_id))
    author_entry = DataPipeline.http_get_json(user_author_url)
    author_url = author_entry["author"]
    return author_url
-end
-
-"""
-    extract_id(url)
-
-Extract id from url
-"""
-function extract_id(url)
-   if !isa(url, Vector)
-      tmp = match(r".*/([0-9]*)/", url)
-      return String(tmp[1])
-   else
-      output = Char[]
-      for i in url
-         tmp = match(r".*/([0-9]*)/", i)
-         append!(output, tmp[1])
-      end
-      return output
-   end
 end
 
 
@@ -302,35 +258,36 @@ function finalise(handle::DataRegistryHandle)
 end
 
 ## read dp and return sl - for internal use
-function read_data_product(handle::DataRegistryHandle, data_product::String, component)
+function read_data_product(handle::DataRegistryHandle, data_product::String, component::String)
    # Get metadata
-   rmd = get_dp_metadata(handle, data_product, "read")
+   rmd = DataPipeline.get_dp_metadata(handle, data_product, "read")
    use_data_product = get(rmd["use"], "data_product", data_product)
+   use_component = get(rmd["use"], "component", component)
    use_namespace = get(rmd["use"], "namespace", handle.config["run_metadata"]["default_input_namespace"])
    use_version = rmd["use"]["version"]
    
    # Is the data product already in the registry?
-   resp = search_data_product(use_namespace, use_data_product, use_version)
-   
-   if resp["count"] == 0 
+   namespace_id = get_id("namespace", Dict("name" => use_namespace))
+   dp_entry = DataPipeline.get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
+
+   if isnothing(dp_entry)
       # If the data product isn't in the registry, throw an error
       msg = string("no data products found matching: ", use_data_product, " :-(ns: ", use_namespace, " - v: ", use_version, ")")
       throw(ReadWriteException(msg))
    else 
       # Get object entry
-      @assert length(resp["results"]) == 1
-      obj_url = resp["results"][1]["object"]
-      obj_entry = http_get_json(obj_url)
-      println("data product found: ", use_data_product, " (url: ", resp["results"][1]["url"], ")")
+      obj_url = dp_entry["object"]
+      obj_id = extract_id(obj_url)
+      component_url = get_entry("object_component", Dict("name" => component, "object" => obj_id))
+      println("data product found: ", use_data_product, " (url: ", obj_url, ")")
+      
       # Get storage location
-      sl = get_storage_loc(obj_url)
-      root = replace(sl.sr_root, "file://" => "")
-      path = joinpath(root, sl.sl_path)
+      path = DataPipeline.get_storage_loc(obj_url)
+      
       # Add metadata to handle
-      add_object_component!(handle.inputs, resp["results"][1]["object"], false, component)
-      #a = Dict("data_product" = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, "use_version" => use_version))
-      push!(handle.inputs, resp["components"][i])
-      # Return storage locationz
+      metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, "use_version" => use_version, "component_url" => component_url)
+      handle.inputs[data_product] = metadata
+
       return path
    end
 end
@@ -343,23 +300,23 @@ Returns the file path of a data product that has been registered in the local da
 """
 function link_read(handle::DataRegistryHandle, data_product::String)
    # Get metadata
-   rmd = DataPipeline.get_dp_metadata(handle, data_product, "read")
+   rmd = get_dp_metadata(handle, data_product, "read")
    use_data_product = get(rmd["use"], "data_product", data_product)
    use_namespace = get(rmd["use"], "namespace", handle.config["run_metadata"]["default_input_namespace"])
    use_version = rmd["use"]["version"]
    
    # Is the data product already in the registry?
-   resp = DataPipeline.search_data_product(use_namespace, use_data_product, use_version)
-   
-   if resp["count"] == 0 
+   namespace_id = get_id("namespace", Dict("name" => use_namespace))
+   dp_entry = DataPipeline.get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
+
+   if isnothing(dp_entry)
       # If the data product isn't in the registry, throw an error
       msg = string("no data products found matching: ", use_data_product, " :-(ns: ", use_namespace, " - v: ", use_version, ")")
       throw(ReadWriteException(msg))
    else 
       # Get object entry
-      @assert length(resp["results"]) == 1
-      obj_url = resp["results"][1]["object"]
-      println("data product found: ", use_data_product, " (url: ", resp["results"][1]["url"], ")")
+      obj_url = dp_entry["object"]
+      println("data product found: ", use_data_product, " (url: ", dp_entry["url"], ")")
        
       # Get component url 
       object_entry = DataPipeline.http_get_json(obj_url)
@@ -391,7 +348,7 @@ Read [array] data product.
 """
 function read_array(handle::DataRegistryHandle, data_product::String, component=nothing)
    ## 1. API call to LDR
-   tmp = read_data_product(handle, data_product, component)
+   tmp = DataPipeline.read_data_product(handle, data_product, component)
    # println("RDP: ", tmp)
    ## 2. read array from file -> process
    output = process_h5_file(tmp, false, C_DEBUG_MODE)
@@ -482,10 +439,11 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    # Get hash
    hash = DataPipeline.get_file_hash(filepath)
    
-   # Does data product already exist?
-   resp = DataPipeline.search_data_product(use_namespace, use_data_product, wmd["use_version"])
-
-   exists = resp["count"] != 0
+   # Is the data product already in the registry?
+   namespace_id = DataPipeline.get_id("namespace", Dict("name" => use_namespace))
+   dp_entry = DataPipeline.get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
+   
+   exists = !ismissing(dp_entry)
    
    # Rename file
    oldname = split.(basename(filepath), ".")[1]
@@ -500,7 +458,7 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    obj_url = DataPipeline.register_object(new_path, hash, wmd["description"], storage_root_uri, file_type, public=wmd["public"])
    
    # Register DataProduct
-   ns_url = DataPipeline.get_ns_url(use_namespace)
+   ns_url = DataPipeline.get_url("namespace", Dict("name" => use_namespace))
    body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, "version" => use_version)
    resp = DataPipeline.http_post_data("data_product", body)
    
@@ -560,23 +518,42 @@ function link_write(handle::DataRegistryHandle, data_product::String)
    return path
 end
 
-## write file and register data product
 """
-    write_array(handle, data, data_product, component)
+    write_array(handle, data, data_product, component; public)
 
 Write an array as a component to an hdf5 file.
-
-WIP.
 """
 function write_array(handle::DataRegistryHandle, data::Array, data_product::String, component::String; public::Bool=true)
-   temp_fp = tempname()    # write file
-   fid = HDF5.h5open(temp_fp, "w")
+   # Get metadata
+   wmd = DataPipeline.get_dp_metadata(handle, data_product, "write")
+   data_store = handle.config["run_metadata"]["write_data_store"]
+   use_namespace = get(wmd["use"], "namespace", handle.config["run_metadata"]["default_output_namespace"])
+   use_data_product = get(wmd["use"], "data_product", data_product)
+   use_component = get(wmd["use"], "component", component)
+   use_version = wmd["use"]["version"]
+   public = get(wmd["use"], "public", handle.config["run_metadata"]["public"])
+   description = wmd["description"]
+
+   # Create storage location
+   filename = "xxxxxxxxxx.h5"
+   directory = joinpath(data_store, use_namespace, use_data_product)
+
+   # Create directory
+   mkpath(directory)
+   path = joinpath(directory, filename)
+
+   # Write array
+   fid = HDF5.h5open(path, "w")
    fid[component] = data
-   HDF5.close(fid)         # register data product
-   return register_data_product(handle, data_product, temp_fp, public, component)
+   HDF5.close(fid)         
+
+   # Add metadata to handle
+   metadata = Dict("use_dp" => use_data_product, "use_component" => use_component, "use_namespace" => use_namespace, "use_version" => use_version, "path" => path, "public" => public, "description" => description)
+   handle.outputs[data_product] = metadata
+    
+   return nothing
 end
 
-## write table
 """
     write_table(handle, table, data_product)
 
@@ -661,105 +638,4 @@ function raise_issue(handle::DataRegistryHandle, url::String, description::Strin
    resp = http_post_data("issue", body)
    println("nb. issue registered as ", resp["url"])
    return resp["url"]
-end
-
-## register code repo release
-function register_git_repo_release(model_name::String, model_version::String, model_repo::String,
-    model_description::String,
-    model_website::String, storage_root_url::String, storage_root_id::String)
-
-    ## testing
-    this_file = @__FILE__
-    model_hash = Base.run(string("git -C ", this_file, " rev-parse HEAD"))
-
-    ## UPDATED: check name/version
-    # crr_chk = search_code_repo_release(model_name, model_version)
-    # sl_path = replace(model_repo, storage_root_url => "")
-    # if crr_chk["count"] == 0
-    #     obj_id = insert_storage_location(sl_path, model_hash, model_description, storage_root_id, scrc_access_tkn)
-    #     ## register release
-    #     body = (name=model_name, version=model_version, object=obj_id, website=model_website)
-    #     resp = http_post_data("code_repo_release", body, scrc_access_tkn)
-    #     println("NB. new code repo release registered. URI := ", resp["url"])
-    #     return resp["url"]
-    # else
-    #     ## check model_repo is the same
-    #     # NB. check SR match?
-    #     resp = http_get_json(crr_chk["results"][1]["object"])
-    #     resp = http_get_json(resp["storage_location"])
-    #     sl_path  == resp["path"] || println("WARNING: repo mismatch detected := ", sl_path, " != ", resp["path"])
-    #     println("NB. code repo release := ", crr_chk["results"][1]["url"])
-    #     return crr_chk["results"][1]["url"]
-    # end
-end
-
-function SEIRS_model(initial_state::Dict, timesteps::Int64, years::Int64,
-   alpha::Float64, beta::Float64, inv_gamma::Float64,
-   inv_omega::Float64, inv_mu::Float64, inv_sigma::Float64)
-
-   S = initial_state["S"]
-   E = initial_state["E"]
-   I = initial_state["I"]
-   R = initial_state["R"]
-   time_unit_years = years / timesteps
-   time_unit_days = time_unit_years * 365.25
- 
-   # Convert parameters to days
-   alpha = alpha * time_unit_days
-   beta = beta * time_unit_days
-   gamma = time_unit_days / inv_gamma
-   omega = time_unit_days / (inv_omega * 365.25)
-   mu = time_unit_days / (inv_mu * 365.25)
-   sigma = 1 / inv_sigma
-   N = S + E + I + R
-   birth = mu * N
-
-   results = DataFrames.DataFrame(time = 0, S = S, E = E, I = I, R = R)
-
-   for t = 1:timesteps
-     infection = (beta * results.I[t] * results.S[t]) / N
-     lost_immunity = omega * results.R[t]
-     death_S = mu * results.S[t]
-     death_E = mu * results.E[t]
-     death_I = (mu * alpha) * results.I[t]
-     death_R = mu * results.R[t]
-     latency = sigma * results.E[t]
-     recovery = gamma * results.I[t]
- 
-     S_rate = birth - infection + lost_immunity - death_S
-     E_rate = infection - latency - death_E
-     I_rate = latency - recovery - death_I
-     R_rate = recovery - lost_immunity - death_R
- 
-     new_S = results.S[t] + S_rate
-     new_E = results.E[t] + E_rate
-     new_I = results.I[t] + I_rate
-     new_R = results.R[t] + R_rate
-
-     new = DataFrames.DataFrame(time = t * time_unit_days, 
-     S = new_S, E = new_E, 
-     I = new_I, R = new_R)
-
-     results = vcat(results, new)
-   end
- 
-   return results
-end
-
-function plot_SEIRS(results::DataFrames.DataFrame)
-   # Left plot
-   x = results.time / 365.25
-   y1 = Matrix(results[:, 2:5]) .* 100
-   p1 = plot(x, y1, label = ["S" "E" "I" "R"], lw = 3)
-   xlabel!("Years")
-   ylabel!("Relative group size (%)")
-
-   # Right plot
-   y2 = y1[:, 2:3]
-   p2 = plot(x, y2, label = ["E" "I"], lw = 3)
-   xlabel!("Years")
-   ylabel!("Relative group size (%)")
-
-   # Join plots together
-   Plots.plot(p1, p2, plot_title = "SEIRS model trajectories")
 end
