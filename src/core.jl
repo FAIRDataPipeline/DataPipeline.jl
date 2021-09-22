@@ -15,7 +15,7 @@ struct DataRegistryHandle
 
 Convert dictionary to url query.
 """
-function convert_query!(query::Dict) 
+function convert_query(query::Dict) 
     url = "?"
     for (key, value) in query
         if isa(value, Bool)
@@ -39,8 +39,8 @@ Use query to get entry from local registry
 """
 function get_entry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    convert_query!(query)
-    r = DataPipeline.http_get_json("$url$query")
+    resolved_query = convert_query(query)
+    r = DataPipeline.http_get_json("$url$resolved_query")
 
     if r["count"] == 0
         return nothing
@@ -99,8 +99,8 @@ Use query to check whether entry exists in local registry
 """
 function check_exists(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    convert_query!(query)
-    r = DataPipeline.http_get_json("$url$query")
+    resolved_query = convert_query(query)
+    r = DataPipeline.http_get_json("$url$resolved_query")
     exists = r["count"]==0 ? false : true
     return exists
 end
@@ -116,8 +116,8 @@ function http_post_data(table::String, query::Dict)
     headers = Dict("Authorization" => token, "Content-Type" => "application/json")
     body = JSON.json(query)
     
-    convert_query!(query)
-    r = DataPipeline.http_get_json("$url$query")
+    resolved_query = convert_query(query)
+    r = DataPipeline.http_get_json("$url$resolved_query")
 
     if r["count"] == 1
         entry_url = r["results"][1]["url"]
