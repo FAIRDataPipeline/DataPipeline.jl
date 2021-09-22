@@ -496,9 +496,6 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    # end
 end
 
-
-
-##
 """
    link_write(handle, filepath, data_product)
 
@@ -532,11 +529,11 @@ function link_write(handle::DataRegistryHandle, data_product::String)
 end
 
 """
-    write_array(handle, data, data_product, component; public)
+    resolve_write(handle, data_product, component, file_type)
 
-Write an array as a component to an hdf5 file.
+Registers a file-based data product based on information provided in the working config file, e.g. for writing external objects.
 """
-function write_array(handle::DataRegistryHandle, data::Array, data_product::String, component::String; public::Bool=true)
+function resolve_write(handle::DataRegistryHandle, data_product::String, component::String, file_type::String)
    # Get metadata
    wmd = DataPipeline.get_dp_metadata(handle, data_product, "write")
    data_store = handle.config["run_metadata"]["write_data_store"]
@@ -547,22 +544,34 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
    public = get(wmd["use"], "public", handle.config["run_metadata"]["public"])
    description = wmd["description"]
 
-   # Create storage location
-   filename = "xxxxxxxxxx.h5"
-   directory = joinpath(data_store, use_namespace, use_data_product)
-
    # Create directory
+   directory = joinpath(data_store, use_namespace, use_data_product)
    mkpath(directory)
-   path = joinpath(directory, filename)
 
-   # Write array
-   fid = HDF5.h5open(path, "w")
-   fid[component] = data
-   HDF5.close(fid)         
+   # Create storage location
+   filename = "xxxxxxxxxx.$file_type"
+   path = joinpath(directory, filename)
 
    # Add metadata to handle
    metadata = Dict("use_dp" => use_data_product, "use_component" => use_component, "use_namespace" => use_namespace, "use_version" => use_version, "path" => path, "public" => public, "description" => description)
    handle.outputs[data_product] = metadata
+
+   return path
+end
+
+"""
+    write_array(handle, data, data_product, component; public)
+
+Write an array as a component to an hdf5 file.
+"""
+function write_array(handle::DataRegistryHandle, data::Array, data_product::String, component::String; public::Bool=true)
+   # Get storage location and write to metadata to handle
+   path = resolve_write(handle, data_product, component, "h5")
+   
+   # Write array
+   fid = HDF5.h5open(path, "w")
+   fid[component] = data
+   HDF5.close(fid)         
     
    return nothing
 end
@@ -570,50 +579,47 @@ end
 """
     write_table(handle, table, data_product)
 
-Write a Tables.jl interface input (https://github.com/JuliaData/Tables.jl) to file (and register a corresonding data product in the local Data Registry.)
+Write a table as a component to an hdf5 file.
+"""
+function write_table(handle::DataRegistryHandle, table, data_product::String)
+   write_array(handle, table, data_product, component)
+end
 
 """
-function write_table(handle::DataRegistryHandle, table, data_product::String; public::Bool=true)
-   temp_fp = tempname()
-   ## write to CSV file
-   CSV.write(temp_fp, table)
-   return register_data_product(handle, data_product, temp_fp, public, nothing)
-   ## 1. API call to LDR (retrieve metadata)
-   ## 2. register dp (possibly)
-   # 3. register component (definitely)
-end
+    write_keyval(handle, data, data_product, component)
 
-## write key val (i.e. Dict) - internal
-function write_keyval(handle::DataRegistryHandle, data::Dict, data_product::String, component::String, public::Bool)
-   temp_fp = tempname()       # write to TOML
-   open(temp_fp, "w") do io
+Write key val (i.e. Dict) - internal
+""" 
+function write_keyval(handle::DataRegistryHandle, data::Dict, data_product::String, component::String)
+   # Get storage location and write to metadata to handle
+   path = resolve_write(handle, data_product, component, "toml")
+   
+   # Write data to TOML
+   open(path, "w") do io
       TOML.print(io, data)
-   end                        # register data product
-   return register_data_product(handle, data_product, temp_fp, public, component)
+   end      
+   
+   return nothing
 end
 
-## write point estimate
 """
     write_estimate(handle, value, data_product, component)
 
-Write point estimate to file (and register a corresonding data product in the local Data Registry.)
-
+Write a point estimate as a component to a toml file.
 """
 function write_estimate(handle::DataRegistryHandle, value, data_product::String, component::String; public::Bool=true)
-   data = Dict(component => Dict{String,Any}("value"=>value,"type"=>"point-estimate"))
-   return write_keyval(handle, data, data_product, component, public)
+   data = Dict(component => Dict{String,Any}("value" => value, "type" => "point-estimate"))
+   return write_keyval(handle, data, data_product, component)
 end
 
-## write distribution
 """
     write_distribution(handle, distribution, parameters, data_product, component)
 
-Write specification of a statistical distribution to file (and register a corresonding data product in the local Data Registry.)
-
+Write a distribution as a component to a toml file.
 """
 function write_distribution(handle::DataRegistryHandle, distribution::String, parameters, data_product::String, component::String; public::Bool=true)
    data = Dict(component => Dict{String,Any}("distribution"=>distribution, "parameters"=>parameters, "type"=>"distribution"))
-   return write_keyval(handle, data, data_product, component, public)
+   return write_keyval(handle, data, data_product, component)
 end
 
 ## get object associated with entity
