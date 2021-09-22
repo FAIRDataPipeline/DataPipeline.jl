@@ -193,7 +193,8 @@ function initialise(config_file::String, submission_script::String)
 
    # Register datastore 
    datastore = config["run_metadata"]["write_data_store"]
-   storage_root_query = Dict("root" => datastore, "local" => true)
+   register_path = "file://$datastore"
+   storage_root_query = Dict("root" => register_path, "local" => true)
    storage_root_uri = DataPipeline.http_post_data("storage_root", storage_root_query)
    
    # Register config file
