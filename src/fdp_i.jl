@@ -236,18 +236,19 @@ Complete (i.e. finish) code run.
 """
 function finalise(handle::DataRegistryHandle)
 
-   # Register outputs
-   inputs = []
+   # Register inputs
+   inputs = Vector{String}()
    for (key, value) in handle.inputs
       dp_url = handle.inputs[key]["component_url"]
-      append!(inputs, dp_url)
+      dp_url = isa(dp_url, Vector) ? dp_url[1] : dp_url
+      push!(inputs, dp_url)
    end
    
    # Register outputs
-   outputs = []
+   outputs = Vector{String}()
    for (key, value) in handle.outputs
       dp_url = DataPipeline.register_data_product(handle, key)
-      append!(outputs, dp_url)
+      push!(outputs, dp_url)
    end
    
    # Register code run
