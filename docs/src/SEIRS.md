@@ -6,6 +6,10 @@ print(pwd())
 ```
 
 ```@example
+run(`cmd /C ls`)
+```
+
+```@example
 cd("/home/runner/work/DataPipeline.jl/DataPipeline.jl")
 run(`fair init --ci`)
 ```
