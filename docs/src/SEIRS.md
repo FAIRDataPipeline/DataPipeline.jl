@@ -11,12 +11,15 @@ run(command)
 ```
 
 ```@example
+run(`cd ../..`)
 run(`fair init --ci`)
-run(`fair pull examples/fdp/SEIRSconfig.yaml`)
+run(`cd docs/build/`)
+run(`fair pull ../../examples/fdp/SEIRSconfig.yaml`)
 ```
 
 dsf
 
 ```@example
-run(`fair run examples/fdp/SEIRSconfig.yaml`)
+print(pwd())
+run(`fair run ../../examples/fdp/SEIRSconfig.yaml`)
 ```
