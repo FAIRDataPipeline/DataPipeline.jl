@@ -2,7 +2,14 @@
 This is the updated manual for the upcoming `FAIR` interfaced version of the Data Registry package.
 
 ```@example
+print(pwd())
+```
+
+```@example
 run(`ls`)
+```
+
+```@example
 run(`fair init --ci`)
 run(`fair pull examples/fdp/SEIRSconfig.yaml`)
 ```
