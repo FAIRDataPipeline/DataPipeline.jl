@@ -6,19 +6,7 @@ print(pwd())
 ```
 
 ```@example
-command = `ls`
-run(command)
-```
-
-```@example
 run(`cd /home/runner/work/DataPipeline.jl/DataPipeline.jl`)
-```
-
-```@example
-print(pwd())
-```
-
-```@example
 run(`fair init --ci`)
 run(`cd docs/build/`)
 run(`fair pull ../../examples/fdp/SEIRSconfig.yaml`)
