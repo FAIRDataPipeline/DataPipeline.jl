@@ -1,0 +1,5 @@
+run_metadata:
+  default_input_namespace: testing
+  default_output_namespace: testing
+  description: Project description
+  script: echo "Hello World!"
