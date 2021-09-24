@@ -11,7 +11,14 @@ run(command)
 ```
 
 ```@example
-run(`cd ../..`)
+run(`cd /home/runner/work/DataPipeline.jl/DataPipeline.jl`)
+```
+
+```@example
+print(pwd())
+```
+
+```@example
 run(`fair init --ci`)
 run(`cd docs/build/`)
 run(`fair pull ../../examples/fdp/SEIRSconfig.yaml`)
@@ -20,6 +27,5 @@ run(`fair pull ../../examples/fdp/SEIRSconfig.yaml`)
 dsf
 
 ```@example
-print(pwd())
 run(`fair run ../../examples/fdp/SEIRSconfig.yaml`)
 ```
