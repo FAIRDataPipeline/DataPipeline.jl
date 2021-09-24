@@ -6,7 +6,8 @@ print(pwd())
 ```
 
 ```@example
-run(`ls`)
+command = `ls`
+run(command)
 ```
 
 ```@example
