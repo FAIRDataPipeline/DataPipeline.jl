@@ -6,7 +6,7 @@ print(pwd())
 ```
 
 ```@example
-run(`cmd /C ls`)
+show(run(`ls`))
 ```
 
 ```@example
