@@ -1,10 +1,39 @@
 module TestDataPipeline
 
 using DataPipeline
-using CSV
-using DataFrames
-using Random
 using Test
+using Dates
+
+Test.@testset "convert_query()" begin
+    # Test boolean
+    test_boolean = convert_query(Dict("public" => true))
+    @test test_boolean == "?public=true"
+
+    # Test strings
+    test_string = convert_query(Dict("name" => "string/1"))
+    @test test_string == "?name=string%2F1"
+
+    test_string2 = convert_query(Dict("description" => "Short description"))
+    @test test_string2 == "?description=Short%20description"
+
+    # Test datetimes
+    rt = Dates.now()
+    rt = Dates.format(rt, "yyyy-mm-dd HH:MM:SS")
+    test_date = convert_query(Dict("run_date" => rt))
+    ans = replace(replace(rt, s":" => s"%3A"), " " => "%20")
+    @test test_date == "?run_date=$ans"
+
+    # Test URLs
+    test_url = convert_query(Dict("namespace" => "http://localhost:8000/api/namespace/19/"))
+    @test test_url == "?namespace=19"
+end
+
+
+
+
+
+
+
 
 # Test.@testset "package tests" begin
 #     ## 1. Empty code run
