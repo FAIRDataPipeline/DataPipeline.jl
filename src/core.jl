@@ -20,7 +20,7 @@ function convert_query(query::Dict)
     for (key, value) in query
         if isa(value, Bool)
             tmp = value
-        elseif all(contains.(value, API_ROOT))
+        elseif all(occursin.(API_ROOT, value))
             tmp = extract_id(value)
             tmp = isa(tmp, Vector) ? join(tmp, ",") : tmp
         else
