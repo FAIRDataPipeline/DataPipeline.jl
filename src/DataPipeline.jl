@@ -67,10 +67,14 @@ export write_keyval
 export get_object_components
 export get_storage_loc
 
-include("model.jl")
-export SEIRS_model, plot_SEIRS, get_parameter
-
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits
+
+end # module
+
+module SEIRSmodel
+
+include("model.jl")
+export SEIRS_model, plot_SEIRS, get_parameter
 
 end # module
