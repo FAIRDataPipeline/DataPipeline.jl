@@ -13,8 +13,9 @@ Test.@testset "convert_query()" begin
     test_string = convert_query(Dict("name" => "string/1"))
     @test test_string == "?name=string%2F1"
 
-    test_string2 = convert_query(Dict("description" => "Short description"))
-    @test test_string2 == "?description=Short%20description"
+    # Test multiple key-value pairs
+    test_string2 = convert_query(Dict("description" => "Short description", "key" => "value"))
+    @test test_string2 == "?key=value&description=Short%20description"
 
     # Test datetimes
     rt = Dates.now()
@@ -26,6 +27,10 @@ Test.@testset "convert_query()" begin
     # Test URLs
     test_url = convert_query(Dict("namespace" => "http://localhost:8000/api/namespace/19/"))
     @test test_url == "?namespace=19"
+
+    # Test URLs in array
+    test_url = convert_query(Dict("authors" => ["http://localhost:8000/api/author/1/", "http://localhost:8000/api/author/2/"]))
+    @test test_url == "?authors=1,2"
 end
 
 
