@@ -11,19 +11,17 @@ show(run(`ls`))
 
 ```@example
 cd("/home/runner/work/DataPipeline.jl/DataPipeline.jl")
+print(pwd())
 show(run(`fair init --ci`))
 ```
 
 ```@example
 print(pwd())
-```
-
-```@example
-show(run(`fair pull ../../examples/fdp/SEIRSconfig.yaml`))
+show(run(`fair pull /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/SEIRSconfig.yaml`))
 ```
 
 dsf
 
 ```@example
-show(run(`fair run ../../examples/fdp/SEIRSconfig.yaml`))
+show(run(`fair run /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/SEIRSconfig.yaml`))
 ```
