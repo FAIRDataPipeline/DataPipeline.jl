@@ -15,24 +15,24 @@ function initialise(config_file::String, submission_script::String)
    datastore = config["run_metadata"]["write_data_store"]
    register_path = "file://$datastore"
    storage_root_query = Dict("root" => register_path, "local" => true)
-   storage_root_uri = DataPipeline.http_post_data("storage_root", storage_root_query)
+   storage_root_uri = http_post_data("storage_root", storage_root_query)
    
    # Register config file
-   config_hash = DataPipeline.get_file_hash(config_file)
-   config_obj_uri = DataPipeline.register_object(config_file, config_hash, "Working config file.", storage_root_uri, "yaml")
+   config_hash = get_file_hash(config_file)
+   config_obj_uri = register_object(config_file, config_hash, "Working config file.", storage_root_uri, "yaml")
    
    # Register submission script   
-   script_hash = DataPipeline.get_file_hash(submission_script)
-   script_obj_uri = DataPipeline.register_object(submission_script, script_hash, "Submission script (Julia.)", storage_root_uri, "sh")
+   script_hash = get_file_hash(submission_script)
+   script_obj_uri = register_object(submission_script, script_hash, "Submission script (Julia.)", storage_root_uri, "sh")
 
    # Register remote repository
    remote_repo = config["run_metadata"]["remote_repo"]
    repo_root = match(r"([a-z]*://[a-z]*.[a-z]*/).*", remote_repo)[1]
    remote_repo = replace(remote_repo, repo_root => "")
    repo_root_query = Dict("root" => repo_root, "local" => false)
-   repo_root_uri = DataPipeline.http_post_data("storage_root", repo_root_query)
+   repo_root_uri = http_post_data("storage_root", repo_root_query)
    latest_commit = config["run_metadata"]["latest_commit"]
-   repo_obj_url = DataPipeline.register_object(remote_repo, latest_commit, "Remote code repository.", repo_root_uri, public=false)
+   repo_obj_url = register_object(remote_repo, latest_commit, "Remote code repository.", repo_root_uri, public=false)
 
    # Register code run
    rt = Dates.now()
@@ -41,7 +41,7 @@ function initialise(config_file::String, submission_script::String)
    body = Dict("run_date" => rt, "description" => coderun_description, "code_repo" => repo_obj_url, "model_config" => config_obj_uri, 
    "submission_script" => script_obj_uri)
 
-   coderun_url = DataPipeline.http_post_data("code_run", body)
+   coderun_url = http_post_data("code_run", body)
 
    println(" - pipeline initialised.")
    
@@ -67,12 +67,12 @@ function finalise(handle::DataRegistryHandle)
    # Register outputs
    outputs = Vector{String}()
    for (key, value) in handle.outputs
-      dp_url = DataPipeline.register_data_product(handle, key)
+      dp_url = register_data_product(handle, key)
       push!(outputs, dp_url)
    end
    
    # Register code run
-   url = DataPipeline.patch_code_run(handle, inputs, outputs)
+   url = patch_code_run(handle, inputs, outputs)
    println("finished - code run locally registered as: ", url, "\n")
    #output = (code_run=url, config_obj=handle.config_obj, script_obj=handle.script_obj)
    #isnothing(handle.repo_obj) && (return output)
@@ -97,7 +97,7 @@ function link_read(handle::DataRegistryHandle, data_product::String)
    
    # Is the data product already in the registry?
    namespace_id = get_id("namespace", Dict("name" => use_namespace))
-   dp_entry = DataPipeline.get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
+   dp_entry = get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
 
    if isnothing(dp_entry)
       # If the data product isn't in the registry, throw an error
@@ -109,12 +109,12 @@ function link_read(handle::DataRegistryHandle, data_product::String)
       println("data product found: ", use_data_product, " (url: ", dp_entry["url"], ")")
        
       # Get component url 
-      object_entry = DataPipeline.http_get_json(obj_url)
+      object_entry = http_get_json(obj_url)
       component_url = object_entry["components"]
       @assert length(component_url) == 1
 
       # Get storage location
-      path = DataPipeline.get_storage_loc(obj_url)
+      path = get_storage_loc(obj_url)
       path = replace(path, "file://" => "")
       
       # Add metadata to handle
@@ -135,7 +135,7 @@ Read [array] data product.
 """
 function read_array(handle::DataRegistryHandle, data_product::String, component=nothing)
    ## 1. API call to LDR
-   tmp = DataPipeline.read_data_product(handle, data_product, component)
+   tmp = read_data_product(handle, data_product, component)
    # println("RDP: ", tmp)
    ## 2. read array from file -> process
    output = process_h5_file(tmp, false, C_DEBUG_MODE)
@@ -188,7 +188,7 @@ Registers a file-based data product based on information provided in the working
 """
 function link_write(handle::DataRegistryHandle, data_product::String)
    # Get metadata
-   wmd = DataPipeline.get_dp_metadata(handle, data_product, "write")
+   wmd = get_dp_metadata(handle, data_product, "write")
    data_store = handle.config["run_metadata"]["write_data_store"]
    use_namespace = get(wmd["use"], "namespace", handle.config["run_metadata"]["default_output_namespace"])
    use_data_product = get(wmd["use"], "data_product", data_product)

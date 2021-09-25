@@ -29,14 +29,14 @@ Register object in local registry and return the URL of the entry.
 function register_object(path::String, hash::String, description::String, root_uri::String; public::Bool=true)
    # Register storage location
    storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, "storage_root" => root_uri)
-   storage_loc_uri = DataPipeline.http_post_data("storage_location", storage_loc_query)
+   storage_loc_uri = http_post_data("storage_location", storage_loc_query)
 
    # Get author URL
-   authors_url = DataPipeline.get_author_url()
+   authors_url = get_author_url()
 
    # Register object
    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, "authors" => [authors_url])
-   object_url = DataPipeline.http_post_data("object", object_query)
+   object_url = http_post_data("object", object_query)
 
    return object_url
 end
@@ -49,13 +49,13 @@ Register object in local registry and return the URL of the entry.
 function register_object(path::String, hash::String, description::String, root_uri::String, file_type::String; public::Bool=true)
    # Register storage location
    storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, "storage_root" => root_uri)
-   storage_loc_uri = DataPipeline.http_post_data("storage_location", storage_loc_query)
+   storage_loc_uri = http_post_data("storage_location", storage_loc_query)
 
    # Get author URL
-   authors_url = DataPipeline.get_author_url()
+   authors_url = get_author_url()
 
    # Register / get file_type entry
-   file_type_url = DataPipeline.get_url("file_type", Dict("extension" => file_type))
+   file_type_url = get_url("file_type", Dict("extension" => file_type))
    ft_query = Dict("name" => file_type, "extension" => file_type)
    if isnothing(file_type_url)
       file_type_url = http_post_data("file_type", ft_query)
@@ -94,9 +94,9 @@ end
 Get author url
 """
 function get_author_url()
-   users_id = DataPipeline.get_id("users", Dict("username" => "admin"))
-   user_author_url = DataPipeline.get_url("user_author", Dict("user" => users_id))
-   author_entry = DataPipeline.http_get_json(user_author_url)
+   users_id = get_id("users", Dict("username" => "admin"))
+   user_author_url = get_url("user_author", Dict("user" => users_id))
+   author_entry = http_get_json(user_author_url)
    author_url = author_entry["author"]
    return author_url
 end
@@ -108,7 +108,7 @@ Read dp and return sl - for internal use
 """
 function read_data_product(handle::DataRegistryHandle, data_product::String, component::String)
    # Get metadata
-   rmd = DataPipeline.get_dp_metadata(handle, data_product, "read")
+   rmd = get_dp_metadata(handle, data_product, "read")
    use_data_product = get(rmd["use"], "data_product", data_product)
    use_component = get(rmd["use"], "component", component)
    use_namespace = get(rmd["use"], "namespace", handle.config["run_metadata"]["default_input_namespace"])
@@ -116,7 +116,7 @@ function read_data_product(handle::DataRegistryHandle, data_product::String, com
    
    # Is the data product already in the registry?
    namespace_id = get_id("namespace", Dict("name" => use_namespace))
-   dp_entry = DataPipeline.get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
+   dp_entry = get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
 
    if isnothing(dp_entry)
       # If the data product isn't in the registry, throw an error
@@ -130,7 +130,7 @@ function read_data_product(handle::DataRegistryHandle, data_product::String, com
       println("data product found: ", use_data_product, " (url: ", obj_url, ")")
       
       # Get storage location
-      path = DataPipeline.get_storage_loc(obj_url)
+      path = get_storage_loc(obj_url)
       
       # Add metadata to handle
       metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, "use_version" => use_version, "component_url" => component_url)
@@ -186,11 +186,11 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    filepath = wmd["path"]
 
    # Get hash
-   hash = DataPipeline.get_file_hash(filepath)
+   hash = get_file_hash(filepath)
    
    # Is the data product already in the registry?
-   namespace_id = DataPipeline.get_id("namespace", Dict("name" => use_namespace))
-   dp_entry = DataPipeline.get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
+   namespace_id = get_id("namespace", Dict("name" => use_namespace))
+   dp_entry = get_entry("data_product", Dict("name" => use_data_product, "namespace" => namespace_id, "version" => use_version))
    
    exists = !ismissing(dp_entry)
    
@@ -204,21 +204,21 @@ function register_data_product(handle::DataRegistryHandle, data_product::String)
    file_type = String(split.(new_path, ".")[2])
 
    # Register Object
-   obj_url = DataPipeline.register_object(new_path, hash, wmd["description"], storage_root_uri, file_type, public=wmd["public"])
+   obj_url = register_object(new_path, hash, wmd["description"], storage_root_uri, file_type, public=wmd["public"])
    
    # Register DataProduct
-   ns_url = DataPipeline.get_url("namespace", Dict("name" => use_namespace))
+   ns_url = get_url("namespace", Dict("name" => use_namespace))
    body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, "version" => use_version)
-   resp = DataPipeline.http_post_data("data_product", body)
+   resp = http_post_data("data_product", body)
    
    if isnothing(use_component)
-      obj_entry = DataPipeline.http_get_json(obj_url)
+      obj_entry = http_get_json(obj_url)
       component_url = obj_entry["components"]
       @assert length(component_url) == 1
       component_url = component_url[1]
    else
       component_query = Dict("object" => obj_url, "name" => use_component)
-      component_url = DataPipeline.http_post_data("object_component", component_query)
+      component_url = http_post_data("object_component", component_query)
    end
 
    return component_url
@@ -247,7 +247,7 @@ Registers a file-based data product based on information provided in the working
 """
 function resolve_write(handle::DataRegistryHandle, data_product::String, component::String, file_type::String)
    # Get metadata
-   wmd = DataPipeline.get_dp_metadata(handle, data_product, "write")
+   wmd = get_dp_metadata(handle, data_product, "write")
    data_store = handle.config["run_metadata"]["write_data_store"]
    use_namespace = get(wmd["use"], "namespace", handle.config["run_metadata"]["default_output_namespace"])
    use_data_product = get(wmd["use"], "data_product", data_product)
@@ -304,8 +304,6 @@ function get_object_components(url::String)
    end
 end
 
-
-
 ## get object_component
 # function add_object_component!(array::Array, obj_url::String, post_component::Bool, component=nothing)
 #     # Post component to registry
@@ -314,7 +312,7 @@ end
 #         rc = http_post_data("object_component", body)
 #     end
 #     # Get object entry
-#     resp = DataPipeline.http_get_json(obj_url)  # object
+#     resp = http_get_json(obj_url)  # object
 #     # Get component entry
 #     for i in length(resp["components"])         # all components
 #         if !post_component && !isnothing(component)
