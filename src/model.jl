@@ -1,3 +1,5 @@
+using DataFrames
+
 function SEIRS_model(initial_state::Dict, timesteps::Int64, years::Int64,
    alpha::Float64, beta::Float64, inv_gamma::Float64,
    inv_omega::Float64, inv_mu::Float64, inv_sigma::Float64)
