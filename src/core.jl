@@ -19,14 +19,14 @@ function convert_query(query::Dict)
     url = "?"
     for (key, value) in query
         if isa(value, Bool)
-            query = value
+            tmp = value
         elseif all(contains.(value, API_ROOT))
-            query = extract_id(value)
-            query = isa(query, Vector) ? join(query, ",") : query
+            tmp = extract_id(value)
+            tmp = isa(tmp, Vector) ? join(tmp, ",") : tmp
         else
-            query = URIs.escapeuri(value)
+            tmp = URIs.escapeuri(value)
         end
-        url = "$url$key=$query&"
+        url = "$url$key=$tmp&"
     end
     url = chop(url, tail = 1)
     return url
