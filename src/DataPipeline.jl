@@ -49,7 +49,7 @@ export get_file_hash, get_access_token
 
 include("api.jl")
 export initialise, finalise
-export link_read, link_write
+export link_read!, link_write!
 export read_array, read_table, read_distribution, read_estimate
 export write_array, write_table, write_distribution, write_estimate
 export raise_issue

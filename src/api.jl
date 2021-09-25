@@ -88,7 +88,7 @@ Returns the file path of a data product that has been registered in the local da
 - `handle::DataRegistryHandle`: code run handle.
 - `data_product::String`: the name of the data product.
 """
-function link_read(handle::DataRegistryHandle, data_product::String)
+function link_read!(handle::DataRegistryHandle, data_product::String)
    # Get metadata
    rmd = get_dp_metadata(handle, data_product, "read")
    use_data_product = get(rmd["use"], "data_product", data_product)
@@ -186,7 +186,7 @@ end
 
 Registers a file-based data product based on information provided in the working config file, e.g. for writing external objects.
 """
-function link_write(handle::DataRegistryHandle, data_product::String)
+function link_write!(handle::DataRegistryHandle, data_product::String)
    # Get metadata
    wmd = get_dp_metadata(handle, data_product, "write")
    data_store = handle.config["run_metadata"]["write_data_store"]

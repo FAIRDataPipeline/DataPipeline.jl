@@ -13,8 +13,9 @@ submission_script = joinpath(ENV["FDP_CONFIG_DIR"], "script.sh")
 handle = initialise(config_file, submission_script)
 
 # Read model parameters
-path = link_read(handle, "SEIRS_model/parameters")
+path = link_read!(handle, "SEIRS_model/parameters")
 static_params = CSV.read(path, DataFrames.DataFrame)
+
 alpha = get_parameter(static_params, "alpha")
 beta = get_parameter(static_params, "beta")
 inv_gamma = get_parameter(static_params, "inv_gamma")
@@ -34,10 +35,10 @@ inv_gamma, inv_omega, inv_mu, inv_sigma)
 g = plot_SEIRS(results)
 
 # Save outputs to data store
-path = link_write(handle, "SEIRS_model/results/model_output")
+path = link_write!(handle, "SEIRS_model/results/model_output")
 CSV.write(path, results)
 
-path = link_write(handle, "SEIRS_model/results/figure")
+path = link_write!(handle, "SEIRS_model/results/figure")
 savefig(g, path)
 
 # Register code run in local registry
