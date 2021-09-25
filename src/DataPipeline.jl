@@ -55,17 +55,6 @@ export write_array, write_table, write_distribution, write_estimate
 export raise_issue
 
 include("fdp_i.jl")
-export register_object
-export patch_code_run
-export get_author_url
-export read_data_product
-export read_toml
-export get_dp_metadata
-export register_data_product
-export resolve_write
-export write_keyval
-export get_object_components
-export get_storage_loc
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits
