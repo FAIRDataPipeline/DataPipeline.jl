@@ -8,39 +8,65 @@ struct DataRegistryHandle
     code_run_obj::String
     inputs::Dict
     outputs::Dict
- end
+end
 
 """
-    convert_query(query)
+ postentry(table, data)
+
+Upload to data registry
+"""
+function postentry(table::String, query::Dict)
+    url = string(API_ROOT, table, "/")
+    token = gettoken()
+    headers = Dict("Authorization" => token, "Content-Type" => "application/json")
+    body = JSON.json(query)
+ 
+    resolved_query = DataPipeline.convertquery(query)
+    r = DataPipeline.getentry(URIs.URI("$url$resolved_query"))
+
+    if r["count"] == 1
+        entry_url = r["results"][1]["url"]
+
+    elseif r["count"] == 0
+        r = HTTP.request("POST", url, headers=headers, body=body)
+        resp = String(r.body)
+        json_resp = JSON.parse(resp)
+        entry_url = json_resp["url"]
+    end
+    return entry_url
+end
+
+"""
+    convertquery(query)
 
 Convert dictionary to url query.
 """
-function convert_query(query::Dict) 
+function convertquery(query::Dict) 
     url = "?"
     for (key, value) in query
         if isa(value, Bool)
             tmp = value
         elseif all(occursin.(API_ROOT, value))
-            tmp = extract_id(value)
+            tmp = extractid(value)
             tmp = isa(tmp, Vector) ? join(tmp, ",") : tmp
         else
             tmp = URIs.escapeuri(value)
         end
         url = "$url$key=$tmp&"
     end
-    url = chop(url, tail = 1)
+    url = chop(url, tail=1)
     return url
 end
 
 """
-    get_entry(table, query)
+    getentry(table, query)
 
 Use query to get entry from local registry
 """
-function get_entry(table::String, query::Dict)
+function getentry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    resolved_query = convert_query(query)
-    r = DataPipeline.http_get_json("$url$resolved_query")
+    resolved_query = convertquery(query)
+    r = getentry(URIs.URI("$url$resolved_query"))
 
     if r["count"] == 0
         return nothing
@@ -52,94 +78,12 @@ function get_entry(table::String, query::Dict)
 end
 
 """
-    get_url(table, query)
-
-Use query to get entry url from local registry
-"""
-function get_url(table::String, query::Dict)
-    entry = DataPipeline.get_entry(table, query)
-    output = isnothing(entry) ? nothing : entry["url"] 
-    return output
-end
-
-"""
-    get_id(table, query)
-
-Use query to get entry id from local registry
-"""
-function get_id(table::String, query::Dict)
-    url = DataPipeline.get_url(table, query)
-    output = isnothing(url) ? nothing :  extract_id(url)
-    return output
-end
-
-"""
-    extract_id(url)
-
-Extract id from url
-"""
-function extract_id(url)
-   if !isa(url, Vector)
-      tmp = match(r".*/([0-9]*)/", url)
-      return String(tmp[1])
-   else
-      output = Char[]
-      for i in url
-         tmp = match(r".*/([0-9]*)/", i)
-         append!(output, tmp[1])
-      end
-      return output
-   end
-end
-
-"""
-    check_exists(table, query)
-
-Use query to check whether entry exists in local registry
-"""
-function check_exists(table::String, query::Dict)
-    url = string(API_ROOT, table, "/")
-    resolved_query = convert_query(query)
-    r = DataPipeline.http_get_json("$url$resolved_query")
-    exists = r["count"]==0 ? false : true
-    return exists
-end
-
-"""
-    http_post_data(table, data)
-
-Upload to data registry
-"""
-function http_post_data(table::String, query::Dict)
-    url = string(API_ROOT, table, "/")
-    token = DataPipeline.get_access_token()
-    headers = Dict("Authorization" => token, "Content-Type" => "application/json")
-    body = JSON.json(query)
-    
-    resolved_query = convert_query(query)
-    r = DataPipeline.http_get_json("$url$resolved_query")
-
-    if r["count"] == 1
-        entry_url = r["results"][1]["url"]
-
-    elseif r["count"] == 0
-        r = HTTP.request("POST", url, headers=headers, body=body)
-        resp = String(r.body)
-        json_resp = JSON.parse(resp)
-        entry_url = json_resp["url"]
-    end
-
-    return entry_url
-end
-
-"""
-    http_get_json(url)
+    getentry(url)
 
 Read data registry
 """
-function http_get_json(url::String)
-    url = replace(url, LOCAL_DR_PORTLESS => API_ROOT)
-    token = DataPipeline.get_access_token()
+function getentry(url::URIs.URI)
+    token = gettoken()
     headers = Dict("Authorization" => token, "Content-Type" => "application/json")
     try
         r = HTTP.request("GET", url, headers)
@@ -153,24 +97,78 @@ function http_get_json(url::String)
 end
 
 """
-    get_file_hash(filepath)
+    geturl(table, query)
+
+Use query to get entry url from local registry
+"""
+function geturl(table::String, query::Dict)
+    entry = getentry(table, query)
+    output = isnothing(entry) ? nothing : entry["url"] 
+    return output
+end
+
+"""
+    getid(table, query)
+
+Use query to get entry id from local registry
+"""
+function getid(table::String, query::Dict)
+    url = geturl(table, query)
+    output = isnothing(url) ? nothing :  extractid(url)
+    return output
+end
+
+"""
+    extractid(url)
+
+Extract id from url
+"""
+function extractid(url)
+    if !isa(url, Vector)
+        tmp = match(r".*/([0-9]*)/", url)
+        return String(tmp[1])
+    else
+        output = Char[]
+        for i in url
+            tmp = match(r".*/([0-9]*)/", i)
+            append!(output, tmp[1])
+        end
+        return output
+    end
+end
+
+"""
+    checkexists(table, query)
+
+Use query to check whether entry exists in local registry
+"""
+function checkexists(table::String, query::Dict)
+    url = string(API_ROOT, table, "/")
+    resolved_query = convertquery(query)
+    r = getentry(URIs.URI("$url$resolved_query"))
+    exists = r["count"] == 0 ? false : true
+    return exists
+end
+
+"""
+    getfilehash(filepath)
 
 Get file hash
 """
-function get_file_hash(filepath::String)
-    fhash = bytes2hex(SHA.sha2_256(filepath))
+function getfilehash(filepath::String)
+fhash = bytes2hex(SHA.sha2_256(filepath))
     return fhash
 end
 
 """
-    get_access_token()
+    gettoken()
 
 Get local repository access token.
 """
-function get_access_token()
-   fp = expanduser("~/.fair/registry/token")
-   token = open(fp) do file
-     read(file, String)
-   end
-   return string("token ", chomp(token))
+function gettoken()
+    fp = expanduser("~/.fair/registry/token")
+    token = open(fp) do file
+        read(file, String)
+    end
+    return string("token ", chomp(token))
 end

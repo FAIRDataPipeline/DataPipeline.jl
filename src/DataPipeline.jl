@@ -40,7 +40,7 @@ const DF_MR_SUB_SCR_DESC = "Submission script."
 const FILE_SR_STEM = "file://"
 
 include("core.jl")
-export get_file_hash, get_access_token
+export getfilehash, gettoken
 
 include("api.jl")
 export initialise, finalise
@@ -56,9 +56,9 @@ include("api_audit.jl")         # DR audits
 
 end # module
 
-module SEIRSmodel
+module SeirsModel
 
 include("model.jl")
-export SEIRS_model, plot_SEIRS, get_parameter
+export modelseirs, plotseirs, getparameter
 
 end # module

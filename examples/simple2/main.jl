@@ -29,12 +29,13 @@ using DataPipeline
 using CSV
 using DataFrames
 using Random
+using URIs
 
 submission_script = "location"
 
 ## 1. Empty code run
 wc = "examples/simple2/working_config1.yaml"
-handle = DataPipeline.initialise(wc, submission_script)
+handle = initialise(wc, submission_script)
 DataPipeline.finalise(handle)
 
 ## 2. Write data product (HDF5)
@@ -59,14 +60,14 @@ DataPipeline.finalise(handle)
 wc = "examples/simple2/working_config4.yaml"
 handle = DataPipeline.initialise(wc, submission_script)
 dat = DataFrame(rand(4, 4), :auto)
-path = DataPipeline.link_write(handle, "test/csv")
+path = DataPipeline.link_write!(handle, "test/csv")
 tmp = CSV.write(path, dat)
 DataPipeline.finalise(handle)
 
 ## 5. Read data product (csv)
 wc = "examples/simple2/working_config5.yaml"
 handle = DataPipeline.initialise(wc, submission_script)
-path = DataPipeline.link_read(handle, "test/csv")
+path = DataPipeline.link_read!(handle, "test/csv")
 dat = DataFrame(CSV.File(path))
 println("TABLE: ", DataFrames.first(tmp, 3))
 DataPipeline.finalise(handle)

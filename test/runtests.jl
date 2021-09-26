@@ -4,32 +4,32 @@ using DataPipeline
 using Test
 using Dates
 
-Test.@testset "convert_query()" begin
+Test.@testset "convertquery()" begin
     # Test boolean
-    test_boolean = DataPipeline.convert_query(Dict("public" => true))
+    test_boolean = DataPipeline.convertquery(Dict("public" => true))
     @test test_boolean == "?public=true"
 
     # Test strings
-    test_string = DataPipeline.convert_query(Dict("name" => "string/1"))
+    test_string = DataPipeline.convertquery(Dict("name" => "string/1"))
     @test test_string == "?name=string%2F1"
 
     # Test multiple key-value pairs
-    test_string2 = DataPipeline.convert_query(Dict("description" => "Short description", "key" => "value"))
+    test_string2 = DataPipeline.convertquery(Dict("description" => "Short description", "key" => "value"))
     @test test_string2 == "?key=value&description=Short%20description"
 
     # Test datetimes
     rt = Dates.now()
     rt = Dates.format(rt, "yyyy-mm-dd HH:MM:SS")
-    test_date = DataPipeline.convert_query(Dict("run_date" => rt))
+    test_date = DataPipeline.convertquery(Dict("run_date" => rt))
     ans = replace(replace(rt, s":" => s"%3A"), " " => "%20")
     @test test_date == "?run_date=$ans"
 
     # Test URLs
-    test_url = DataPipeline.convert_query(Dict("namespace" => "http://localhost:8000/api/namespace/19/"))
+    test_url = DataPipeline.convertquery(Dict("namespace" => "http://localhost:8000/api/namespace/19/"))
     @test test_url == "?namespace=19"
 
     # Test URLs in array
-    test_url = DataPipeline.convert_query(Dict("authors" => ["http://localhost:8000/api/author/1/", "http://localhost:8000/api/author/2/"]))
+    test_url = DataPipeline.convertquery(Dict("authors" => ["http://localhost:8000/api/author/1/", "http://localhost:8000/api/author/2/"]))
     @test test_url == "?authors=1,2"
 end
 
