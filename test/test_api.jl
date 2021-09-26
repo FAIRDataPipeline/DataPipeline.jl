@@ -4,8 +4,6 @@ using DataPipeline
 using HDF5
 using Test
 
-DataPipeline._startregistry()
-
 Test.@testset "write_array()" begin
     config = "test.yaml"
     data_product = DataPipeline._randomhash()

@@ -5,10 +5,6 @@ Start FAIR registry.
 """ 
 function _startregistry()
     path = expanduser("~/.fair/registry/scripts/start_fair_registry")
-    if !ispath(path) 
-        path = joinpath("/home/runner/work/DataPipeline.jl/DataPipeline.jl", 
-                        ".fair/registry/scripts/start_fair_registry")
-    end
     cmd = `sh $path`
     run(cmd)
     return nothing
