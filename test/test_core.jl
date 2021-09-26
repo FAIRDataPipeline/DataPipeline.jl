@@ -1,5 +1,6 @@
 module TestCore
 
+using Dates
 using DataPipeline
 using Test
 
@@ -21,7 +22,7 @@ Test.@testset "_convertquery()" begin
     rt = Dates.now()
     rt = Dates.format(rt, "yyyy-mm-dd HH:MM:SS")
     test_date = DataPipeline._convertquery(Dict("run_date" => rt))
-    ans = replace(replace(rt, s":" => s"%3A"), " " => "%20")
+    ans = replace(replace(rt, s":" => s"%3A"), s" " => s"%20")
     @test test_date == "?run_date=$ans"
 
     # Test URLs

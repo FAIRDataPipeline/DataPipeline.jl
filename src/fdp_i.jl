@@ -22,29 +22,6 @@ struct ConfigFileException <: Exception
 end
 
 """
-    _registerobject(path, hash, description, root_uri[, public])
-
-Register object in local registry and return the URL of the entry.
-"""
-function _registerobject(path::String, hash::String, description::String, root_uri::String; 
-                         public::Bool=true)
-    # Register storage location
-    storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, 
-                             "storage_root" => root_uri)
-    storage_loc_uri = _postentry("storage_location", storage_loc_query)
-
-    # Get author URL
-    authors_url = _getauthorurl()
-
-    # Register object
-    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, 
-                        "authors" => [authors_url])
-    object_url = _postentry("object", object_query)
-
-    return object_url
-end
-
-"""
     _registerobject(path, hash, description, root_uri, file_type[, public])
 
 Register object in local registry and return the URL of the entry.
@@ -223,7 +200,7 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
     oldname = split.(basename(filepath), ".")[1]
     new_filepath = replace(filepath, oldname => hash)
     isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
-    new_path = replace(new_filepath, datastore => "")
+    new_path = replace(new_filepath, datastore => s"")
 
     # Get file type
     file_type = String(split.(new_path, ".")[2])
@@ -369,7 +346,7 @@ function _getstoragelocation(object_url)
     storage_root_url = storage_loc_entry["storage_root"]
     storage_root_entry = _getentry(URIs.URI(storage_root_url))
     storage_root = storage_root_entry["root"]
-    root = replace(storage_root, "file://" => "")
+    root = replace(storage_root, s"file://" => s"")
     path = joinpath(root, storage_loc_path)
     return path
 end

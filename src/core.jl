@@ -1,27 +1,32 @@
 """
-This is an `X`
+    DataRegistryHandle
 
 # Fields
-- a: First letter of the English alphabet
-- b: Second letter of the English alphabet
-- c: C is for cookie
+- `config`: working config.yaml file
+- `config_obj`: object url associated with working config.yaml file
+- `script_obj`: object url associated with submission script file
+- `repo_obj`: object url associated with remote repository
+- `write_data_store`: object url associated with data store
+- `code_run_obj`: object url associated with code run
+- `inputs`: metadata associated with code run inputs
+- `outputs`: metadata associated with code run outputs
 """
 struct DataRegistryHandle
-    config::Dict            # working config file data
-    config_obj::String      # config file object id
-    script_obj::String      # submission script object file id
-    repo_obj::String        # code repo object file id (optional)
-    write_data_store::String          
-    # user_id               # [local registry] user_id
+    config::Dict
+    config_obj::String
+    script_obj::String
+    repo_obj::String
+    write_data_store::String
+    # user_id             
     code_run_obj::String
     inputs::Dict
     outputs::Dict
 end
 
 """
- _postentry(table, data)
+    _postentry(table, data)
 
-Upload to data registry
+Post entry to local data registry.
 """
 function _postentry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
@@ -69,7 +74,7 @@ end
 """
     _getentry(table, query)
 
-Use query to get entry from local registry
+Use query to get entry from local data registry.
 """
 function _getentry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
@@ -88,7 +93,7 @@ end
 """
     _getentry(url)
 
-Read data registry
+Use URL to get entry from local data registry.
 """
 function _getentry(url::URIs.URI)
     token = _gettoken()
@@ -107,7 +112,7 @@ end
 """
     _geturl(table, query)
 
-Use query to get entry url from local registry
+Use query to get entry URL from local data registry.
 """
 function _geturl(table::String, query::Dict)
     entry = _getentry(table, query)
@@ -118,7 +123,7 @@ end
 """
     _getid(table, query)
 
-Use query to get entry id from local registry
+Use query to get entry ID from local data registry.
 """
 function _getid(table::String, query::Dict)
     url = _geturl(table, query)
@@ -129,7 +134,7 @@ end
 """
     _extractid(url)
 
-Extract id from url
+Extract ID from URL.
 """
 function _extractid(url)
     if !isa(url, Vector)
@@ -148,7 +153,7 @@ end
 """
     _checkexists(table, query)
 
-Use query to check whether entry exists in local registry
+Use query to check whether entry exists in local registry.
 """
 function _checkexists(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
@@ -161,7 +166,7 @@ end
 """
     _getfilehash(filepath)
 
-Get file hash
+Get file hash.
 """
 function _getfilehash(filepath::String)
 fhash = bytes2hex(SHA.sha2_256(filepath))

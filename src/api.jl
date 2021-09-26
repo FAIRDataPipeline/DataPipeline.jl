@@ -1,10 +1,8 @@
 """
     initialise(config_file, submission_script)
 
-Read [working] config.yaml file. Returns a `DataRegistryHandle` containing:
-- the working config.yaml file contents
-- the object id for this file
-- the object id for the submission script file
+Reads in  working config.yaml file, generates a new Code Run entry, and returns a 
+`DataRegistryHandle` containing various metadata.
 """
 function initialise(config_file::String, submission_script::String)
     # Read working config file
@@ -30,12 +28,12 @@ function initialise(config_file::String, submission_script::String)
     # Register remote repository
     remote_repo = config["run_metadata"]["remote_repo"]
     repo_root = match(r"([a-z]*://[a-z]*.[a-z]*/).*", remote_repo)[1]
-    remote_repo = replace(remote_repo, repo_root => "")
+    remote_repo = replace(remote_repo, repo_root => s"")
     repo_root_query = Dict("root" => repo_root, "local" => false)
     repo_root_uri = _postentry("storage_root", repo_root_query)
     latest_commit = config["run_metadata"]["latest_commit"]
     repo_obj_url = _registerobject(remote_repo, latest_commit, "Remote code repository.", 
-                                   repo_root_uri, public=false)
+                                   repo_root_uri, "git", public=false)
 
     # Register code run
     rt = Dates.now()
@@ -122,7 +120,7 @@ function link_read!(handle::DataRegistryHandle, data_product::String)
 
         # Get storage location
         path = _getstoragelocation(obj_url)
-        path = replace(path, "file://" => "")
+        path = replace(path, s"file://" => s"")
       
         # Add metadata to handle
         metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
