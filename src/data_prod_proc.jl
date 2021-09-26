@@ -39,11 +39,6 @@ function read_h5_table(obj_grp, use_axis_arrays::Bool)
     end
 end
 
-## does what it says on the tin
-# function read_h5_array(obj_grp)
-#     return HDF5.read(obj_grp[ARRAY_OBJ_NAME])
-# end
-
 ## recursively search and read table/array
 function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, verbose::Bool)
     gnm = HDF5.name(h5)

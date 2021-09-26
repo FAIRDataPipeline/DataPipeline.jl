@@ -86,7 +86,8 @@ function _getentry(table::String, query::Dict)
     else
         results = r["results"]
         @assert length(results) == 1
-        return results[1]
+        entry = results[1]
+        return entry
     end 
 end
 
@@ -100,7 +101,8 @@ function _getentry(url::URIs.URI)
     headers = Dict("Authorization" => token, "Content-Type" => "application/json")
     try
         r = HTTP.request("GET", url, headers)
-        return JSON.parse(String(r.body))
+        entry = JSON.parse(String(r.body))
+        return entry
     catch e
         msg = "couldn't connect to local web server... have you run the start script?"
         isa(e, Base.IOError) && throw(ReadWriteException(msg))
@@ -139,15 +141,15 @@ Extract ID from URL.
 function _extractid(url)
     if !isa(url, Vector)
         tmp = match(r".*/([0-9]*)/", url)
-        return String(tmp[1])
+        output = String(tmp[1])
     else
         output = Char[]
         for i in url
             tmp = match(r".*/([0-9]*)/", i)
             append!(output, tmp[1])
         end
-        return output
     end
+    return output
 end
 
 """
@@ -169,7 +171,7 @@ end
 Get file hash.
 """
 function _getfilehash(filepath::String)
-fhash = bytes2hex(SHA.sha2_256(filepath))
+    fhash = bytes2hex(SHA.sha2_256(filepath))
     return fhash
 end
 
@@ -183,5 +185,6 @@ function _gettoken()
     token = open(fp) do file
         read(file, String)
     end
-    return string("token ", chomp(token))
+    output = string("token ", chomp(token))
+    return output
 end

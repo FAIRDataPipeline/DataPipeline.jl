@@ -143,7 +143,7 @@ end
 """
     _readtoml(handle, data_product, component)
 
-Read toml file
+Read toml file.
 """
 function _readtoml(handle::DataRegistryHandle, data_product::String, component)
     ## 1. API call to LDR
@@ -154,6 +154,11 @@ function _readtoml(handle::DataRegistryHandle, data_product::String, component)
     return output[component]
 end
 
+"""
+    _getmetadata(handle, data_product, section)
+
+Get data product metadata.
+"""
 function _getmetadata(handle::DataRegistryHandle, data_product::String, section::String)
     if haskey(handle.config, section)
         wmd = handle.config[section]
@@ -276,7 +281,7 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
                     "use_namespace" => use_namespace, "use_version" => use_version, 
                     "path" => path, "public" => public, "description" => description)
     handle.outputs[data_product] = metadata
-
+    
     return path
 end
 
@@ -294,7 +299,6 @@ function _writekeyval(handle::DataRegistryHandle, data::Dict, data_product::Stri
     open(path, "w") do io
         TOML.print(io, data)
     end      
-   
     return nothing
 end
 

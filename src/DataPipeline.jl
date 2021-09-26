@@ -21,26 +21,12 @@ using URIs
 const C_DEBUG_MODE = false
 const LOCAL_DR_STEM = "http://localhost"
 const LOCAL_DR_PORTLESS = string(LOCAL_DR_STEM, "/api/")
-const API_ROOT = string(LOCAL_DR_STEM, ":8000", "/api/")
-const NS_ROOT = string(API_ROOT, "namespace/")
 const STR_ROOT = string(LOCAL_DR_PORTLESS, "storage_root/")
-const STR_MATCH = Regex(string(LOCAL_DR_STEM, ".*storage_root/"))
+const API_ROOT = string(LOCAL_DR_STEM, ":8000", "/api/")
 const SL_ROOT = string(LOCAL_DR_PORTLESS, "storage_location/")
-const TF_ROOT = string(API_ROOT, "text_file/")
-const TEST_NAMESPACE = "data_processing_test"
 const DATA_OUT = "./out/"
-const NULL_HASH = "na"
-const NULL_FILE = "no_match"
-const VERSION_LATEST = "latest"
-const STR_RT_GITHUB = string(STR_ROOT, "11/")
-const STR_RT_TEXTFILE = string(STR_ROOT, "203/")
-const STR_RT_BOYDORR = string(STR_ROOT, "9/")
-const DF_MODEL_REL_DESC = "Julia model."
-const DF_MR_SUB_SCR_DESC = "Submission script."
-const FILE_SR_STEM = "file://"
 
 include("core.jl")
-export _getfilehash, _gettoken
 
 include("api.jl")
 export initialise, finalise
