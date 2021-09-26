@@ -117,3 +117,14 @@ function _addread(path::String, data_product::String; version=nothing,
     YAML.write_file(path, data)
     return(nothing)
 end
+
+"""
+    _randomhash()
+
+Generate random hash.
+"""
+function _randomhash()
+    date = Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS")
+    hash = bytes2hex(SHA.sha2_256(date))
+    return hash
+end
