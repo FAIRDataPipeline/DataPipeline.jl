@@ -1,3 +1,11 @@
+"""
+This is an `X`
+
+# Fields
+- a: First letter of the English alphabet
+- b: Second letter of the English alphabet
+- c: C is for cookie
+"""
 struct DataRegistryHandle
     config::Dict            # working config file data
     config_obj::String      # config file object id
@@ -11,18 +19,18 @@ struct DataRegistryHandle
 end
 
 """
- postentry(table, data)
+ _postentry(table, data)
 
 Upload to data registry
 """
-function postentry(table::String, query::Dict)
+function _postentry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    token = gettoken()
+    token = _gettoken()
     headers = Dict("Authorization" => token, "Content-Type" => "application/json")
     body = JSON.json(query)
  
-    resolved_query = DataPipeline.convertquery(query)
-    r = DataPipeline.getentry(URIs.URI("$url$resolved_query"))
+    resolved_query = _convertquery(query)
+    r = _getentry(URIs.URI("$url$resolved_query"))
 
     if r["count"] == 1
         entry_url = r["results"][1]["url"]
@@ -37,17 +45,17 @@ function postentry(table::String, query::Dict)
 end
 
 """
-    convertquery(query)
+    _convertquery(query)
 
 Convert dictionary to url query.
 """
-function convertquery(query::Dict) 
+function _convertquery(query::Dict) 
     url = "?"
     for (key, value) in query
         if isa(value, Bool)
             tmp = value
         elseif all(occursin.(API_ROOT, value))
-            tmp = extractid(value)
+            tmp = _extractid(value)
             tmp = isa(tmp, Vector) ? join(tmp, ",") : tmp
         else
             tmp = URIs.escapeuri(value)
@@ -59,14 +67,14 @@ function convertquery(query::Dict)
 end
 
 """
-    getentry(table, query)
+    _getentry(table, query)
 
 Use query to get entry from local registry
 """
-function getentry(table::String, query::Dict)
+function _getentry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    resolved_query = convertquery(query)
-    r = getentry(URIs.URI("$url$resolved_query"))
+    resolved_query = _convertquery(query)
+    r = _getentry(URIs.URI("$url$resolved_query"))
 
     if r["count"] == 0
         return nothing
@@ -78,12 +86,12 @@ function getentry(table::String, query::Dict)
 end
 
 """
-    getentry(url)
+    _getentry(url)
 
 Read data registry
 """
-function getentry(url::URIs.URI)
-    token = gettoken()
+function _getentry(url::URIs.URI)
+    token = _gettoken()
     headers = Dict("Authorization" => token, "Content-Type" => "application/json")
     try
         r = HTTP.request("GET", url, headers)
@@ -97,33 +105,33 @@ function getentry(url::URIs.URI)
 end
 
 """
-    geturl(table, query)
+    _geturl(table, query)
 
 Use query to get entry url from local registry
 """
-function geturl(table::String, query::Dict)
-    entry = getentry(table, query)
+function _geturl(table::String, query::Dict)
+    entry = _getentry(table, query)
     output = isnothing(entry) ? nothing : entry["url"] 
     return output
 end
 
 """
-    getid(table, query)
+    _getid(table, query)
 
 Use query to get entry id from local registry
 """
-function getid(table::String, query::Dict)
-    url = geturl(table, query)
-    output = isnothing(url) ? nothing :  extractid(url)
+function _getid(table::String, query::Dict)
+    url = _geturl(table, query)
+    output = isnothing(url) ? nothing :  _extractid(url)
     return output
 end
 
 """
-    extractid(url)
+    _extractid(url)
 
 Extract id from url
 """
-function extractid(url)
+function _extractid(url)
     if !isa(url, Vector)
         tmp = match(r".*/([0-9]*)/", url)
         return String(tmp[1])
@@ -138,34 +146,34 @@ function extractid(url)
 end
 
 """
-    checkexists(table, query)
+    _checkexists(table, query)
 
 Use query to check whether entry exists in local registry
 """
-function checkexists(table::String, query::Dict)
+function _checkexists(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    resolved_query = convertquery(query)
-    r = getentry(URIs.URI("$url$resolved_query"))
+    resolved_query = _convertquery(query)
+    r = _getentry(URIs.URI("$url$resolved_query"))
     exists = r["count"] == 0 ? false : true
     return exists
 end
 
 """
-    getfilehash(filepath)
+    _getfilehash(filepath)
 
 Get file hash
 """
-function getfilehash(filepath::String)
+function _getfilehash(filepath::String)
 fhash = bytes2hex(SHA.sha2_256(filepath))
     return fhash
 end
 
 """
-    gettoken()
+    _gettoken()
 
 Get local repository access token.
 """
-function gettoken()
+function _gettoken()
     fp = expanduser("~/.fair/registry/token")
     token = open(fp) do file
         read(file, String)

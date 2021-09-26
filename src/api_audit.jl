@@ -2,7 +2,7 @@
 # NB. THIS IS NOW BROKEN DUE TO CHANGES TO THE DR SCHEMA ***********
 function whats_my_hash(fh::String)
     search_url = string(API_ROOT, "storage_location/?hash=", fh)
-    return getentry(URIs.URI(search_url))
+    return _getentry(URIs.URI(search_url))
 end
 # NB. add option for staged objects?
 """
@@ -20,7 +20,7 @@ function whats_my_file(path::String; show_path=false)
         println("Searching the Data Registry for files similar to ", basename(path))
         println(" - filepath: ", path)
         println(" - type:     ", get_file_type(path))
-        fh = getfilehash(path)
+        fh = _getfilehash(path)
         resp = whats_my_hash(fh)
         ## process results
         println(" -> Results: ", resp["count"], " matching data product", resp["count"]==1 ? "" : "s")
@@ -29,10 +29,10 @@ function whats_my_file(path::String; show_path=false)
             sl = resp["results"][i]["url"]
             println("SL: ", resp["results"][i])
             obj_url = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl, SL_ROOT))
-            obj_resp = getentry(URIs.URI(obj_url)["results"][1])
-            dp_resp = getentry(URIs.URI(obj_resp["data_product"]))
-            ns_resp = getentry(URIs.URI(dp_resp["namespace"]))
-            sr_resp = getentry(URIs.URI(resp["results"][i]["storage_root"]))
+            obj_resp = _getentry(URIs.URI(obj_url)["results"][1])
+            dp_resp = _getentry(URIs.URI(obj_resp["data_product"]))
+            ns_resp = _getentry(URIs.URI(dp_resp["namespace"]))
+            sr_resp = _getentry(URIs.URI(resp["results"][i]["storage_root"]))
             println("\n ", dp_resp["url"])
             println(" - name:         ", dp_resp["name"])
             println(" -- version:     ", dp_resp["version"])
@@ -76,7 +76,7 @@ function record_issues!(issues::Dict, obj)
         if haskey(issues, obj["issues"][i])
             issues[obj["issues"][i]] += 1
         else
-            issue = getentry(URIs.URI(obj["issues"][i]))
+            issue = _getentry(URIs.URI(obj["issues"][i]))
             println("\n -- ISSUE DETECTED - SEVERITY := ", issue["severity"])
             println(" --- ", issue["description"])
             println(" --- last updated: ", issue["last_updated"])
@@ -95,13 +95,13 @@ function registry_audit_recursive(obj, trace::String)
     obj_urls = String[]
     issues = Dict{String, Int64}()
     for c in eachindex(obj[trace])
-        obj_c = getentry(URIs.URI(obj[trace][c]))
+        obj_c = _getentry(URIs.URI(obj[trace][c]))
         ic += record_issues!(issues, obj_c)
         push!(obj_urls, obj_c["object"])
     end
     ## recurse over distinct object urls
     for o in eachindex(obj_urls)
-        obj2 = getentry(URIs.URI(obj_urls[o]))
+        obj2 = _getentry(URIs.URI(obj_urls[o]))
         ic += registry_audit_recursive(obj2, trace)
     end
     return ic
@@ -126,19 +126,19 @@ function registry_audit(url::String; trace::String="both")
     el_count(cnt) = string(cnt==0 ? "no issues" : (cnt==1 ? "one issue" : string(cnt, " issues")))
     ## fetch e.g. data product
     # - ADD ERROR HANDLING
-    resp = getentry(URIs.URI(url))
+    resp = _getentry(URIs.URI(url))
     println("DATA REGISTRY AUDIT: ", url)
     print_thing(resp, "name")
     print_thing(resp, "version")
     print_thing(resp, "last_updated", "last updated")
     ## record object issues
     ic = zeros(Int64, 3)
-    obj = getentry(URIs.URI(resp["object"]))
+    obj = _getentry(URIs.URI(resp["object"]))
     issues = Dict{String,Int64}()
     ic[1] += record_issues!(issues, obj)
     ## record component issues
     for c in eachindex(obj["components"])
-        obj_c = getentry(URIs.URI(obj["components"][c]))
+        obj_c = _getentry(URIs.URI(obj["components"][c]))
         ic[1] += record_issues!(issues, obj_c)
     end
     status = string(" - directly affected by ", el_count(ic[1]), ".")

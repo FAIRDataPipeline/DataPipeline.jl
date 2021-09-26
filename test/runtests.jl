@@ -4,41 +4,6 @@ using DataPipeline
 using Test
 using Dates
 
-Test.@testset "convertquery()" begin
-    # Test boolean
-    test_boolean = DataPipeline.convertquery(Dict("public" => true))
-    @test test_boolean == "?public=true"
-
-    # Test strings
-    test_string = DataPipeline.convertquery(Dict("name" => "string/1"))
-    @test test_string == "?name=string%2F1"
-
-    # Test multiple key-value pairs
-    test_string2 = DataPipeline.convertquery(Dict("description" => "Short description", "key" => "value"))
-    @test test_string2 == "?key=value&description=Short%20description"
-
-    # Test datetimes
-    rt = Dates.now()
-    rt = Dates.format(rt, "yyyy-mm-dd HH:MM:SS")
-    test_date = DataPipeline.convertquery(Dict("run_date" => rt))
-    ans = replace(replace(rt, s":" => s"%3A"), " " => "%20")
-    @test test_date == "?run_date=$ans"
-
-    # Test URLs
-    test_url = DataPipeline.convertquery(Dict("namespace" => "http://localhost:8000/api/namespace/19/"))
-    @test test_url == "?namespace=19"
-
-    # Test URLs in array
-    test_url = DataPipeline.convertquery(Dict("authors" => ["http://localhost:8000/api/author/1/", "http://localhost:8000/api/author/2/"]))
-    @test test_url == "?authors=1,2"
-end
-
-
-
-
-
-
-
 
 # Test.@testset "package tests" begin
 #     ## 1. Empty code run
@@ -149,7 +114,7 @@ end
     #     Test.@testset "read from file" begin
     #         # fp = "out/records/SARS-CoV-2/scotland/cases_and_management/0.20200825.0.h5"
     #         fp = "out/fefe14d6a63b4dc1666f93e7d95367977969bdf7"
-    #         dp = read_data_product_from_file(fp, use_axis_arrays=true, verbose=false)
+    #         dp = _readdataproduct_from_file(fp, use_axis_arrays=true, verbose=false)
     #         component = dp["/test_result/date-cumulative"]
     #         Test.@test !isnothing(component)
     #     end

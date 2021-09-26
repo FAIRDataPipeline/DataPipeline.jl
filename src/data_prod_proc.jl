@@ -85,7 +85,7 @@ end
 
 ## NB. NEED TO REWORK THIS TO ACCOUNT
 """
-    read_data_product_from_file(filepath; use_axis_arrays = false, verbose = false)
+    _readdataproduct_from_file(filepath; use_axis_arrays = false, verbose = false)
 
 Read HDF5, CSV or TOML file from local system.
 
@@ -94,7 +94,7 @@ Read HDF5, CSV or TOML file from local system.
 - `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
-function read_data_product_from_file(filepath::String; use_axis_arrays::Bool = false, verbose::Bool = false)
+function _readdataproduct_from_file(filepath::String; use_axis_arrays::Bool = false, verbose::Bool = false)
     verbose && println("processing file: ", filepath)
     HDF5.ishdf5(filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
     occursin(".h5", filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
@@ -108,5 +108,5 @@ end
 ## test
 # DATA_DIR = "/home/martin/AtomProjects/DataPipeline.jl/out/"
 # println(typeof(process_h5_file(string(DATA_DIR, "geography/scotland/lookup_table/1.0.1.h5"))))
-# println(read_data_product(string(DATA_DIR, "master/EERA/fixed-parameters/T_hos/0.1.0.toml")))
-# read_data_product(string(DATA_DIR, "human/demographics/population/scotland/1.0.1.h5"))
+# println(_readdataproduct(string(DATA_DIR, "master/EERA/fixed-parameters/T_hos/0.1.0.toml")))
+# _readdataproduct(string(DATA_DIR, "human/demographics/population/scotland/1.0.1.h5"))

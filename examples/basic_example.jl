@@ -30,7 +30,7 @@ println("type := ", typeof(one_array), " - size := ", size(one_array))
 
 ### Example: read individual HDF5 or TOML file
 # fp = "out/records/SARS-CoV-2/scotland/cases_and_management/0.20200825.0.h5"
-# dp = DataPipeline.read_data_product_from_file(fp, use_axis_arrays=true, verbose=false)
+# dp = DataPipeline._readdataproduct_from_file(fp, use_axis_arrays=true, verbose=false)
 # component = dp["/test_result/date-cumulative"]
 
 #### examples for usage ####

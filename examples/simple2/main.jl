@@ -107,7 +107,7 @@ tmp = reshape(rand(10), 2, :)       # create an array
 url = DataPipeline.write_array(handle, tmp, "test/array/issues/component", component_name)
 
 
-# comp_url = DataPipeline.get_object_components(url)[2]
+# comp_url = DataPipeline._getcomponents(url)[2]
 # urls = DataPipeline.finalise(handle)
 # # - raise issue: component
 # DataPipeline.raise_issue(handle, comp_url, "Some issue with a component.", 7)

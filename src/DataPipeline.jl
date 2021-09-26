@@ -7,16 +7,16 @@ language-agnostic RESTful API that is used to interact with the Data Registry.
 
 module DataPipeline
 
-using YAML
-using HTTP
-using JSON
-using FTPClient
-using SHA
-using Dates
 using CSV
 using DataFrames
-using URIs
+using Dates
+using FTPClient
+using HTTP
+using JSON
 using Plots
+using SHA
+using YAML
+using URIs
 
 const C_DEBUG_MODE = false
 const LOCAL_DR_STEM = "http://localhost"
@@ -40,7 +40,7 @@ const DF_MR_SUB_SCR_DESC = "Submission script."
 const FILE_SR_STEM = "file://"
 
 include("core.jl")
-export getfilehash, gettoken
+export _getfilehash, _gettoken
 
 include("api.jl")
 export initialise, finalise
