@@ -354,15 +354,3 @@ function _getstoragelocation(object_url)
     path = joinpath(root, storage_loc_path)
     return path
 end
-
-"""
-    _startregistry()
-
-Start FAIR registry
-""" 
-function _startregistry()
-    path = expanduser("~/.fair/registry/scripts/start_fair_registry")
-    @assert ispath(path)
-    cmd = `sh $path`
-    run(cmd)
-end

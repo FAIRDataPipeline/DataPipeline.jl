@@ -40,11 +40,14 @@ include("fdp_i.jl")
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits
 
-end # module
+include("testing.jl")
 
+end 
+
+# ---- SEIRS model ----
 module SeirsModel
 
 include("model.jl")
 export modelseirs, plotseirs, getparameter
 
-end # module
+end 
