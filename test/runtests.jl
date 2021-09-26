@@ -4,8 +4,9 @@ using DataPipeline
 using Test
 using Dates
 
-include("test_core.jl")
 
+include("test_core.jl")
+include("test_api.jl")
 
 # Test.@testset "package tests" begin
 #     ## 1. Empty code run
