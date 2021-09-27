@@ -38,10 +38,24 @@ Register object in local registry and return the URL of the entry.
 """
 function _registerobject(path::String, hash::String, description::String, root_uri::String, 
                          file_type::String; public::Bool=true)
-    # Register storage location
-    storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, 
-                             "storage_root" => root_uri)
-    storage_loc_uri = _postentry("storage_location", storage_loc_query)
+
+    # Get file hash
+    hash = _getfilehash(path)
+
+    # Does a storage location already exist with the same `root`, `hash`, `public`?
+    storage_root_id = _extractid(root_uri)
+    script_exists = _geturl("storage_location", Dict("hash" => hash, 
+                            "public" => true, "storage_root" => storage_root_id))
+    
+    # If it doesn't, then register storage location
+    if isnothing(script_exists)    
+        storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, 
+                                 "storage_root" => root_uri)
+        storage_loc_uri = _postentry("storage_location", storage_loc_query)
+    else
+        storage_loc_uri = script_exists
+    end
+
 
     # Get author URL
     authors_url = _getauthorurl()
