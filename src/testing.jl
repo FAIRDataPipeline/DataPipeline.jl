@@ -36,7 +36,7 @@ end
 """
     _addwrite()
 
-Add `write` section to (user-written) config.yaml file.
+Add `write` section to (working) config.yaml file.
 """ 
 function _addwrite(path::String, data_product::String, description::String; 
                    version=nothing, file_type=nothing, 
