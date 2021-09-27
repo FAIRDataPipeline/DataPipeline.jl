@@ -5,7 +5,6 @@ Start FAIR registry.
 """ 
 function _startregistry()
     path = expanduser("~/.fair/registry/scripts/start_fair_registry")
-    @assert ispath(path)
     cmd = `sh $path`
     run(cmd)
     return nothing
@@ -116,4 +115,15 @@ function _addread(path::String, data_product::String; version=nothing,
     # Write to config file
     YAML.write_file(path, data)
     return(nothing)
+end
+
+"""
+    _randomhash()
+
+Generate random hash.
+"""
+function _randomhash()
+    date = Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS")
+    hash = bytes2hex(SHA.sha2_256(date))
+    return hash
 end

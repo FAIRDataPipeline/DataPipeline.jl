@@ -242,9 +242,9 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
     path = _resolvewrite(handle, data_product, component, "h5")
    
     # Write array
-    fid = HDF5.h5open(path, "w")
-    fid[component] = data
-    HDF5.close(fid)         
+    HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
+        write(file, component, data)
+    end       
     
     return nothing
 end
