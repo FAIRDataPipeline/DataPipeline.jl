@@ -1,4 +1,5 @@
 using DataFrames
+using Plots
 
 """
     modelseirs(initial_state, timesteps, years, alpha, beta, inv_gamma, inv_omega, inv_mu, inv_sigma)

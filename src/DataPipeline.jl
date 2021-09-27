@@ -42,12 +42,12 @@ include("api_audit.jl")         # DR audits
 
 include("testing.jl")
 
-end 
-
 # ---- SEIRS model ----
 module SeirsModel
 
 include("model.jl")
 export modelseirs, plotseirs, getparameter
+
+end 
 
 end 
