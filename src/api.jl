@@ -14,7 +14,8 @@ function initialise(config_file::String, submission_script::String)
     register_path = "file://$datastore"
     storage_root_query = Dict("root" => register_path, "local" => true)
     storage_root_uri = _postentry("storage_root", storage_root_query)
-   
+    
+
     # Register config file
     config_hash = _getfilehash(config_file)
     config_obj_uri = _registerobject(config_file, config_hash, "Working config file.", 
@@ -24,6 +25,7 @@ function initialise(config_file::String, submission_script::String)
     script_hash = _getfilehash(submission_script)
     script_obj_uri = _registerobject(submission_script, script_hash, 
                                      "Submission script (Julia.)", storage_root_uri, "sh")
+    
 
     # Register remote repository
     remote_repo = config["run_metadata"]["remote_repo"]
@@ -245,7 +247,6 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
     HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
         write(file, component, data)
     end       
-    
     return nothing
 end
 
