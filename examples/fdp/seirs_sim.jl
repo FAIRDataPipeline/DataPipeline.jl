@@ -5,7 +5,7 @@ using CSV
 using DataFrames
 using Plots
 
-# ENV["FDP_CONFIG_DIR"] = "/var/folders/0f/fj5r_1ws15x4jzgnm27h_y6h0000gr/T/tmpesebxxi5/data_store/jobs/2021-09-27_13_47_36_132006"
+# ENV["FDP_CONFIG_DIR"] = "/var/folders/0f/fj5r_1ws15x4jzgnm27h_y6h0000gr/T/tmpnq2t4wqy/data_store/jobs/2021-09-27_16_53_43_149467"
 
 # Initialise code run
 config_file = joinpath(ENV["FDP_CONFIG_DIR"], "config.yaml")
@@ -35,10 +35,10 @@ results = modelseirs(initial_state, timesteps, years, alpha, beta,
 g = plotseirs(results);
 
 # Save outputs to data store
-path = link_write!(handle, "SEIRS_model/results/model_output")
+path = link_write!(handle, "model_output")
 CSV.write(path, results)
 
-path = link_write!(handle, "SEIRS_model/results/figure")
+path = link_write!(handle, "figure")
 savefig(g, path)
 
 # Register code run in local registry

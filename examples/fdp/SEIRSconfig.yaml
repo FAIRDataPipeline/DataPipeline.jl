@@ -22,10 +22,14 @@ register:
   primary: True
 
 write:
-- data_product: SEIRS_model/results/model_output
+- data_product: model_output
   description: SEIRS model results
   file_type: csv
+  use: 
+    data_product: SEIRS_model/results/model_output/julia
 
-- data_product: SEIRS_model/results/figure
+- data_product: figure
   description: SEIRS output plot
   file_type: pdf
+  use: 
+    data_product: SEIRS_model/results/figure/julia

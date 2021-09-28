@@ -181,10 +181,7 @@ end
 Get local repository access token.
 """
 function _gettoken()
-    fp = expanduser("~/.fair/registry/token")
-    token = open(fp) do file
-        read(file, String)
-    end
-    output = string("token ", chomp(token))
+    token = ENV["FDP_LOCAL_TOKEN"]
+    output = string("token ", token)
     return output
 end
