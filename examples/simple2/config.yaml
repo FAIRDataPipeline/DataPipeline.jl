@@ -1,7 +1,0 @@
-run_metadata:
-  default_input_namespace: test
-  default_output_namespace: test
-  description: simple example
-  local_data_registry: http://localhost:8000/api/
-  local_repo: /media/martin/storage/projects/AtomProjects/DataPipeline.jl/examples/simple2
-  write_data_store: /home/martin/.fair/data
