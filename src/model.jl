@@ -55,8 +55,9 @@ function modelseirs(initial_state::Dict, timesteps::Int64, years::Int64,
 
         results = vcat(results, new)
     end
- 
-    return results
+
+    results.time = results.time / 365.25
+    return results 
 end
 
 """
@@ -66,7 +67,7 @@ Plot model output
 """
 function plotseirs(results::DataFrames.DataFrame)
    # Left plot
-    x = results.time / 365.25
+    x = results.time
     y1 = Matrix(results[:, 2:5]) .* 100
     p1 = plot(x, y1, label=["S" "E" "I" "R"], lw=3)
     xlabel!("Years")
