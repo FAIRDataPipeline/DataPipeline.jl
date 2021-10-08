@@ -169,10 +169,10 @@ Additionally, for each question please explain the situation and include any rel
 > - [ ] Needs to be addressed
 > - [x] N/A
 
-[test-build]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml
-[codecov]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl
+[build-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml
+[codecov-url]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl
 [DataPipeline]: https://github.com/FAIRDataPipeline/DataPipeline.jl
-[docs]: https://www.fairdatapipeline.org/DataPipeline.jl/stable/
+[docs-url]: https://www.fairdatapipeline.org/DataPipeline.jl/stable/
 [licence]: https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/main/LICENSE.md
 [issues]: https://github.com/FAIRDataPipeline/DataPipeline.jl/issues
 [dependencies]: https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/main/Project.toml
