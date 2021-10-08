@@ -1,6 +1,6 @@
 # DataPipeline.jl
 
-**The [FAIR Data Pipeline][dp_docs] in Julia**
+The Julia implementation of the FAIR Data Pipeline API.
 
 | **Documentation** | **Build Status**        | **Coverage**         | **DOI**          |
 |:-----------------:|:-----------------------:|:--------------------:|:----------------:|
