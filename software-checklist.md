@@ -170,8 +170,10 @@ Additionally, for each question please explain the situation and include any rel
 > - [x] N/A
 
 [build-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml
+[codecov-badge]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl/branch/main/graph/badge.svg?token=3toeFS7C7I
 [codecov-url]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl
 [DataPipeline]: https://github.com/FAIRDataPipeline/DataPipeline.jl
+[docs-badge]: https://img.shields.io/badge/docs-stable-blue.svg
 [docs-url]: https://www.fairdatapipeline.org/DataPipeline.jl/stable/
 [licence]: https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/main/LICENSE.md
 [issues]: https://github.com/FAIRDataPipeline/DataPipeline.jl/issues
