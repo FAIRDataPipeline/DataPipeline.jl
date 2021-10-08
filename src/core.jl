@@ -6,7 +6,6 @@
 - `config_obj`: object url associated with working config.yaml file
 - `script_obj`: object url associated with submission script file
 - `repo_obj`: object url associated with remote repository
-- `write_data_store`: object url associated with data store
 - `code_run_obj`: object url associated with code run
 - `inputs`: metadata associated with code run inputs
 - `outputs`: metadata associated with code run outputs
@@ -16,8 +15,6 @@ struct DataRegistryHandle
     config_obj::String
     script_obj::String
     repo_obj::String
-    write_data_store::String
-    # user_id             
     code_run_obj::String
     inputs::Dict
     outputs::Dict
