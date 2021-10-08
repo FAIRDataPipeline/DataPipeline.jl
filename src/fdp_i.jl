@@ -27,20 +27,22 @@ end
 Register object in local registry and return the URL of the entry.
 ...
 # Arguments
-- `path::String`: the storage location of the file associated with the object.
-- `hash::String`: the hash of the file associated with the object. 
+- `path::String`: the full storage path of the file associated with the object.
+- `root::String`: the storage root of the file associated with the object.
 - `description::String`: the object description.
-- `root_uri::String`: the URL of an entry in the storage root table.
-- `file_type::String`: the file type of the data product associated with the object.
 - `public::Bool=true`: (optional) public flag denoting whether the storage location is  
   public (`true`) or not (`false`).
 ...
 """
-function _registerobject(path::String, hash::String, description::String, root_uri::String, 
-                         file_type::String; public::Bool=true)
+function _registerobject(path::String, root::String, description::String; 
+                         public::Bool=true)
 
-    # Get file hash
     hash = _getfilehash(path)
+
+    # Register storage root 
+    register_root = "file://$root"
+    storage_root_query = Dict("root" => register_root, "local" => true)
+    root_uri = _postentry("storage_root", storage_root_query)
 
     # Does a storage location already exist with the same `root`, `hash`, `public`?
     storage_root_id = _extractid(root_uri)
@@ -49,18 +51,74 @@ function _registerobject(path::String, hash::String, description::String, root_u
     
     # If it doesn't, then register storage location
     if isnothing(script_exists)    
-        storage_loc_query = Dict("path" => path, "hash" => hash, "public" => public, 
+        storage_loc = replace(path, root => s"")
+        storage_loc_query = Dict("path" => storage_loc, "hash" => hash, "public" => public, 
                                  "storage_root" => root_uri)
         storage_loc_uri = _postentry("storage_location", storage_loc_query)
     else
         storage_loc_uri = script_exists
     end
 
+    # Get author URL
+    authors_url = _getauthorurl()
+
+    # Register / get file_type entry
+    file_type = match(r"([^.]+)$", path)[1]
+    file_type_url = _geturl("file_type", Dict("extension" => file_type))
+    ft_query = Dict("name" => file_type, "extension" => file_type)
+    if isnothing(file_type_url)
+        file_type_url = _postentry("file_type", ft_query)
+    end
+
+    # Register object
+    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, 
+                        "authors" => [authors_url], "file_type" => file_type_url)
+    object_url = _postentry("object", object_query)
+
+    return object_url
+end
+
+"""
+    _registerobject(path, hash, description, root_uri, file_type[, public])
+
+Register object in local registry and return the URL of the entry.
+...
+# Arguments
+- `path::String`: the full storage path of the file associated with the object.
+- `root::String`: the storage root of the file associated with the object.
+- `description::String`: the object description.
+- `hash::String`: most recent commit.
+- `public::Bool=true`: (optional) public flag denoting whether the storage location is  
+  public (`true`) or not (`false`).
+...
+"""
+function _registerobject(path::String, root::String, description::String, hash::String; 
+                         public::Bool=true)
+
+    # Register storage root 
+    storage_root_query = Dict("root" => root, "local" => false)
+    root_uri = _postentry("storage_root", storage_root_query)
+
+    # Does a storage location already exist with the same `root`, `hash`, `public`?
+    storage_root_id = _extractid(root_uri)
+    script_exists = _geturl("storage_location", Dict("hash" => hash, 
+                            "public" => true, "storage_root" => storage_root_id))
+    
+    # If it doesn't, then register storage location
+    if isnothing(script_exists)    
+        storage_loc = replace(path, root => s"")
+        storage_loc_query = Dict("path" => storage_loc, "hash" => hash, "public" => public, 
+                                 "storage_root" => root_uri)
+        storage_loc_uri = _postentry("storage_location", storage_loc_query)
+    else
+        storage_loc_uri = script_exists
+    end
 
     # Get author URL
     authors_url = _getauthorurl()
 
     # Register / get file_type entry
+    file_type = match(r"([^.]+)$", path)[1]
     file_type_url = _geturl("file_type", Dict("extension" => file_type))
     ft_query = Dict("name" => file_type, "extension" => file_type)
     if isnothing(file_type_url)
@@ -196,7 +254,6 @@ Register data product (from `link_write()`)
 function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
     # Get metadata
     wmd = handle.outputs[data_product]
-    storage_root_uri = handle.write_data_store
     datastore = handle.config["run_metadata"]["write_data_store"]
     use_data_product = wmd["use_dp"]
     use_component = get(wmd, "use_component", nothing)
@@ -221,12 +278,8 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
     isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
     new_path = replace(new_filepath, datastore => s"")
 
-    # Get file type
-    file_type = String(split.(new_path, ".")[2])
-
     # Register Object
-    obj_url = _registerobject(new_path, hash, wmd["description"], storage_root_uri, 
-                              file_type, public=wmd["public"])
+    obj_url = _registerobject(new_path, datastore, wmd["description"], public=wmd["public"])
    
     # Register DataProduct
     ns_url = _geturl("namespace", Dict("name" => use_namespace))
@@ -245,22 +298,6 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
     end
 
     return component_url
-
-     # else  ## check hash and throw error if different
-   #    url = resp["results"][1]["url"]
-   #    obj_url = resp["results"][1]["object"]
-   #    resp = _getentry(URIs.URI(obj_url))
-   #    resp = _getentry(URIs.URI(resp["storage_location"]))
-   #    if hash == resp["hash"]
-   #       println("nb. data product already registered as ", url)
-   #       # add_object_component!(handle.outputs, obj_url)
-   #       return url
-   #    else
-   #       println("HASH: ", hash, " vs:\n", resp)
-   #       msg = string("a different data product is already registered to that namespace and version: ", url)
-   #       throw(ReadWriteException(msg))
-   #    end
-   # end
 end
 
 """

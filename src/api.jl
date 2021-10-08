@@ -8,34 +8,20 @@ function initialise(config_file::String, submission_script::String)
     # Read working config file
     print("processing config file: ", config_file)
     config = YAML.load_file(config_file)
-
-    # Register datastore 
     datastore = config["run_metadata"]["write_data_store"]
-    register_path = "file://$datastore"
-    storage_root_query = Dict("root" => register_path, "local" => true)
-    storage_root_uri = _postentry("storage_root", storage_root_query)
-    
-
+   
     # Register config file
-    config_hash = _getfilehash(config_file)
-    config_obj_uri = _registerobject(config_file, config_hash, "Working config file.", 
-                                     storage_root_uri, "yaml")
+    config_obj_uri = _registerobject(config_file, datastore, "Working config file")
    
     # Register submission script   
-    script_hash = _getfilehash(submission_script)
-    script_obj_uri = _registerobject(submission_script, script_hash, 
-                                     "Submission script (Julia.)", storage_root_uri, "sh")
+    script_obj_uri = _registerobject(submission_script, datastore, "Submission script")
     
-
     # Register remote repository
     remote_repo = config["run_metadata"]["remote_repo"]
-    repo_root = match(r"([a-z]*://[a-z]*.[a-z]*/).*", remote_repo)[1]
-    remote_repo = replace(remote_repo, repo_root => s"")
-    repo_root_query = Dict("root" => repo_root, "local" => false)
-    repo_root_uri = _postentry("storage_root", repo_root_query)
+    repo_root = String(match(r"([a-z]*://[a-z]*.[a-z]*/).*", remote_repo)[1])
     latest_commit = config["run_metadata"]["latest_commit"]
-    repo_obj_url = _registerobject(remote_repo, latest_commit, "Remote code repository.", 
-                                   repo_root_uri, "git", public=false)
+    repo_obj_url = _registerobject(remote_repo, repo_root, "Remote code repository.", 
+                                   latest_commit, public=true)
 
     # Register code run
     rt = Dates.now()
@@ -49,7 +35,7 @@ function initialise(config_file::String, submission_script::String)
    
     # Write to handle
     handle = DataRegistryHandle(config, config_obj_uri, script_obj_uri, repo_obj_url, 
-                                storage_root_uri, coderun_url, Dict(), Dict())
+                                coderun_url, Dict(), Dict())
     return handle
 end
 
