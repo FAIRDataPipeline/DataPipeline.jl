@@ -108,7 +108,7 @@ Additionally, for each question please explain the situation and include any rel
 > - [ ] Some work remaining or caveats
 > - [ ] Needs to be addressed
 >
-> `StaticLint` was run - no problems were identified.
+> `StaticLint.jl` was used to lint the package - no problems were identified.
 
 ### Is the code clean, generally understandable and readable and written according to good software engineering principles?
 
