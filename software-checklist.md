@@ -81,8 +81,9 @@ Additionally, for each question please explain the situation and include any rel
 > - [x] Some work remaining or caveats
 > - [ ] Needs to be addressed
 >
-> Tests are run via GitHub Actions CI (test-build) with reasonable code coverage (codecov).
-> More tests will be added soon.
+> Tests are run via GitHub Actions CI ([![test-build][build-badge]][bulid-url]) with
+> reasonable code coverage ([![codecov][codecov-badge]][codecov-url]). More tests will be
+> added soon.
 
 ### Are the scientific results of runs robust to different ways of running the code? (models only)
 
@@ -133,8 +134,8 @@ Additionally, for each question please explain the situation and include any rel
 > - [x] Some work remaining or caveats
 > - [ ] Needs to be addressed
 >
-> There is a [readme][DataPipeline] that describes how to install the code.
-> Additional documentation exists ([docs][docs]), however this needs expanded upon.
+> There is a [readme][DataPipeline] that describes how to install the code. Additional
+> documentation exists ([![docs][docs-badge]][docs-url]), however this needs expanded upon.
 
 ### Is there suitable collaboration infrastructure?
 
