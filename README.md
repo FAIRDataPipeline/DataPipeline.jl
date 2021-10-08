@@ -2,11 +2,10 @@
 
 **The [FAIR Data Pipeline][dp_docs] in Julia**
 
-| **Documentation** | **Build Status**           | **DOI**                    |
-|:-----------------:|:--------------------------:|:--------------------------:|
-| [![stable docs][docs-stable-img]][docs-stable-url] | [![Package Testing][testing-img]][testing-url] | [![Zenodo][zenodo-badge]][zenodo-url] |
+| **Documentation** | **Build Status**        | **Coverage**         | **DOI**          |
+|:-----------------:|:-----------------------:|:--------------------:|:----------------:|
+| [![stable docs][docs-stable-img]][docs-stable-url] | [![Package Testing][testing-img]][testing-url] | [![codecov][codecov-img]][codecov-url] | [![Zenodo][zenodo-badge]][zenodo-url] |
 | [![dev docs][docs-dev-img]][docs-dev-url] | [![Julia Nightly][nightly-img]][nightly-url] | |
-
 
 
 ## Features
