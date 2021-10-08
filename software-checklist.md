@@ -81,7 +81,7 @@ Additionally, for each question please explain the situation and include any rel
 > - [x] Some work remaining or caveats
 > - [ ] Needs to be addressed
 >
-> Tests are run via GitHub Actions CI ([![test-build][build-badge]][bulid-url]) with
+> Tests are run via GitHub Actions CI ([![Package Testing][testing-img]][testing-url]) with
 > reasonable code coverage ([![codecov][codecov-badge]][codecov-url]). More tests will be
 > added soon.
 
@@ -169,7 +169,8 @@ Additionally, for each question please explain the situation and include any rel
 > - [ ] Needs to be addressed
 > - [x] N/A
 
-[build-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml
+[testing-img]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml/badge.svg
+[testing-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml
 [codecov-badge]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl/branch/main/graph/badge.svg?token=3toeFS7C7I
 [codecov-url]: https://codecov.io/gh/FAIRDataPipeline/DataPipeline.jl
 [DataPipeline]: https://github.com/FAIRDataPipeline/DataPipeline.jl
