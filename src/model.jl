@@ -23,13 +23,13 @@ function modelseirs(initial_state::Dict, timesteps::Int64, years::Int64,
     gamma = time_unit_days / inv_gamma
     omega = time_unit_days / (inv_omega * 365.25)
     mu = time_unit_days / (inv_mu * 365.25)
-    sigma = 1 / inv_sigma
-    N = S + E + I + R
-    birth = mu * N
+    sigma = time_unit_days / inv_sigma
 
     results = DataFrames.DataFrame(time=0, S=S, E=E, I=I, R=R)
 
     for t = 1:timesteps
+        N = S + E + I + R
+        birth = mu * N
         infection = (beta * results.I[t] * results.S[t]) / N
         lost_immunity = omega * results.R[t]
         death_S = mu * results.S[t]
