@@ -34,7 +34,7 @@ function modelseirs(initial_state::Dict, timesteps::Int64, years::Int64,
         lost_immunity = omega * results.R[t]
         death_S = mu * results.S[t]
         death_E = mu * results.E[t]
-        death_I = (mu * alpha) * results.I[t]
+        death_I = (mu + alpha) * results.I[t]
         death_R = mu * results.R[t]
         latency = sigma * results.E[t]
         recovery = gamma * results.I[t]
