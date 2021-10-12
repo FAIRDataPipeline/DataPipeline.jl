@@ -22,7 +22,7 @@ data2 = reshape(rand(10), 2, :)
 estimate1 = rand(1)
 estimate2 = rand(1)
 
-distribution = Dict("parameters" => Dict("mean" => -16.08, "SD" => 30), 
+distribution = Dict("parameters" => Dict("mean" => rand(1), "SD" => rand(1)), 
                     "distribution" => "Gaussian", "type" => "distribution")
 
 Test.@testset "link_write()" begin
