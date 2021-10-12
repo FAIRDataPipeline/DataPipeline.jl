@@ -94,14 +94,12 @@ Test.@testset "write_array()" begin
 
     # Write components
     write_array(handle, data1, data_product, component1, "description1")
-    @test handle.outputs[(data_product, component)]["use_dp"] == data_product
+    @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-
-    # Try to write the same component
-    # write_array(handle, data1, data_product, component1, "description1")
-    # @test length(handle.outputs) == 1
-    
+    write_array(handle, data1, data_product, component1, "description1")
+    @test length(handle.outputs) == 1
     write_array(handle, data2, data_product, component2, "description2")
+    @test length(handle.outputs) == 2
 
     # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
