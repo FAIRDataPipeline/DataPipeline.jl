@@ -34,7 +34,7 @@ Test.@testset "link_write()" begin
                          "xxxxxxxxxx.$file_type")
     @test path == test_path
 
-     # Finalise Code Run
+    # Finalise Code Run
     finalise(handle)
 end
 
@@ -57,6 +57,9 @@ Test.@testset "link_read()" begin
     end
 
     @test chomp(dat) == uid
+
+    # Finalise Code Run
+    finalise(handle)
 end
 
 Test.@testset "write_array()" begin
@@ -102,6 +105,36 @@ Test.@testset "write_array()" begin
     should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
                               data_product, "$hash.h5")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
+
+    # Check that file exists 
+    datastore = handle.config["run_metadata"]["write_data_store"]
+    @test isfile(joinpath(datastore, should_be_here))
+end
+
+Test.@testset "read_array()" begin
+    config = "test.yaml"
+    data_product = "data_product/write_array/$uid"
+
+    # Create working config.yaml
+    DataPipeline._createconfig(config)
+    DataPipeline._addread(config, data_product, use_version = "0.0.1")
+    handle = initialise(config, config)
+    @test handle.outputs == Dict()
+
+    # First component
+    dat1 = read_array(handle, data_product, component1)
+    @test dat1 == data1
+
+    # Second component
+    dat2 = read_array(handle, data_product, component2)
+    @test dat2 == data2
+
+    # Finalise Code Run
+    finalise(handle)
+
+    # Check that the handle has been updated
+    @test handle.inputs[(data_product, component1)]["use_dp"] == data_product
+    @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
 Test.@testset "write_estimate()" begin
