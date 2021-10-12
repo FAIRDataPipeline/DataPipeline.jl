@@ -6,9 +6,21 @@ using TOML
 using Test
 
 uid = DataPipeline._randomhash()
+config = "test.yaml"
+
+component1 = "component/1"
+component2 = "component/2"
+
+data1 = reshape(rand(10), 2, :)  
+data2 = reshape(rand(10), 2, :)  
+
+estimate1 = 1
+estimate2 = 2
+
+distribution = Dict("parameters" => Dict("mean" => -16.08, "SD" => 30), 
+                    "distribution" => "Gaussian", "type" => "distribution")
 
 Test.@testset "link_write()" begin
-    config = "test.yaml"
     data_product = "data_product/link_write/$uid"
     file_type = "txt"
 
@@ -19,7 +31,7 @@ Test.@testset "link_write()" begin
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
-    # Test that returned file path matches handle
+    # Check output
     path = link_write!(handle, data_product)    
     @test path == handle.outputs[data_product]["path"]
 
@@ -39,7 +51,6 @@ Test.@testset "link_write()" begin
 end
 
 Test.@testset "link_read()" begin
-    config = "test.yaml"
     data_product = "data_product/link_write/$uid"
 
     # Create working config.yaml
@@ -48,7 +59,7 @@ Test.@testset "link_read()" begin
     handle = initialise(config, config)
     @test handle.inputs == Dict()
 
-    # Test that returned file path matches handle
+    # Check output
     path = link_read!(handle, data_product)
     @test collect(keys(handle.inputs))[1] == data_product
 
@@ -63,7 +74,6 @@ Test.@testset "link_read()" begin
 end
 
 Test.@testset "write_array()" begin
-    config = "test.yaml"
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
@@ -72,24 +82,17 @@ Test.@testset "write_array()" begin
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
-    # First component
-    component1 = "component/1"
-    data1 = reshape(rand(10), 2, :)  
-    write_array(handle, data1, data_product, component1, "description1")
-    
-    # Second component
-    component2 = "component/2"
-    data2 = reshape(rand(10), 2, :)  
+    # Write components
+    write_array(handle, data1, data_product, component1, "description1")    
     write_array(handle, data2, data_product, component2, "description2")
 
-    # Test that data in component1 of hdf5 file matches data1
+    # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
     c1 = HDF5.h5open(path1, "r") do file
         read(file, component1)
     end
     @test data1 == c1
 
-    # Test that data in component2 of hdf5 file matches data2
     path2 = handle.outputs[(data_product, component2)]["path"]
     @test path1 == path2
     c2 = HDF5.h5open(path2, "r") do file
@@ -100,7 +103,7 @@ Test.@testset "write_array()" begin
     # Finalise Code Run
     finalise(handle)
 
-    # Check that the handle has been updated
+    # Check handle 
     hash = DataPipeline._getfilehash(path1)
     should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
                               data_product, "$hash.h5")
@@ -112,7 +115,6 @@ Test.@testset "write_array()" begin
 end
 
 Test.@testset "read_array()" begin
-    config = "test.yaml"
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
@@ -121,24 +123,21 @@ Test.@testset "read_array()" begin
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
-    # First component
+    # Read components
     dat1 = read_array(handle, data_product, component1)
-    @test dat1 == data1
-
-    # Second component
     dat2 = read_array(handle, data_product, component2)
+    @test dat1 == data1
     @test dat2 == data2
 
     # Finalise Code Run
     finalise(handle)
 
-    # Check that the handle has been updated
+    # Check handle 
     @test handle.inputs[(data_product, component1)]["use_dp"] == data_product
     @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
 Test.@testset "write_estimate()" begin
-    config = "test.yaml"
     data_product = "data_product/write_estimate/$uid"
 
     # Create working config.yaml
@@ -147,46 +146,55 @@ Test.@testset "write_estimate()" begin
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
-    # First component
-    component1 = "component/1"
-    data1 = 1
-    write_estimate(handle, data1, data_product, component1, "description1")
-    
-    # Second component
-    component2 = "component/2"
-    data2 = 2
-    write_estimate(handle, data2, data_product, component2, "description2")
+    # Write components
+    write_estimate(handle, estimate1, data_product, component1, "description1")    
+    write_estimate(handle, estimate2, data_product, component2, "description2")
 
-    # Test that data in component1 of toml file matches data1
+    # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
     c1 = TOML.parsefile(path1)[component1]["value"]
-    @test data1 == c1
+    @test c1 == estimate1
 
-    # Test that data in component2 of hdf5 file matches data2
     path2 = handle.outputs[(data_product, component2)]["path"]
     @test path1 == path2
     c2 = TOML.parsefile(path2)[component2]["value"]
-    @test data2 == c2
+    @test c2 == estimate2
 
-     # Finalise Code Run
-     finalise(handle)
+    # Finalise Code Run
+    finalise(handle)
 
-     # Check that the handle has been updated
-     hash = DataPipeline._getfilehash(path1)
-     should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
+    # Check handle 
+    hash = DataPipeline._getfilehash(path1)
+    should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
                                data_product, "$hash.toml")
-     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
+    @test handle.outputs[(data_product, component1)]["path"] == should_be_here
+end
+
+Test.@testset "read_estimate()" begin
+    data_product = "data_product/write_estimate/$uid"
+
+    # Create working config.yaml
+    DataPipeline._createconfig(config)
+    DataPipeline._addread(config, data_product, use_version = "0.0.1")
+    handle = initialise(config, config)
+    @test handle.outputs == Dict()
+
+    # Read components
+    dat1 = read_estimate(handle, data_product, component1)
+    dat2 = read_estimate(handle, data_product, component2)
+    @test dat1 == estimate1
+    @test dat2 == estimate2
+  
+    # Finalise Code Run
+    finalise(handle)
+
+    # Check handle 
+    @test handle.inputs[(data_product, component1)]["use_dp"] == data_product
+    @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
 Test.@testset "write_distribution()" begin
-    config = "test.yaml"
     data_product = "data_product/write_distribution/$uid"
-
-    parameters = Dict("mean" => -16.08, "SD" => 30)
-    distribution = "Gaussian"
-    compare = Dict("parameters" => parameters, 
-                   "distribution" => distribution, 
-                   "type" => "distribution")
 
     # Create working config.yaml
     DataPipeline._createconfig(config)
@@ -194,35 +202,53 @@ Test.@testset "write_distribution()" begin
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
-    # First component
-    component1 = "component/1"
-    write_distribution(handle, distribution, parameters, data_product, component1, 
-                       "symptom-delay")
-    
-    # Second component
-    component2 = "component/2"
-    write_distribution(handle, distribution, parameters, data_product, component2, 
-                       "symptom-delay")
+    # Write components
+    write_distribution(handle, distribution["distribution"], distribution["parameters"], 
+                       data_product, component1, "symptom-delay")    
+    write_distribution(handle, distribution["distribution"], distribution["parameters"], 
+                       data_product, component2, "symptom-delay")
 
-    # Test that data in component1 of toml file matches data1
+    # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
     c1 = TOML.parsefile(path1)[component1]
-    @test c1 == compare
+    @test c1 == distribution
 
-    # Test that data in component2 of hdf5 file matches data2
     path2 = handle.outputs[(data_product, component2)]["path"]
     @test path1 == path2
     c2 = TOML.parsefile(path2)[component2]
-    @test c2 == compare
+    @test c2 == distribution
 
-     # Finalise Code Run
-     finalise(handle)
+    # Finalise Code Run
+    finalise(handle)
 
-     # Check that the handle has been updated
-     hash = DataPipeline._getfilehash(path1)
-     should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
+    # Check handle 
+    hash = DataPipeline._getfilehash(path1)
+    should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
                                data_product, "$hash.toml")
-     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
+    @test handle.outputs[(data_product, component1)]["path"] == should_be_here
+end
+
+Test.@testset "read_distribution()" begin
+    data_product = "data_product/write_distribution/$uid"
+
+    # Create working config.yaml
+    DataPipeline._createconfig(config)
+    DataPipeline._addread(config, data_product, use_version = "0.0.1")
+    handle = initialise(config, config)
+    @test handle.outputs == Dict()
+
+    # Read components
+    dat1 = read_distribution(handle, data_product, component1)
+    dat2 = read_distribution(handle, data_product, component2)
+    @test dat1 == distribution
+    @test dat2 == distribution
+
+    # Finalise Code Run
+    finalise(handle)
+
+    # Check handle
+    @test handle.inputs[(data_product, component1)]["use_dp"] == data_product
+    @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
 end
