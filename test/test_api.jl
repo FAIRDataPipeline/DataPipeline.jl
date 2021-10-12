@@ -8,6 +8,11 @@ using Test
 uid = DataPipeline._randomhash()
 config = "test.yaml"
 
+DataPipeline._createconfig(config)
+handle = initialise(config, config)
+datastore = handle.config["run_metadata"]["write_data_store"]
+namespace = handle.config["run_metadata"]["default_output_namespace"]
+
 component1 = "component/1"
 component2 = "component/2"
 
@@ -31,17 +36,19 @@ Test.@testset "link_write()" begin
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
-    # Check output
+    # Check function output
     path = link_write!(handle, data_product)    
     @test path == handle.outputs[data_product]["path"]
-
+    @test length(handle.outputs) == 1
+    path = link_write!(handle, data_product)    
+    @test length(handle.outputs) == 1
+    
+    # Write data product
     open(path, "w") do file
         println(file, uid)
     end
 
     # Test that returned file path is correct 
-    datastore = handle.config["run_metadata"]["write_data_store"]
-    namespace = handle.config["run_metadata"]["default_output_namespace"]
     test_path = joinpath("$(datastore)$(namespace)", "$data_product", 
                          "xxxxxxxxxx.$file_type")
     @test path == test_path
@@ -59,14 +66,17 @@ Test.@testset "link_read()" begin
     handle = initialise(config, config)
     @test handle.inputs == Dict()
 
-    # Check output
+    # Check function output
     path = link_read!(handle, data_product)
-    @test collect(keys(handle.inputs))[1] == data_product
+    @test handle.inputs[data_product]["use_dp"] == data_product
+    @test length(handle.inputs) == 1
+    path = link_read!(handle, data_product)    
+    @test length(handle.inputs) == 1
 
+    # Check data
     dat = open(path) do file
         read(file, String)
     end
-
     @test chomp(dat) == uid
 
     # Finalise Code Run
@@ -88,13 +98,14 @@ Test.@testset "write_array()" begin
 
     # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
+    path2 = handle.outputs[(data_product, component2)]["path"]
+    @test path1 == path2
+
     c1 = HDF5.h5open(path1, "r") do file
         read(file, component1)
     end
     @test data1 == c1
 
-    path2 = handle.outputs[(data_product, component2)]["path"]
-    @test path1 == path2
     c2 = HDF5.h5open(path2, "r") do file
         read(file, component2)
     end
@@ -105,12 +116,10 @@ Test.@testset "write_array()" begin
 
     # Check handle 
     hash = DataPipeline._getfilehash(path1)
-    should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
-                              data_product, "$hash.h5")
+    should_be_here = joinpath(namespace, data_product, "$hash.h5")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
 
-    # Check that file exists 
-    datastore = handle.config["run_metadata"]["write_data_store"]
+    # Check file exists 
     @test isfile(joinpath(datastore, should_be_here))
 end
 
@@ -165,9 +174,11 @@ Test.@testset "write_estimate()" begin
 
     # Check handle 
     hash = DataPipeline._getfilehash(path1)
-    should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
-                               data_product, "$hash.toml")
+    should_be_here = joinpath(namespace, data_product, "$hash.toml")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
+
+    # Check file exists 
+    @test isfile(joinpath(datastore, should_be_here))
 end
 
 Test.@testset "read_estimate()" begin
@@ -223,9 +234,11 @@ Test.@testset "write_distribution()" begin
 
     # Check handle 
     hash = DataPipeline._getfilehash(path1)
-    should_be_here = joinpath(handle.config["run_metadata"]["default_output_namespace"],
-                               data_product, "$hash.toml")
+    should_be_here = joinpath(datastore, data_product, "$hash.toml")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
+
+    # Check file exists 
+    @test isfile(joinpath(datastore, should_be_here))
 end
 
 Test.@testset "read_distribution()" begin
