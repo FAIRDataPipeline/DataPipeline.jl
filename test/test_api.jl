@@ -19,42 +19,60 @@ component2 = "component/2"
 data1 = reshape(rand(10), 2, :)  
 data2 = reshape(rand(10), 2, :)  
 
-estimate1 = 1
-estimate2 = 2
+estimate1 = rand(1)
+estimate2 = rand(1)
 
 distribution = Dict("parameters" => Dict("mean" => -16.08, "SD" => 30), 
                     "distribution" => "Gaussian", "type" => "distribution")
 
 Test.@testset "link_write()" begin
     data_product = "data_product/link_write/$uid"
+    data_product2 = "$data_product/2"
     file_type = "txt"
 
     # Create working config.yaml
     DataPipeline._createconfig(config)
     DataPipeline._addwrite(config, data_product, "description", file_type = file_type, 
                            use_version = "0.0.1")
+    DataPipeline._addwrite(config, data_product2, "description", file_type = file_type, 
+                           use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
     # Check function output
-    path = link_write!(handle, data_product)    
-    @test path == handle.outputs[data_product]["path"]
+    path1 = link_write!(handle, data_product)    
+    @test path1 == handle.outputs[(data_product, nothing)]["path"]
     @test length(handle.outputs) == 1
-    path = link_write!(handle, data_product)    
+    path1 = link_write!(handle, data_product)    
     @test length(handle.outputs) == 1
-    
-    # Write data product
-    open(path, "w") do file
+    path2 = link_write!(handle, data_product2)   
+    @test length(handle.outputs) == 2
+
+    open(path1, "w") do file
         println(file, uid)
     end
 
-    # Test that returned file path is correct 
-    test_path = joinpath("$(datastore)$(namespace)", "$data_product", 
-                         "xxxxxxxxxx.$file_type")
-    @test path == test_path
+    open(path2, "w") do file
+        println(file, "$uid/2")
+    end
 
     # Finalise Code Run
     finalise(handle)
+
+    # Check path
+    test_path = joinpath("$(datastore)$(namespace)", "$data_product", 
+                         "xxxxxxxxxx.$file_type")
+    @test path1 == test_path
+    test_path2 = joinpath("$(datastore)$(namespace)", "$data_product2", 
+                          "xxxxxxxxxx.$file_type")
+    @test path2 == test_path2
+
+    # Check file
+    should_be_here = joinpath(datastore, handle.outputs[(data_product, nothing)]["path"])
+    @test isfile(should_be_here)
+
+    should_be_here = joinpath(datastore, handle.outputs[(data_product2, nothing)]["path"])
+    @test isfile(should_be_here)
 end
 
 Test.@testset "link_read()" begin
@@ -67,20 +85,25 @@ Test.@testset "link_read()" begin
     @test handle.inputs == Dict()
 
     # Check function output
-    path = link_read!(handle, data_product)
-    @test handle.inputs[data_product]["use_dp"] == data_product
+    path1 = link_read!(handle, data_product)
+    @test handle.inputs[(data_product, nothing)]["use_dp"] == data_product
     @test length(handle.inputs) == 1
-    path = link_read!(handle, data_product)    
+    path1 = link_read!(handle, data_product)  
     @test length(handle.inputs) == 1
 
+    # Finalise Code Run
+    finalise(handle)
+
     # Check data
-    dat = open(path) do file
+    dat = open(path1) do file
         read(file, String)
     end
     @test chomp(dat) == uid
 
-    # Finalise Code Run
-    finalise(handle)
+    # Check handle 
+    hash = DataPipeline._getfilehash(path1)
+    should_be_here = joinpath(datastore, namespace, data_product, "$hash.txt")
+    @test handle.inputs[(data_product, nothing)]["path"] == should_be_here
 end
 
 Test.@testset "write_array()" begin
@@ -101,27 +124,31 @@ Test.@testset "write_array()" begin
     write_array(handle, data2, data_product, component2, "description2")
     @test length(handle.outputs) == 2
 
-    # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
     path2 = handle.outputs[(data_product, component2)]["path"]
     @test path1 == path2
-
-    c1 = HDF5.h5open(path1, "r") do file
-        read(file, component1)
-    end
-    @test data1 == c1
-
-    c2 = HDF5.h5open(path2, "r") do file
-        read(file, component2)
-    end
-    @test data2 == c2    
+    isfile(path1)
 
     # Finalise Code Run
     finalise(handle)
 
+    newpath1 = handle.outputs[(data_product, component1)]["path"]
+    newpath2 = handle.outputs[(data_product, component2)]["path"]
+
+    # Check data
+    c1 = HDF5.h5open(newpath1, "r") do file
+        read(file, component1)
+    end
+    @test data1 == c1
+
+    c2 = HDF5.h5open(newpath2, "r") do file
+        read(file, component2)
+    end
+    @test data2 == c2    
+
     # Check handle 
-    hash = DataPipeline._getfilehash(path1)
-    should_be_here = joinpath(namespace, data_product, "$hash.h5")
+    hash = DataPipeline._getfilehash(newpath1)
+    should_be_here = joinpath(datastore, namespace, data_product, "$hash.h5")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
 
     # Check file exists 
@@ -183,8 +210,10 @@ Test.@testset "write_estimate()" begin
     finalise(handle)
 
     # Check handle 
-    hash = DataPipeline._getfilehash(path1)
-    should_be_here = joinpath(namespace, data_product, "$hash.toml")
+    newpath1 = handle.outputs[(data_product, component1)]["path"]
+
+    hash = DataPipeline._getfilehash(newpath1)
+    should_be_here = joinpath(datastore, namespace, data_product, "$hash.toml")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
 
     # Check file exists 
@@ -229,7 +258,7 @@ Test.@testset "write_distribution()" begin
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
     write_distribution(handle, distribution["distribution"], distribution["parameters"], 
-    data_product, component1, "symptom-delay")    
+                       data_product, component1, "symptom-delay")    
     @test length(handle.outputs) == 1
     write_distribution(handle, distribution["distribution"], distribution["parameters"], 
                        data_product, component2, "symptom-delay")
@@ -249,8 +278,9 @@ Test.@testset "write_distribution()" begin
     finalise(handle)
 
     # Check handle 
-    hash = DataPipeline._getfilehash(path1)
-    should_be_here = joinpath(namespace, data_product, "$hash.toml")
+    newpath1 = handle.outputs[(data_product, component1)]["path"]
+    hash = DataPipeline._getfilehash(newpath1)
+    should_be_here = joinpath(datastore, namespace, data_product, "$hash.toml")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
 
     # Check file exists 

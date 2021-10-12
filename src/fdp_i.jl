@@ -37,11 +37,11 @@ Register object in local registry and return the URL of the entry.
 function _registerobject(path::String, root::String, description::String; 
                          public::Bool=true)
 
-    hash = _getfilehash(path)
+    full_path = joinpath(root, path)
+    hash = _getfilehash(full_path)
 
     # Register storage root 
-    register_root = "file://$root"
-    storage_root_query = Dict("root" => register_root, "local" => true)
+    storage_root_query = Dict("root" => root, "local" => true)
     root_uri = _postentry("storage_root", storage_root_query)
 
     # Does a storage location already exist with the same `root`, `hash`, `public`?
@@ -79,7 +79,7 @@ function _registerobject(path::String, root::String, description::String;
 end
 
 """
-    _registerobject(path, hash, description, root_uri, file_type[, public])
+    _registerrepo(path, hash, description, root_uri, file_type[, public])
 
 Register object in local registry and return the URL of the entry.
 ...
@@ -92,8 +92,8 @@ Register object in local registry and return the URL of the entry.
   public (`true`) or not (`false`).
 ...
 """
-function _registerobject(path::String, root::String, description::String, hash::String; 
-                         public::Bool=true)
+function _registerrepo(path::String, root::String, description::String, hash::String, 
+                       public::Bool=true)
 
     # Register storage root 
     storage_root_query = Dict("root" => root, "local" => false)
@@ -252,7 +252,7 @@ end
 Register data product (from `link_write()`)
 """
 function _registerdataproduct(handle::DataRegistryHandle, data_product::String, 
-                              component::String)
+                              component::Any)
     # Get metadata
     wmd = handle.outputs[(data_product, component)]
     datastore = handle.config["run_metadata"]["write_data_store"]
@@ -260,29 +260,32 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
     use_component = wmd["use_component"]
     use_namespace = wmd["use_namespace"]
     use_version = wmd["use_version"]
-    filepath = wmd["path"]
-
-    # Get hash
-    hash = _getfilehash(filepath)
-
-    # Is the data product already in the registry?
-    namespace_id = _getid("namespace", Dict("name" => use_namespace))
-    dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
-                                              "namespace" => namespace_id, 
-                                              "version" => use_version))
-   
-    exists = !isnothing(dp_entry)
-   
-    # Rename file
-    oldname = split.(basename(filepath), ".")[1]
-    new_filepath = replace(filepath, oldname => hash)
-    isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
-    new_path = replace(new_filepath, datastore => s"")
+    filepath = joinpath(datastore, wmd["path"])
+      
+    if isfile(filepath)
+        # Rename file
+        oldname = split.(basename(filepath), ".")[1]
+        hash = _getfilehash(filepath)
+        new_filepath = replace(filepath, oldname => hash)
+        isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
+    else
+        # Is the data product already in the registry?
+        namespace_id = _getid("namespace", Dict("name" => use_namespace))
+        dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
+                                                  "namespace" => namespace_id, 
+                                                  "version" => use_version))
+        obj_entry = DataPipeline._getentry(URIs.URI(dp_entry["object"]))
+        location_entry = DataPipeline._getentry(URIs.URI(obj_entry["storage_location"]))
+        root_entry = DataPipeline._getentry(URIs.URI(location_entry["storage_root"]))
+        root = replace(root_entry["root"], "file://" => "")
+        new_filepath = joinpath(root, location_entry["path"])
+    end
 
     # Update handle
-    handle.outputs[(data_product, component)]["path"] = new_path
+    handle.outputs[(data_product, component)]["path"] = new_filepath
 
     # Register Object
+    new_path = replace(new_filepath, datastore => s"")
     obj_url = _registerobject(new_path, 
                               datastore, 
                               wmd["dataproduct_description"], 
@@ -295,58 +298,15 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
     resp = _postentry("data_product", body)
    
     # Register Component
-    component_query = Dict("object" => obj_url, "name" => use_component)
-    component_url = _postentry("object_component", component_query)
-
-    return component_url
-end
-
-function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
-    # Get metadata
-    wmd = handle.outputs[data_product]
-    datastore = handle.config["run_metadata"]["write_data_store"]
-    use_data_product = wmd["use_dp"]
-    use_namespace = wmd["use_namespace"]
-    use_version = wmd["use_version"]
-    filepath = wmd["path"]
-
-    # Get hash
-    hash = _getfilehash(filepath)
-
-    # Is the data product already in the registry?
-    namespace_id = _getid("namespace", Dict("name" => use_namespace))
-    dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
-                         "namespace" => namespace_id, 
-                         "version" => use_version))
-
-    exists = !isnothing(dp_entry)
-
-    # Rename file
-    oldname = split.(basename(filepath), ".")[1]
-    new_filepath = replace(filepath, oldname => hash)
-    isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
-    new_path = replace(new_filepath, datastore => s"")
-
-    # Update handle
-    handle.outputs[data_product]["path"] = new_path
-
-    # Register Object
-    obj_url = _registerobject(new_path, 
-                              datastore, 
-                              wmd["dataproduct_description"], 
-                              public = wmd["public"])
-
-    # Register DataProduct
-    ns_url = _geturl("namespace", Dict("name" => use_namespace))
-    body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, 
-                "version" => use_version)
-    resp = _postentry("data_product", body)
-
-    # Register Component
-    obj_entry = _getentry(URIs.URI(obj_url))
-    component_url = obj_entry["components"]
-    @assert length(component_url) == 1
-    component_url = component_url[1]
+    if isnothing(use_component)
+        obj_entry = _getentry(URIs.URI(obj_url))
+        component_url = obj_entry["components"]
+        @assert length(component_url) == 1
+        component_url = component_url[1]
+    else
+        component_query = Dict("object" => obj_url, "name" => use_component)
+        component_url = _postentry("object_component", component_query)
+    end
 
     return component_url
 end

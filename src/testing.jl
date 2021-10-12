@@ -29,7 +29,8 @@ function _createconfig(path)
                         "remote_repo" => "https://github.com/FAIRDataPipeline/DataPipeline.jl.git",
                         "local_data_registry_url" => "http://localhost:8000/api/")
     data = Dict("run_metadata" => run_metadata)
-    YAML.write_file(path, data)
+    full_path = joinpath(run_metadata["write_data_store"], path)
+    YAML.write_file(full_path, data)
     return(nothing)
 end
 
