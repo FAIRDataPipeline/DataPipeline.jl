@@ -161,8 +161,13 @@ Test.@testset "write_estimate()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_estimate(handle, estimate1, data_product, component1, "description1")    
+    write_estimate(handle, estimate1, data_product, component1, "description1")  
+    @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
+    @test length(handle.outputs) == 1
+    write_estimate(handle, estimate1, data_product, component1, "description1") 
+    @test length(handle.outputs) == 1
     write_estimate(handle, estimate2, data_product, component2, "description2")
+    @test length(handle.outputs) == 2
 
     # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
@@ -221,8 +226,14 @@ Test.@testset "write_distribution()" begin
     # Write components
     write_distribution(handle, distribution["distribution"], distribution["parameters"], 
                        data_product, component1, "symptom-delay")    
+    @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
+    @test length(handle.outputs) == 1
+    write_distribution(handle, distribution["distribution"], distribution["parameters"], 
+    data_product, component1, "symptom-delay")    
+    @test length(handle.outputs) == 1
     write_distribution(handle, distribution["distribution"], distribution["parameters"], 
                        data_product, component2, "symptom-delay")
+    @test length(handle.outputs) == 2
 
     # Check data
     path1 = handle.outputs[(data_product, component1)]["path"]
