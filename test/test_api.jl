@@ -93,7 +93,14 @@ Test.@testset "write_array()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_array(handle, data1, data_product, component1, "description1")    
+    write_array(handle, data1, data_product, component1, "description1")
+    @test handle.outputs[(data_product, component)]["use_dp"] == data_product
+    @test length(handle.outputs) == 1
+
+    # Try to write the same component
+    # write_array(handle, data1, data_product, component1, "description1")
+    # @test length(handle.outputs) == 1
+    
     write_array(handle, data2, data_product, component2, "description2")
 
     # Check data
@@ -234,7 +241,7 @@ Test.@testset "write_distribution()" begin
 
     # Check handle 
     hash = DataPipeline._getfilehash(path1)
-    should_be_here = joinpath(datastore, data_product, "$hash.toml")
+    should_be_here = joinpath(namespace, data_product, "$hash.toml")
     @test handle.outputs[(data_product, component1)]["path"] == should_be_here
 
     # Check file exists 
