@@ -275,8 +275,16 @@ Write a point estimate as a component to a toml file.
 """
 function write_estimate(handle::DataRegistryHandle, value, data_product::String, 
                         component::String, description::String) 
+    
+    # Check whether component is already in handle
+    if haskey(handle.outputs, (data_product, component))
+        return (data_product, component)
+    end
+
     data = Dict{String,Any}("value" => value, "type" => "point-estimate")
-    return _writekeyval(handle, data, data_product, component, description)
+    output = _writekeyval(handle, data, data_product, component, description)
+    
+    return output
 end
 
 """
@@ -286,12 +294,19 @@ Write a distribution as a component to a toml file.
 """
 function write_distribution(handle::DataRegistryHandle, distribution::String, parameters, 
                             data_product::String, component::String, description::String) 
+    
+    # Check whether component is already in handle
+    if haskey(handle.outputs, (data_product, component))
+        return (data_product, component)
+    end
+    
     data = Dict{String,Any}("distribution" => distribution, 
                             "parameters" => parameters, "type" => "distribution")
-    return _writekeyval(handle, data, data_product, component, description)
+    output = _writekeyval(handle, data, data_product, component, description)
+
+    return output
 end
 
-## register issue with data product; component; externalobject; or script
 """
     raise_issue(handle; ... )
 
