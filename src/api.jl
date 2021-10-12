@@ -134,10 +134,11 @@ Read [array] data product.
 """
 function read_array(handle::DataRegistryHandle, data_product::String, component=nothing)
     ## 1. API call to LDR
-    tmp = _readdataproduct(handle, data_product, component)
+    path = _readdataproduct(handle, data_product, component)
     # println("RDP: ", tmp)
     ## 2. read array from file -> process
-    output = process_h5_file(tmp, false, C_DEBUG_MODE)
+    h5file = process_h5_file(path, false)
+    output = h5file["/$component"]
 return output
 end
 
