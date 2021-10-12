@@ -251,26 +251,27 @@ end
 
 Register data product (from `link_write()`)
 """
-function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
+function _registerdataproduct(handle::DataRegistryHandle, data_product::String, 
+                              component::String)
     # Get metadata
-    wmd = handle.outputs[data_product]
+    wmd = handle.outputs[(data_product, component)]
     datastore = handle.config["run_metadata"]["write_data_store"]
     use_data_product = wmd["use_dp"]
-    use_component = get(wmd, "use_component", nothing)
+    use_component = wmd["use_component"]
     use_namespace = wmd["use_namespace"]
     use_version = wmd["use_version"]
     filepath = wmd["path"]
 
     # Get hash
     hash = _getfilehash(filepath)
-   
+
     # Is the data product already in the registry?
     namespace_id = _getid("namespace", Dict("name" => use_namespace))
     dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
                                               "namespace" => namespace_id, 
                                               "version" => use_version))
    
-    exists = !ismissing(dp_entry)
+    exists = !isnothing(dp_entry)
    
     # Rename file
     oldname = split.(basename(filepath), ".")[1]
@@ -278,24 +279,74 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
     isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
     new_path = replace(new_filepath, datastore => s"")
 
+    # Update handle
+    handle.outputs[(data_product, component)]["path"] = new_path
+
     # Register Object
-    obj_url = _registerobject(new_path, datastore, wmd["description"], public=wmd["public"])
-   
+    obj_url = _registerobject(new_path, 
+                              datastore, 
+                              wmd["dataproduct_description"], 
+                              public = wmd["public"])
+
     # Register DataProduct
     ns_url = _geturl("namespace", Dict("name" => use_namespace))
     body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, 
                 "version" => use_version)
     resp = _postentry("data_product", body)
    
-    if isnothing(use_component)
-        obj_entry = _getentry(URIs.URI(obj_url))
-        component_url = obj_entry["components"]
-        @assert length(component_url) == 1
-        component_url = component_url[1]
-    else
-        component_query = Dict("object" => obj_url, "name" => use_component)
-        component_url = _postentry("object_component", component_query)
-    end
+    # Register Component
+    component_query = Dict("object" => obj_url, "name" => use_component)
+    component_url = _postentry("object_component", component_query)
+
+    return component_url
+end
+
+function _registerdataproduct(handle::DataRegistryHandle, data_product::String)
+    # Get metadata
+    wmd = handle.outputs[data_product]
+    datastore = handle.config["run_metadata"]["write_data_store"]
+    use_data_product = wmd["use_dp"]
+    use_namespace = wmd["use_namespace"]
+    use_version = wmd["use_version"]
+    filepath = wmd["path"]
+
+    # Get hash
+    hash = _getfilehash(filepath)
+
+    # Is the data product already in the registry?
+    namespace_id = _getid("namespace", Dict("name" => use_namespace))
+    dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
+                         "namespace" => namespace_id, 
+                         "version" => use_version))
+
+    exists = !isnothing(dp_entry)
+
+    # Rename file
+    oldname = split.(basename(filepath), ".")[1]
+    new_filepath = replace(filepath, oldname => hash)
+    isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
+    new_path = replace(new_filepath, datastore => s"")
+
+    # Update handle
+    handle.outputs[data_product]["path"] = new_path
+
+    # Register Object
+    obj_url = _registerobject(new_path, 
+                              datastore, 
+                              wmd["dataproduct_description"], 
+                              public = wmd["public"])
+
+    # Register DataProduct
+    ns_url = _geturl("namespace", Dict("name" => use_namespace))
+    body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, 
+                "version" => use_version)
+    resp = _postentry("data_product", body)
+
+    # Register Component
+    obj_entry = _getentry(URIs.URI(obj_url))
+    component_url = obj_entry["components"]
+    @assert length(component_url) == 1
+    component_url = component_url[1]
 
     return component_url
 end
@@ -307,7 +358,7 @@ Registers a file-based data product based on information provided in the working
 file, e.g. for writing external objects.
 """
 function _resolvewrite(handle::DataRegistryHandle, data_product::String, component::String, 
-                       file_type::String)
+                       file_type::String, description::String)
     # Get metadata
     wmd = _getmetadata(handle, data_product, "write")
     data_store = handle.config["run_metadata"]["write_data_store"]
@@ -317,23 +368,47 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
     use_component = get(wmd["use"], "component", component)
     use_version = wmd["use"]["version"]
     public = get(wmd["use"], "public", handle.config["run_metadata"]["public"])
-    description = wmd["description"]
+    dp_description = wmd["description"]
 
-    # Create directory
-    directory = joinpath(data_store, use_namespace, use_data_product)
-    mkpath(directory)
+    # Check whether this data product has been written to in this Code Run
+    # (could be a multi-component object)
+    path = []
+    if length(handle.outputs) != 0
+        result = Any[]
+        for (key, value) in handle.outputs
+            if collect(key)[1] == data_product
+                push!(result, value["path"])
+            end
+        end
+        path = unique(result)
+        @assert length(path) == 1
+        path = path[1]
+    end
 
-    # Create storage location
-    filename = "xxxxxxxxxx.$file_type"
-    path = joinpath(directory, filename)
+    if length(path) == 0
+        # Create storage location
+        filename = _randomhash()
+        filename = "dat-$filename.$file_type"
+
+        # Create directory
+        directory = joinpath(data_store, use_namespace, use_data_product)
+        mkpath(directory)
+
+        path = joinpath(directory, filename)
+    end
 
     # Add metadata to handle
-    metadata = Dict("use_dp" => use_data_product, "use_component" => use_component, 
-                    "use_namespace" => use_namespace, "use_version" => use_version, 
-                    "path" => path, "public" => public, "description" => description)
-    handle.outputs[data_product] = metadata
+    metadata = Dict("use_dp" => use_data_product, 
+                    "use_component" => use_component, 
+                    "use_namespace" => use_namespace, 
+                    "use_version" => use_version, 
+                    "path" => path, 
+                    "public" => public, 
+                    "dataproduct_description" => dp_description,
+                    "component_description" => description)
+    handle.outputs[(data_product, component)] = metadata
     
-    return path
+    return metadata
 end
 
 """
@@ -342,14 +417,28 @@ end
 Write key val (i.e. Dict) - internal
 """ 
 function _writekeyval(handle::DataRegistryHandle, data::Dict, data_product::String, 
-                      component::String)
+                      component::String, description::String)
     # Get storage location and write to metadata to handle
-    path = _resolvewrite(handle, data_product, component, "toml")
-   
+    metadata = _resolvewrite(handle, data_product, component, "toml", description)
+    use_component = metadata["use_component"]
+    path = metadata["path"]
+
+    # Does component already exist in toml file?
+    if isfile(path)
+        output = TOML.parsefile(path)
+        if haskey(output, use_component)
+            throw("Component already exists in toml file.")
+        end
+        output[use_component] = data
+    else
+        output = Dict(use_component => data)
+    end
+ 
     # Write data to TOML
     open(path, "w") do io
-        TOML.print(io, data)
-    end      
+        TOML.print(io, output)
+    end
+
     return nothing
 end
 

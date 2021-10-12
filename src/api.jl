@@ -48,7 +48,7 @@ function finalise(handle::DataRegistryHandle)
 
     # Register inputs
     inputs = Vector{String}()
-    for (key, value) in handle.inputs
+    for key in keys(handle.inputs)
         dp_url = handle.inputs[key]["component_url"]
         dp_url = isa(dp_url, Vector) ? dp_url[1] : dp_url
         push!(inputs, dp_url)
@@ -56,8 +56,13 @@ function finalise(handle::DataRegistryHandle)
    
     # Register outputs
     outputs = Vector{String}()
-    for (key, value) in handle.outputs
-        dp_url = _registerdataproduct(handle, key)
+    for key in keys(handle.outputs)
+        if key isa String
+            dp_url = DataPipeline._registerdataproduct(handle, key)
+        else
+            dp_url = DataPipeline._registerdataproduct(handle, key[1], key[2])
+        end
+        
         push!(outputs, dp_url)
     end
    
@@ -189,7 +194,7 @@ file, e.g. for writing external objects.
 """
 function link_write!(handle::DataRegistryHandle, data_product::String)
     # Get metadata
-    wmd = _getmetadata(handle, data_product, "write")
+    wmd = DataPipeline._getmetadata(handle, data_product, "write")
     data_store = handle.config["run_metadata"]["write_data_store"]
     default_namespace = handle.config["run_metadata"]["default_output_namespace"]
     use_namespace = get(wmd["use"], "namespace", default_namespace)
@@ -208,9 +213,14 @@ function link_write!(handle::DataRegistryHandle, data_product::String)
     path = joinpath(directory, filename)
 
     # Add metadata to handle
-    metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
-                    "use_version" => use_version, "path" => path, "public" => public, 
-                    "description" => description)
+    metadata = Dict("use_dp" => use_data_product, 
+                    "use_component" => nothing, 
+                    "use_namespace" => use_namespace, 
+                    "use_version" => use_version, 
+                    "path" => path, 
+                    "public" => public, 
+                    "dataproduct_description" => description,
+                    "component_description" => nothing)
     handle.outputs[data_product] = metadata
 
     # Return path
@@ -225,13 +235,15 @@ Write an array as a component to an hdf5 file.
 See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
 function write_array(handle::DataRegistryHandle, data::Array, data_product::String, 
-                     component::String)
+                     component::String, description::String)
     # Get storage location and write to metadata to handle
-    path = _resolvewrite(handle, data_product, component, "h5")
-   
+    metadata = _resolvewrite(handle, data_product, component, "h5", description)
+    path = metadata["path"]
+    use_component = metadata["use_component"]
+
     # Write array
     HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
-        write(file, component, data)
+        write(file, use_component, data)
     end       
     return nothing
 end
@@ -254,9 +266,9 @@ end
 Write a point estimate as a component to a toml file.
 """
 function write_estimate(handle::DataRegistryHandle, value, data_product::String, 
-                        component::String)
-    data = Dict(component => Dict{String,Any}("value" => value, "type" => "point-estimate"))
-    return _writekeyval(handle, data, data_product, component)
+                        component::String, description::String) 
+    data = Dict{String,Any}("value" => value, "type" => "point-estimate")
+    return _writekeyval(handle, data, data_product, component, description)
 end
 
 """
@@ -265,10 +277,10 @@ end
 Write a distribution as a component to a toml file.
 """
 function write_distribution(handle::DataRegistryHandle, distribution::String, parameters, 
-                            data_product::String, component::String)
-    data = Dict(component => Dict{String,Any}("distribution" => distribution, 
-                "parameters" => parameters, "type" => "distribution"))
-    return _writekeyval(handle, data, data_product, component)
+                            data_product::String, component::String, description::String) 
+    data = Dict{String,Any}("distribution" => distribution, 
+                            "parameters" => parameters, "type" => "distribution")
+    return _writekeyval(handle, data, data_product, component, description)
 end
 
 ## register issue with data product; component; externalobject; or script
