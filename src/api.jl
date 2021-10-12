@@ -237,6 +237,12 @@ See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
 function write_array(handle::DataRegistryHandle, data::Array, data_product::String, 
                      component::String, description::String)
+
+    # Check whether component is already in handle
+    if haskey(handle.outputs, (data_product, component))
+        return (data_product, component)
+    end
+
     # Get storage location and write to metadata to handle
     metadata = _resolvewrite(handle, data_product, component, "h5", description)
     path = metadata["path"]
@@ -246,7 +252,8 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
     HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
         write(file, use_component, data)
     end       
-    return nothing
+
+    return (data_product, component)
 end
 
 """
