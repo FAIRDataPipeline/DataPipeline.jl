@@ -152,9 +152,9 @@ Read [table] data product.
 """
 function read_table(handle::DataRegistryHandle, data_product::String, component=nothing)
     ## 1. API call to LDR
-    tmp = _readdataproduct(handle, data_product, component)
+    path = _readdataproduct(handle, data_product, component)
     ## 2. read array from file -> process
-    output = CSV.read(tmp, DataFrames.DataFrame)
+    output = CSV.read(path, DataFrames.DataFrame)
 return output
 end
 
