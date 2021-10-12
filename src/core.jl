@@ -168,7 +168,9 @@ end
 Get file hash.
 """
 function _getfilehash(filepath::String)
-    fhash = bytes2hex(SHA.sha2_256(filepath))
+    fhash = open(filepath) do file
+        bytes2hex(SHA.sha1(file))
+    end
     return fhash
 end
 
