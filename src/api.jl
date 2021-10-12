@@ -258,7 +258,7 @@ See also: [`write_array`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
 function write_table(handle::DataRegistryHandle, data, data_product::String, 
                      component::String)
-    write_array(handle, data, data_product, component)
+   # write_array(handle, data, data_product, component)
 end
 
 """
