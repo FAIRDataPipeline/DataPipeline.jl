@@ -198,7 +198,7 @@ function _readdataproduct(handle::DataRegistryHandle, data_product::String,
         obj_id = _extractid(obj_url)
         component_url = _geturl("object_component", Dict("name" => use_component, 
                                                          "object" => obj_id))
-        println("data product found: ", use_data_product, " (url: ", obj_url, ")")
+        #println("data product found: ", use_data_product, " (url: ", obj_url, ")")
       
         # Get storage location
         path = _getstoragelocation(obj_url)
