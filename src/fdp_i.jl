@@ -206,7 +206,7 @@ function _readdataproduct(handle::DataRegistryHandle, data_product::String,
         # Add metadata to handle
         metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
                         "use_version" => use_version, "component_url" => component_url)
-        handle.inputs[data_product] = metadata
+        handle.inputs[(data_product, component)] = metadata
 
         return path
     end
