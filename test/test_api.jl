@@ -4,11 +4,13 @@ using DataPipeline
 using HDF5
 using TOML
 using Test
+using Dates
 
 uid = DataPipeline._randomhash()
-config = "test.yaml"
+datetime = Dates.format(Dates.now(), "yyyymmdd-HHMMSS")
+cpath = joinpath("coderun", datetime, "config.yaml")
 
-DataPipeline._createconfig(config)
+config = DataPipeline._createconfig(cpath)
 handle = initialise(config, config)
 datastore = handle.config["run_metadata"]["write_data_store"]
 namespace = handle.config["run_metadata"]["default_output_namespace"]
@@ -31,7 +33,7 @@ Test.@testset "link_write()" begin
     file_type = "txt"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description", file_type = file_type, 
                            use_version = "0.0.1")
     DataPipeline._addwrite(config, data_product2, "description", file_type = file_type, 
@@ -79,7 +81,7 @@ Test.@testset "link_read()" begin
     data_product = "data_product/link_write/$uid"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.inputs == Dict()
@@ -110,7 +112,7 @@ Test.@testset "write_array()" begin
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description", use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.outputs == Dict()
@@ -159,7 +161,7 @@ Test.@testset "read_array()" begin
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.outputs == Dict()
@@ -182,7 +184,7 @@ Test.@testset "write_estimate()" begin
     data_product = "data_product/write_estimate/$uid"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description", use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.outputs == Dict()
@@ -224,7 +226,7 @@ Test.@testset "read_estimate()" begin
     data_product = "data_product/write_estimate/$uid"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.outputs == Dict()
@@ -247,7 +249,7 @@ Test.@testset "write_distribution()" begin
     data_product = "data_product/write_distribution/$uid"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description", use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.outputs == Dict()
@@ -291,7 +293,7 @@ Test.@testset "read_distribution()" begin
     data_product = "data_product/write_distribution/$uid"
 
     # Create working config.yaml
-    DataPipeline._createconfig(config)
+    config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = "0.0.1")
     handle = initialise(config, config)
     @test handle.outputs == Dict()

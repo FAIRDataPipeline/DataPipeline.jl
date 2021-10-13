@@ -16,21 +16,32 @@ end
 Generate `run_metadata` section of (user-written) config.yaml file.
 """ 
 function _createconfig(path)
+
+    # Generate run_metadata block
+    write_data_store = expanduser("~/.fair/registry/datastore/")
     run_metadata = Dict("public" => true,
                         "latest_commit" => "b8af9e4c5d77521c608188ba63273f959149b532",
                         "local_repo" => "/Users/Soniam/Desktop/git/FAIRDataPipeline/DataPipeline.jl",
                         "remote_data_registry_url" => "http://localhost:8001/api/",
                         "default_input_namespace" => "testing", 
                         "default_output_namespace" => "testing", 
-                        "write_data_store" => expanduser("~/.fair/registry/datastore/"),
+                        "write_data_store" => write_data_store,
                         "script_path" => expanduser("~/.fair/registry/datastore/script.sh"),
                         "description" => "A description", 
                         "script" => "julia examples/fdp/seirs_sim.jl",
                         "remote_repo" => "https://github.com/FAIRDataPipeline/DataPipeline.jl.git",
                         "local_data_registry_url" => "http://localhost:8000/api/")
     data = Dict("run_metadata" => run_metadata)
-    YAML.write_file(path, data)
-    return(nothing)
+
+    # Create file path
+    fullpath = joinpath(write_data_store, path)
+    !isfile(fullpath) ? mkpath(dirname(fullpath)) : nothing
+    
+    # Write config yaml file
+    YAML.write_file(fullpath, data)
+
+    # Return path
+    return(fullpath)
 end
 
 """
@@ -76,7 +87,7 @@ function _addwrite(path::String, data_product::String, description::String;
 
     # Write to config file
     YAML.write_file(path, data)
-    return(nothing)
+    return(path)
 end
 
 """
@@ -120,7 +131,7 @@ function _addread(path::String, data_product::String; version=nothing,
 
     # Write to config file
     YAML.write_file(path, data)
-    return(nothing)
+    return(path)
 end
 
 """
