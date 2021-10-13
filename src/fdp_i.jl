@@ -169,7 +169,7 @@ end
 """
     _readdataproduct(handle, data_product, component)
 
-Read dp and return sl - for internal use
+Get data product path
 """
 function _readdataproduct(handle::DataRegistryHandle, data_product::String, 
                           component::String)
@@ -214,7 +214,7 @@ end
 """
     _readtoml(handle, data_product, component)
 
-Read toml file.
+Read toml file
 """
 function _readtoml(handle::DataRegistryHandle, data_product::String, component)
     ## 1. API call to LDR
@@ -228,7 +228,7 @@ end
 """
     _getmetadata(handle, data_product, section)
 
-Get data product metadata.
+Get data product metadata
 """
 function _getmetadata(handle::DataRegistryHandle, data_product::String, section::String)
     if haskey(handle.config, section)
