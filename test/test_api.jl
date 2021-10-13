@@ -314,6 +314,8 @@ Test.@testset "read_distribution()" begin
     @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
+# If an attempt is made to write a new component to a data product that was createtd in 
+# a previous Code Run, then an error should be thrown.
 Test.@testset "new components aren't added to existing data products" begin
     
     # write_array() -------------------------------------------------------------------
