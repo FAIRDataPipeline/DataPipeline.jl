@@ -10,6 +10,10 @@ function initialise(config_file::String, submission_script::String)
     config = YAML.load_file(config_file)
     datastore = config["run_metadata"]["write_data_store"]
    
+    # Register datastore
+    datastore = config["run_metadata"]["write_data_store"]
+    datastore_obj_url = _geturl("storage_root", Dict("root" => datastore))
+
     # Register config file
     config_obj_uri = _registerobject(config_file, datastore, "Working config file")
    
@@ -22,10 +26,6 @@ function initialise(config_file::String, submission_script::String)
     latest_commit = config["run_metadata"]["latest_commit"]
     repo_obj_url = _registerrepo(remote_repo, repo_root, "Remote code repository.", 
                                  latest_commit, true)
-
-    # Register datastore
-    datastore = config["run_metadata"]["write_data_store"]
-    datastore_obj_url = _geturl("storage_root", Dict("root" => datastore))
 
     # Register code run
     rt = Dates.now()
