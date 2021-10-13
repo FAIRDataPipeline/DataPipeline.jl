@@ -273,6 +273,15 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
         dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
                                                   "namespace" => namespace_id, 
                                                   "version" => use_version))
+
+        # If file doesn't exist but the data product is listed in the handle, then
+        # the user may have forgotten to write the file after !link_write() was called
+        if isnothing(dp_entry)
+            msg = string("File not found: ", use_data_product, "is present in handle ",
+            "but not in data store.")
+            throw(ReadWriteException(msg))
+        end
+        
         obj_entry = DataPipeline._getentry(URIs.URI(dp_entry["object"]))
         location_entry = DataPipeline._getentry(URIs.URI(obj_entry["storage_location"]))
         root_entry = DataPipeline._getentry(URIs.URI(location_entry["storage_root"]))
