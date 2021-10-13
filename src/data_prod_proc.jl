@@ -1,5 +1,3 @@
-# import SQLite
-# import DataFrames
 import HDF5
 import TOML
 import AxisArrays
@@ -9,21 +7,8 @@ import NetCDF
 const ARRAY_OBJ_NAME = "array"
 const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"
-# - csv (https://tools.ietf.org/html/rfc4180)
 const CSV_OBJ_NAME = TABLE_OBJ_NAME # "csv"
-# TBL_OBJ_NAME
-const TOML_OBJ_NAME = "toml" # CHG to KEYVAL ? ***
 
-const DATA_FILE_TYPES = ["HDF5", "NetCDF", "TOML", "CSV", "UNKNOWN"]
-
-function get_file_type(filepath::String)
-    HDF5.ishdf5(filepath) && (return DATA_FILE_TYPES[1])
-    occursin(".nc", filepath) && (return DATA_FILE_TYPES[2])
-    occursin(".toml", filepath) && (return DATA_FILE_TYPES[3])
-    occursin(".tml", filepath) && (return DATA_FILE_TYPES[3])
-    occursin(".csv", filepath) && (return DATA_FILE_TYPES[4])
-    return DATA_FILE_TYPES[5]
-end
 
 ## does what it says on the tin
 function read_h5_table(obj_grp, use_axis_arrays::Bool)
@@ -40,14 +25,12 @@ function read_h5_table(obj_grp, use_axis_arrays::Bool)
 end
 
 ## recursively search and read table/array
-function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, verbose::Bool)
+function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool)
     gnm = HDF5.name(h5)
-    verbose && println(" - processing group: ", gnm)
     if haskey(h5, TABLE_OBJ_NAME)
         d = read_h5_table(h5, use_axis_arrays)
         output_dict[gnm] = d
     elseif (haskey(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
-        # d = read_h5_array(h5)
         d = HDF5.read(h5)
         output_dict[gnm] = d
     elseif typeof(h5) == HDF5.Dataset
@@ -55,28 +38,19 @@ function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool, ve
         output_dict[gnm] = d        
     else    # group - recurse
         for g in keys(h5)
-            process_h5_file_group!(output_dict, h5[g], use_axis_arrays, verbose)
+            process_h5_file_group!(output_dict, h5[g], use_axis_arrays)
         end
     end
 end
 
 ## wrapper for recursive processing
-function process_h5_file(filepath::String, use_axis_arrays::Bool, verbose::Bool)
+function process_h5_file(filepath::String, use_axis_arrays::Bool)
     output = Dict()
     f = HDF5.h5open(filepath)
-    process_h5_file_group!(output, f, use_axis_arrays, verbose)
+    process_h5_file_group!(output, f, use_axis_arrays)
     HDF5.close(f)
     return output
 end
-
-## tabular data
-# function process_csv_file(filepath::String, use_axis_arrays::Bool, verbose::Bool)
-#     return CSV.read(filepath, DataFrames.DataFrame)
-# end
-
-# function process_toml_file(filepath::String)
-#     return TOML.parsefile(filepath)
-# end
 
 ## NB. NEED TO REWORK THIS TO ACCOUNT
 """
@@ -89,19 +63,12 @@ Read HDF5, CSV or TOML file from local system.
 - `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
-function _readdataproduct_from_file(filepath::String; use_axis_arrays::Bool = false, verbose::Bool = false)
-    verbose && println("processing file: ", filepath)
-    HDF5.ishdf5(filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
-    occursin(".h5", filepath) && (return process_h5_file(filepath, use_axis_arrays, verbose))
+function _readdataproduct_from_file(filepath::String; use_axis_arrays::Bool = false)
+    println("processing file: ", filepath)
+    HDF5.ishdf5(filepath) && (return process_h5_file(filepath, use_axis_arrays))
+    occursin(".h5", filepath) && (return process_h5_file(filepath, use_axis_arrays))
     occursin(".toml", filepath) && (return TOML.parsefile(filepath))
     occursin(".tml", filepath) && (return TOML.parsefile(filepath))
     occursin(".csv", filepath) && (return CSV.read(filepath, DataFrames.DataFrame))
-    # occursin(".nc", filepath) && (return TOML.parsefile(filepath))
     println(" - WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
 end
-
-## test
-# DATA_DIR = "/home/martin/AtomProjects/DataPipeline.jl/out/"
-# println(typeof(process_h5_file(string(DATA_DIR, "geography/scotland/lookup_table/1.0.1.h5"))))
-# println(_readdataproduct(string(DATA_DIR, "master/EERA/fixed-parameters/T_hos/0.1.0.toml")))
-# _readdataproduct(string(DATA_DIR, "human/demographics/population/scotland/1.0.1.h5"))

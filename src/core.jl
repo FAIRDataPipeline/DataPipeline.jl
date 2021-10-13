@@ -6,6 +6,7 @@
 - `config_obj`: object url associated with working config.yaml file
 - `script_obj`: object url associated with submission script file
 - `repo_obj`: object url associated with remote repository
+- `datastore_obj_url`: object url associated with datastore
 - `code_run_obj`: object url associated with code run
 - `inputs`: metadata associated with code run inputs
 - `outputs`: metadata associated with code run outputs
@@ -15,6 +16,7 @@ struct DataRegistryHandle
     config_obj::String
     script_obj::String
     repo_obj::String
+    datastore_obj_url::String
     code_run_obj::String
     inputs::Dict
     outputs::Dict
@@ -27,17 +29,21 @@ Post entry to local data registry.
 """
 function _postentry(table::String, query::Dict)
     url = string(API_ROOT, table, "/")
-    token = _gettoken()
-    headers = Dict("Authorization" => token, "Content-Type" => "application/json")
-    body = JSON.json(query)
- 
-    resolved_query = _convertquery(query)
-    r = _getentry(URIs.URI("$url$resolved_query"))
+    resolved_query = DataPipeline._convertquery(query)
+    r = DataPipeline._getentry(URIs.URI("$url$resolved_query"))
 
     if r["count"] == 1
         entry_url = r["results"][1]["url"]
 
     elseif r["count"] == 0
+        if haskey(query, "root") && isnothing(match(r".*://.*", query["root"]))
+            value = query["root"]
+            query["root"] = "file://$value"
+        end
+
+        token = _gettoken()
+        headers = Dict("Authorization" => token, "Content-Type" => "application/json")
+        body = JSON.json(query)
         r = HTTP.request("POST", url, headers=headers, body=body)
         resp = String(r.body)
         json_resp = JSON.parse(resp)
@@ -53,9 +59,12 @@ Convert dictionary to url query.
 """
 function _convertquery(query::Dict) 
     url = "?"
+
     for (key, value) in query
         if isa(value, Bool)
             tmp = value
+        elseif key == "root" && isnothing(match(r".*://.*", value))
+            tmp = "file://$value"
         elseif all(occursin.(API_ROOT, value))
             tmp = _extractid(value)
             tmp = isa(tmp, Vector) ? join(tmp, ",") : tmp
@@ -168,7 +177,9 @@ end
 Get file hash.
 """
 function _getfilehash(filepath::String)
-    fhash = bytes2hex(SHA.sha2_256(filepath))
+    fhash = open(filepath) do file
+        bytes2hex(SHA.sha1(file))
+    end
     return fhash
 end
 

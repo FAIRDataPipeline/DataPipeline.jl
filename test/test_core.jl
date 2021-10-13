@@ -37,4 +37,14 @@ Test.@testset "_convertquery()" begin
     @test test_url == "?authors=1,2"
 end
 
+# Test.@testset "_getfilehash()" begin
+#     DataPipeline._getfilehash()
+# end
+
+Test.@testset "_gettoken()" begin
+    token = DataPipeline._gettoken()
+    tmp = match(r"token (.*)", token)
+    @test length(tmp[1]) == 40
+end
+
 end

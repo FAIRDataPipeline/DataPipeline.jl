@@ -20,8 +20,12 @@ function initialise(config_file::String, submission_script::String)
     remote_repo = config["run_metadata"]["remote_repo"]
     repo_root = String(match(r"([a-z]*://[a-z]*.[a-z]*/).*", remote_repo)[1])
     latest_commit = config["run_metadata"]["latest_commit"]
-    repo_obj_url = _registerobject(remote_repo, repo_root, "Remote code repository.", 
-                                   latest_commit, public=true)
+    repo_obj_url = _registerrepo(remote_repo, repo_root, "Remote code repository.", 
+                                 latest_commit, true)
+
+    # Register datastore
+    datastore = config["run_metadata"]["write_data_store"]
+    datastore_obj_url = _geturl("storage_root", Dict("root" => datastore))
 
     # Register code run
     rt = Dates.now()
@@ -35,6 +39,7 @@ function initialise(config_file::String, submission_script::String)
    
     # Write to handle
     handle = DataRegistryHandle(config, config_obj_uri, script_obj_uri, repo_obj_url, 
+                                datastore_obj_url,
                                 coderun_url, Dict(), Dict())
     return handle
 end
@@ -48,7 +53,7 @@ function finalise(handle::DataRegistryHandle)
 
     # Register inputs
     inputs = Vector{String}()
-    for (key, value) in handle.inputs
+    for key in keys(handle.inputs)
         dp_url = handle.inputs[key]["component_url"]
         dp_url = isa(dp_url, Vector) ? dp_url[1] : dp_url
         push!(inputs, dp_url)
@@ -56,8 +61,8 @@ function finalise(handle::DataRegistryHandle)
    
     # Register outputs
     outputs = Vector{String}()
-    for (key, value) in handle.outputs
-        dp_url = _registerdataproduct(handle, key)
+    for key in keys(handle.outputs)
+        dp_url = _registerdataproduct(handle, key[1], key[2])
         push!(outputs, dp_url)
     end
    
@@ -79,6 +84,18 @@ Returns the file path of a data product that has been registered in the local da
 - `data_product::String`: the name of the data product.
 """
 function link_read!(handle::DataRegistryHandle, data_product::String)
+    
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["read"]))
+        throw("$data_product not found in config file")
+    end
+
+    # Check whether component is already in handle
+    if haskey(handle.inputs, (data_product, nothing))
+        path = handle.inputs[(data_product, nothing)]["path"]
+        return path
+    end
+
     # Get metadata
     rmd = _getmetadata(handle, data_product, "read")
     use_data_product = get(rmd["use"], "data_product", data_product)
@@ -112,8 +129,9 @@ function link_read!(handle::DataRegistryHandle, data_product::String)
       
         # Add metadata to handle
         metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
-                        "use_version" => use_version, "component_url" => component_url)
-        handle.inputs[data_product] = metadata
+                        "use_version" => use_version, "component_url" => component_url,
+                        "path" => path)
+        handle.inputs[(data_product, nothing)] = metadata
       
         # Return storage location
         return path
@@ -128,11 +146,23 @@ Read [array] data product.
 - the latest version of the data is read unless otherwise specified.
 """
 function read_array(handle::DataRegistryHandle, data_product::String, component=nothing)
+    
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["read"]))
+        throw("$data_product not found in config file")
+    end
+    
+    # Check whether component is already in handle
+    if haskey(handle.inputs, (data_product, component))
+        return (data_product, component)
+    end
+
     ## 1. API call to LDR
-    tmp = _readdataproduct(handle, data_product, component)
+    path = _readdataproduct(handle, data_product, component)
     # println("RDP: ", tmp)
     ## 2. read array from file -> process
-    output = process_h5_file(tmp, false, C_DEBUG_MODE)
+    h5file = process_h5_file(path, false)
+    output = h5file["/$component"]
 return output
 end
 
@@ -145,11 +175,11 @@ Read [table] data product.
 - the latest version of the data is read unless otherwise specified.
 """
 function read_table(handle::DataRegistryHandle, data_product::String, component=nothing)
-    ## 1. API call to LDR
-    tmp = _readdataproduct(handle, data_product, component)
-    ## 2. read array from file -> process
-    output = CSV.read(tmp, DataFrames.DataFrame)
-return output
+#     ## 1. API call to LDR
+#     path = _readdataproduct(handle, data_product, component)
+#     ## 2. read array from file -> process
+#     output = CSV.read(path, DataFrames.DataFrame)
+# return output
 end
 
 """
@@ -162,6 +192,17 @@ Read TOML-based data product.
   used.)
 """
 function read_estimate(handle::DataRegistryHandle, data_product::String, component=nothing)
+    
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["read"]))
+        throw("$data_product not found in config file")
+    end
+    
+    # Check whether component is already in handle
+    if haskey(handle.inputs, (data_product, component))
+        return (data_product, component)
+    end
+
     output = _readtoml(handle, data_product, component)
     isnothing(component) && (return output)
     return output["value"]
@@ -178,6 +219,17 @@ Read TOML-based data product.
 """
 function read_distribution(handle::DataRegistryHandle, data_product::String, 
                            component=nothing)
+    
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["read"]))
+        throw("$data_product not found in config file")
+    end
+    
+    # Check whether component is already in handle
+    if haskey(handle.inputs, (data_product, component))
+        return (data_product, component)
+    end
+
     return _readtoml(handle, data_product, component)
 end
 
@@ -188,8 +240,20 @@ Registers a file-based data product based on information provided in the working
 file, e.g. for writing external objects.
 """
 function link_write!(handle::DataRegistryHandle, data_product::String)
+    
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["write"]))
+        throw("$data_product not found in config file")
+    end
+    
+    # Check whether component is already in handle
+    if haskey(handle.outputs, (data_product, nothing))
+        path = handle.outputs[(data_product, nothing)]["path"]
+        return path
+    end
+
     # Get metadata
-    wmd = _getmetadata(handle, data_product, "write")
+    wmd = DataPipeline._getmetadata(handle, data_product, "write")
     data_store = handle.config["run_metadata"]["write_data_store"]
     default_namespace = handle.config["run_metadata"]["default_output_namespace"]
     use_namespace = get(wmd["use"], "namespace", default_namespace)
@@ -208,10 +272,15 @@ function link_write!(handle::DataRegistryHandle, data_product::String)
     path = joinpath(directory, filename)
 
     # Add metadata to handle
-    metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
-                    "use_version" => use_version, "path" => path, "public" => public, 
-                    "description" => description)
-    handle.outputs[data_product] = metadata
+    metadata = Dict("use_dp" => use_data_product, 
+                    "use_component" => nothing, 
+                    "use_namespace" => use_namespace, 
+                    "use_version" => use_version, 
+                    "path" => path, 
+                    "public" => public, 
+                    "dataproduct_description" => description,
+                    "component_description" => nothing)
+    handle.outputs[(data_product, nothing)] = metadata
 
     # Return path
     return path
@@ -225,15 +294,29 @@ Write an array as a component to an hdf5 file.
 See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
 function write_array(handle::DataRegistryHandle, data::Array, data_product::String, 
-                     component::String)
+                     component::String, description::String)
+
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["write"]))
+        throw("$data_product not found in config file")
+    end
+
+    # Check whether component is already in handle
+    if haskey(handle.outputs, (data_product, component))
+        return (data_product, component)
+    end
+
     # Get storage location and write to metadata to handle
-    path = _resolvewrite(handle, data_product, component, "h5")
-   
+    metadata = _resolvewrite(handle, data_product, component, "h5", description)
+    path = metadata["path"]
+    use_component = metadata["use_component"]
+
     # Write array
     HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
-        write(file, component, data)
+        write(file, use_component, data)
     end       
-    return nothing
+
+    return (data_product, component)
 end
 
 """
@@ -245,7 +328,7 @@ See also: [`write_array`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
 function write_table(handle::DataRegistryHandle, data, data_product::String, 
                      component::String)
-    write_array(handle, data, data_product, component)
+   # write_array(handle, data, data_product, component)
 end
 
 """
@@ -254,9 +337,22 @@ end
 Write a point estimate as a component to a toml file.
 """
 function write_estimate(handle::DataRegistryHandle, value, data_product::String, 
-                        component::String)
-    data = Dict(component => Dict{String,Any}("value" => value, "type" => "point-estimate"))
-    return _writekeyval(handle, data, data_product, component)
+                        component::String, description::String) 
+    
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["write"]))
+        throw("$data_product not found in config file")
+    end
+
+    # Check whether component is already in handle
+    if haskey(handle.outputs, (data_product, component))
+        return (data_product, component)
+    end
+
+    data = Dict{String,Any}("value" => value, "type" => "point-estimate")
+    output = _writekeyval(handle, data, data_product, component, description)
+    
+    return output
 end
 
 """
@@ -265,13 +361,25 @@ end
 Write a distribution as a component to a toml file.
 """
 function write_distribution(handle::DataRegistryHandle, distribution::String, parameters, 
-                            data_product::String, component::String)
-    data = Dict(component => Dict{String,Any}("distribution" => distribution, 
-                "parameters" => parameters, "type" => "distribution"))
-    return _writekeyval(handle, data, data_product, component)
+                            data_product::String, component::String, description::String) 
+    
+    # Check whether data product is in the working config
+    if !(data_product in map(x -> x["data_product"], handle.config["write"]))
+        throw("$data_product not found in config file")
+    end
+
+    # Check whether component is already in handle
+    if haskey(handle.outputs, (data_product, component))
+        return (data_product, component)
+    end
+    
+    data = Dict{String,Any}("distribution" => distribution, 
+                            "parameters" => parameters, "type" => "distribution")
+    output = _writekeyval(handle, data, data_product, component, description)
+
+    return output
 end
 
-## register issue with data product; component; externalobject; or script
 """
     raise_issue(handle; ... )
 
