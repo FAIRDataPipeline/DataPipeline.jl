@@ -181,7 +181,7 @@ function _readdataproduct(handle::DataRegistryHandle, data_product::String,
                         handle.config["run_metadata"]["default_input_namespace"])
     use_version = rmd["use"]["version"]
    
-    # Is the data product already in the registry?
+    # Is the data product in the registry?
     namespace_id = _getid("namespace", Dict("name" => use_namespace))
     dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
                                               "namespace" => namespace_id, 
@@ -198,12 +198,11 @@ function _readdataproduct(handle::DataRegistryHandle, data_product::String,
         obj_id = _extractid(obj_url)
         component_url = _geturl("object_component", Dict("name" => use_component, 
                                                          "object" => obj_id))
-        #println("data product found: ", use_data_product, " (url: ", obj_url, ")")
       
         # Get storage location
         path = _getstoragelocation(obj_url)
       
-        # Add metadata to handle
+        # Write to handle
         metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
                         "use_version" => use_version, "component_url" => component_url)
         handle.inputs[(data_product, component)] = metadata
@@ -331,7 +330,7 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
     dp_description = wmd["description"]
 
     # Check whether this data product has been written to in this Code Run
-    # (could be a multi-component object)
+    # (could be a multi-component object) and return path if so
     path = []
     if length(handle.outputs) != 0
         result = Any[]
@@ -345,7 +344,21 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
         path = path[1]
     end
 
+    # If data product has not been written to in this Code Run, create a new path
     if length(path) == 0
+
+        # Does the data product already exist?
+        namespace_id = DataPipeline._getid("namespace", Dict("name" => use_namespace))
+        dataproduct_query = Dict("name" => use_data_product, 
+                                 "version" => use_version, 
+                                 "namespace" => namespace_id)
+        exists = DataPipeline._getentry("data_product", dataproduct_query)
+        if !isnothing(exists)
+            msg = string("data product already exists in registry: ", use_data_product, 
+                         " :-(ns: ", use_namespace, " - v: ", use_version, ")")
+            throw(ReadWriteException(msg))
+        end
+
         # Create storage location
         filename = _randomhash()
         filename = "dat-$filename.$file_type"
@@ -357,7 +370,9 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
         path = joinpath(directory, filename)
     end
 
-    # Add metadata to handle
+
+  
+
     metadata = Dict("use_dp" => use_data_product, 
                     "use_component" => use_component, 
                     "use_namespace" => use_namespace, 
@@ -366,7 +381,6 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
                     "public" => public, 
                     "dataproduct_description" => dp_description,
                     "component_description" => description)
-    handle.outputs[(data_product, component)] = metadata
     
     return metadata
 end
@@ -378,7 +392,8 @@ Write key val (i.e. Dict) - internal
 """ 
 function _writekeyval(handle::DataRegistryHandle, data::Dict, data_product::String, 
                       component::String, description::String)
-    # Get storage location and write to metadata to handle
+
+    # Get metadata
     metadata = _resolvewrite(handle, data_product, component, "toml", description)
     use_component = metadata["use_component"]
     path = metadata["path"]
@@ -399,7 +414,10 @@ function _writekeyval(handle::DataRegistryHandle, data::Dict, data_product::Stri
         TOML.print(io, output)
     end
 
-    return nothing
+    # Write metadata to handle
+    handle.outputs[(data_product, component)] = metadata
+
+    return metadata
 end
 
 """
