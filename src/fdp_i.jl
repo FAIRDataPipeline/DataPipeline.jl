@@ -169,7 +169,7 @@ end
 """
     _readdataproduct(handle, data_product, component)
 
-Read dp and return sl - for internal use
+Get data product path
 """
 function _readdataproduct(handle::DataRegistryHandle, data_product::String, 
                           component::String)
@@ -214,7 +214,7 @@ end
 """
     _readtoml(handle, data_product, component)
 
-Read toml file.
+Read toml file
 """
 function _readtoml(handle::DataRegistryHandle, data_product::String, component)
     ## 1. API call to LDR
@@ -228,7 +228,7 @@ end
 """
     _getmetadata(handle, data_product, section)
 
-Get data product metadata.
+Get data product metadata
 """
 function _getmetadata(handle::DataRegistryHandle, data_product::String, section::String)
     if haskey(handle.config, section)
@@ -273,6 +273,15 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
         dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
                                                   "namespace" => namespace_id, 
                                                   "version" => use_version))
+
+        # If file doesn't exist but the data product is listed in the handle, then
+        # the user may have forgotten to write the file after !link_write() was called
+        if isnothing(dp_entry)
+            msg = string("File not found: ", use_data_product, "is present in handle ",
+            "but not in data store.")
+            throw(ReadWriteException(msg))
+        end
+        
         obj_entry = DataPipeline._getentry(URIs.URI(dp_entry["object"]))
         location_entry = DataPipeline._getentry(URIs.URI(obj_entry["storage_location"]))
         root_entry = DataPipeline._getentry(URIs.URI(location_entry["storage_root"]))
