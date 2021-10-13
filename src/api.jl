@@ -154,13 +154,15 @@ function read_array(handle::DataRegistryHandle, data_product::String, component=
         return (data_product, component)
     end
 
-    ## 1. API call to LDR
+    # Get path and write to handle
     path = _readdataproduct(handle, data_product, component)
-    # println("RDP: ", tmp)
-    ## 2. read array from file -> process
+   
+    # Read hdf5 file and extract component
     h5file = process_h5_file(path, false)
     output = h5file["/$component"]
-return output
+
+    # Return array
+    return output
 end
 
 """
@@ -298,13 +300,19 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
         throw("$data_product not found in config file")
     end
 
-    if haskey(handle.outputs, (data_product, component))
     # Check whether component is already in handle outputs
+    exists = haskey(handle.outputs, (data_product, component))
+    if exists
         return (data_product, component)
     end
 
-    # Get storage location and write to metadata to handle
-    metadata = _resolvewrite(handle, data_product, component, "h5", description)
+    if !exists
+        dataproduct_query = Dict("name" => data_product, "version" => version)
+        get_entry("data_product", dataproduct_query)
+    end
+
+    # Get metadata
+    metadata = DataPipeline._resolvewrite(handle, data_product, component, "h5", description)
     path = metadata["path"]
     use_component = metadata["use_component"]
 
@@ -312,6 +320,9 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
     HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
         write(file, use_component, data)
     end       
+
+    # Write metadata to handle
+    handle.outputs[(data_product, component)] = metadata
 
     return (data_product, component)
 end
@@ -347,9 +358,12 @@ function write_estimate(handle::DataRegistryHandle, value, data_product::String,
     end
 
     data = Dict{String,Any}("value" => value, "type" => "point-estimate")
-    output = _writekeyval(handle, data, data_product, component, description)
+    metadata = _writekeyval(handle, data, data_product, component, description)
     
-    return output
+    # Write metadata to handle
+    handle.outputs[(data_product, component)] = metadata
+
+    return (data_product, component)
 end
 
 """
@@ -372,9 +386,12 @@ function write_distribution(handle::DataRegistryHandle, distribution::String, pa
     
     data = Dict{String,Any}("distribution" => distribution, 
                             "parameters" => parameters, "type" => "distribution")
-    output = _writekeyval(handle, data, data_product, component, description)
+    metadata = _writekeyval(handle, data, data_product, component, description)
 
-    return output
+    # Write metadata to handle
+    handle.outputs[(data_product, component)] = metadata
+
+    return (data_product, component)
 end
 
 """
