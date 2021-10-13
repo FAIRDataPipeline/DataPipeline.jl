@@ -87,7 +87,7 @@ function link_read!(handle::DataRegistryHandle, data_product::String)
         throw("$data_product not found in config file")
     end
 
-    # Check whether component is already in handle
+    # Check whether component is already in handle inputs
     if haskey(handle.inputs, (data_product, nothing))
         path = handle.inputs[(data_product, nothing)]["path"]
         return path
@@ -124,7 +124,7 @@ function link_read!(handle::DataRegistryHandle, data_product::String)
         path = _getstoragelocation(obj_url)
         path = replace(path, s"file://" => s"")
       
-        # Add metadata to handle
+        # Write to handle
         metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
                         "use_version" => use_version, "component_url" => component_url,
                         "path" => path)
@@ -149,7 +149,7 @@ function read_array(handle::DataRegistryHandle, data_product::String, component=
         throw("$data_product not found in config file")
     end
     
-    # Check whether component is already in handle
+    # Check whether component is already in handle inputs
     if haskey(handle.inputs, (data_product, component))
         return (data_product, component)
     end
@@ -195,7 +195,7 @@ function read_estimate(handle::DataRegistryHandle, data_product::String, compone
         throw("$data_product not found in config file")
     end
     
-    # Check whether component is already in handle
+    # Check whether component is already in handle inputs
     if haskey(handle.inputs, (data_product, component))
         return (data_product, component)
     end
@@ -222,7 +222,7 @@ function read_distribution(handle::DataRegistryHandle, data_product::String,
         throw("$data_product not found in config file")
     end
     
-    # Check whether component is already in handle
+    # Check whether component is already in handle inputs
     if haskey(handle.inputs, (data_product, component))
         return (data_product, component)
     end
@@ -243,7 +243,7 @@ function link_write!(handle::DataRegistryHandle, data_product::String)
         throw("$data_product not found in config file")
     end
     
-    # Check whether component is already in handle
+    # Check whether component is already in handle outputs
     if haskey(handle.outputs, (data_product, nothing))
         path = handle.outputs[(data_product, nothing)]["path"]
         return path
@@ -298,8 +298,8 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
         throw("$data_product not found in config file")
     end
 
-    # Check whether component is already in handle
     if haskey(handle.outputs, (data_product, component))
+    # Check whether component is already in handle outputs
         return (data_product, component)
     end
 
@@ -341,7 +341,7 @@ function write_estimate(handle::DataRegistryHandle, value, data_product::String,
         throw("$data_product not found in config file")
     end
 
-    # Check whether component is already in handle
+    # Check whether component is already in handle outputs
     if haskey(handle.outputs, (data_product, component))
         return (data_product, component)
     end
@@ -365,7 +365,7 @@ function write_distribution(handle::DataRegistryHandle, distribution::String, pa
         throw("$data_product not found in config file")
     end
 
-    # Check whether component is already in handle
+    # Check whether component is already in handle outputs
     if haskey(handle.outputs, (data_product, component))
         return (data_product, component)
     end
