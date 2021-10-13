@@ -301,14 +301,8 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
     end
 
     # Check whether component is already in handle outputs
-    exists = haskey(handle.outputs, (data_product, component))
-    if exists
+    if haskey(handle.outputs, (data_product, component))
         return (data_product, component)
-    end
-
-    if !exists
-        dataproduct_query = Dict("name" => data_product, "version" => version)
-        get_entry("data_product", dataproduct_query)
     end
 
     # Get metadata

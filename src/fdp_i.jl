@@ -330,7 +330,7 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
     dp_description = wmd["description"]
 
     # Check whether this data product has been written to in this Code Run
-    # (could be a multi-component object)
+    # (could be a multi-component object) and return path if so
     path = []
     if length(handle.outputs) != 0
         result = Any[]
@@ -344,7 +344,21 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
         path = path[1]
     end
 
+    # If data product has not been written to in this Code Run, create a new path
     if length(path) == 0
+
+        # Does the data product already exist?
+        namespace_id = DataPipeline._getid("namespace", Dict("name" => use_namespace))
+        dataproduct_query = Dict("name" => use_data_product, 
+                                 "version" => use_version, 
+                                 "namespace" => namespace_id)
+        exists = DataPipeline._getentry("data_product", dataproduct_query)
+        if !isnothing(exists)
+            msg = string("data product already exists in registry: ", use_data_product, 
+                         " :-(ns: ", use_namespace, " - v: ", use_version, ")")
+            throw(ReadWriteException(msg))
+        end
+
         # Create storage location
         filename = _randomhash()
         filename = "dat-$filename.$file_type"
@@ -355,6 +369,9 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
 
         path = joinpath(directory, filename)
     end
+
+
+  
 
     metadata = Dict("use_dp" => use_data_product, 
                     "use_component" => use_component, 
