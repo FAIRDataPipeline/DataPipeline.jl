@@ -12,7 +12,8 @@ function initialise(config_file::String, submission_script::String)
    
     # Register datastore
     datastore = config["run_metadata"]["write_data_store"]
-    datastore_obj_url = _postentry("storage_root", Dict("root" => datastore))
+    datastore_obj_url = _postentry("storage_root", Dict("root" => datastore, 
+                                                        "local" => true))
 
     # Register config file
     config_obj_uri = _registerobject(config_file, datastore, "Working config file")
