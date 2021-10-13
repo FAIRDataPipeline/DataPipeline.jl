@@ -69,9 +69,6 @@ function finalise(handle::DataRegistryHandle)
     # Register code run
     url = _patchcoderun(handle, inputs, outputs)
     println("finished - code run locally registered as: ", url, "\n")
-    # output = (code_run=url, config_obj=handle.config_obj, script_obj=handle.script_obj)
-    # isnothing(handle.repo_obj) && (return output)
-    # return (; output..., repo_obj=handle.repo_obj)
 end
 
 """
