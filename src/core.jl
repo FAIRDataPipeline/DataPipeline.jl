@@ -43,7 +43,7 @@ function _postentry(table::String, query::Dict)
 
         token = _gettoken()
         headers = Dict("Authorization" => token, "Content-Type" => "application/json",
-                        "Version" => "1.0.0")
+                       "Accept" => "application/json; version=1.0.0")
         body = JSON.json(query)
         r = HTTP.request("POST", url, headers=headers, body=body)
         resp = String(r.body)
