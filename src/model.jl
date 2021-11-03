@@ -80,7 +80,8 @@ function plotseirs(results::DataFrames.DataFrame)
     ylabel!("Relative group size (%)")
 
    # Join plots together
-    Plots.plot(p1, p2, plot_title="SEIRS model trajectories")
+    pp = plot(p1, p2, plot_title="SEIRS model trajectories")
+    return pp
 end
 
 """
