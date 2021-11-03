@@ -1,7 +1,9 @@
 run_metadata:
   default_input_namespace: testing
   description: SEIRS Model julia
-  script: julia --project=examples/fdp examples/fdp/seirs_sim.jl
+  script: |
+    julia --project=examples/fdp -e 'using Pkg; Pkg.instantiate()'
+    julia --project=examples/fdp examples/fdp/seirs_sim.jl
 
 register:
 - namespace: PSU
