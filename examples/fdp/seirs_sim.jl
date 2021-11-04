@@ -39,7 +39,7 @@ path = link_write!(handle, "model_output")
 CSV.write(path, results)
 
 path = link_write!(handle, "figure")
-savefig(g, path)
+savefig(g, path);
 
 # Register code run in local registry
 finalise(handle)
