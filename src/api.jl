@@ -8,7 +8,6 @@ function initialise(config_file::String, submission_script::String)
     # Read working config file
     print("processing config file: ", config_file)
     config = YAML.load_file(config_file)
-    datastore = config["run_metadata"]["write_data_store"]
    
     # Register datastore
     datastore = config["run_metadata"]["write_data_store"]
