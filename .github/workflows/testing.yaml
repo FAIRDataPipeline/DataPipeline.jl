@@ -64,6 +64,7 @@ jobs:
         source .venv/bin/activate
         cd ${{ github.workspace }}
         fair init --ci
+        fair registry start
 
     - name: Running
       uses: julia-actions/julia-runtest@master
