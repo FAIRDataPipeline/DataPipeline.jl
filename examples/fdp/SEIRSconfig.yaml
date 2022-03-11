@@ -11,7 +11,7 @@ register:
   website: https://ror.org/04p491231
 
 - external_object: SEIRS_model/parameters
-  namespace: PSU
+  namespace_name: PSU
   root: https://raw.githubusercontent.com/
   path: FAIRDataPipeline/rSimpleModel/main/inst/extdata/static_params_SEIRS.csv
   title: Static parameters of the model
