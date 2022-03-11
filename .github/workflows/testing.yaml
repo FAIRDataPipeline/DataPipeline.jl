@@ -45,13 +45,6 @@ jobs:
       with:
         python-version: '3.x'
         architecture: 'x64'
-    - name: Checkout FAIRDataPipeline/FAIR-CLI
-      uses: actions/checkout@v2
-      with:
-        repository: FAIRDataPipeline/FAIR-CLI
-        path: FAIR-CLI
-    - name: Move FAIR-CLI
-      run: mv FAIR-CLI ../FAIR-CLI
     - name: Install Poetry
       uses: snok/install-poetry@v1
       with:
@@ -59,11 +52,12 @@ jobs:
         virtualenvs-in-project: true
     - name: Install and initialise FAIR CLI
       run: |
-        cd ../FAIR-CLI
-        poetry install
-        source .venv/bin/activate
-        cd ${{ github.workspace }}
+        python -m venv venv
+        source venv/bin/activate
+        pip3 install fair-cli
+        fair registry install
         fair init --ci
+        fair registry start
 
     - name: Running
       uses: julia-actions/julia-runtest@master
