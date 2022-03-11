@@ -23,8 +23,6 @@ jobs:
           arch: x64
       - name: Build package
         uses: julia-actions/julia-buildpkg@latest
-      - name: Install local registry
-        run: /bin/bash -c "$(curl -fsSL https://data.scrc.uk/static/localregistry.sh)"
       - name: Set up python
         uses: actions/setup-python@v2
         with:
