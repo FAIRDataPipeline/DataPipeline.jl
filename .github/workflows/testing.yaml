@@ -52,6 +52,7 @@ jobs:
         source venv/bin/activate
         pip3 install fair-cli
         fair registry install
+        mkdir ~/.fair/registry/datastore
         fair init --ci
         fair registry start
 
