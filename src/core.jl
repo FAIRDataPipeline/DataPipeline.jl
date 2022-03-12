@@ -62,6 +62,7 @@ function _convertquery(query::Dict)
     url = "?"
 
     for (key, value) in query
+        print("converting query value: ", value)
         if isa(value, Bool)
             tmp = value
         elseif key == "root" && isnothing(match(r".*://.*", value))
