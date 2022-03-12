@@ -301,6 +301,9 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
 
     # Register DataProduct
     ns_url = _geturl("namespace", Dict("name" => use_namespace))
+    if isnothin(ns_url)
+        body = (name = use_namespace)
+        ns_url = _postentry("namespace", body)
     body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, 
                 "version" => use_version)
     resp = _postentry("data_product", body)
