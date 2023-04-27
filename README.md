@@ -17,11 +17,7 @@ pkg> add DataPipeline
 
 ## Usage
 
-See the [package documentation][docs] for instructions and examples.
-
-[docs]: https://fairdatapipeline.github.io/DataPipeline.jl/stable/
-
-[dp_docs]: https://fairdatapipeline.github.io/docs/introduction/
+See the [package documentation][docs-stable-url] for instructions and examples.
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
 [docs-stable-url]: https://fairdatapipeline.github.io/DataPipeline.jl/stable/
