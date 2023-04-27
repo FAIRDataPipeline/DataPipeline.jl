@@ -20,10 +20,10 @@ pkg> add DataPipeline
 See the [package documentation][docs-stable-url] for instructions and examples.
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
-[docs-stable-url]: https://fairdatapipeline.github.io/DataPipeline.jl/stable/
+[docs-stable-url]: https://www.fairdatapipeline.org/DataPipeline.jl/stable/
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
-[docs-dev-url]: https://fairdatapipeline.github.io/DataPipeline.jl/dev/
+[docs-dev-url]: https://www.fairdatapipeline.org/DataPipeline.jl/main/
 
 [testing-img]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml/badge.svg
 [testing-url]: https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml

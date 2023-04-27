@@ -2,7 +2,7 @@
 
 !!! note
 
-    See [here][fair-docs] for the main FAIR Data Pipeline documentation, and information about the SCRC. This website is for the Julia package only.
+    See [here](https://www.fairdatapipeline.org) for the main FAIR Data Pipeline documentation, and information about the SCRC. This website is for the Julia package only.
 
 **DataPipeline.jl**  -  *the Julia implementation of the FAIR Data Pipeline*
 
@@ -44,7 +44,7 @@ Hint: click [here](https://data.scrc.uk/static/images/schema.svg) to expand the 
 
 ## What does this package do?
 
-Similar to the [R](https://fairdatapipeline.github.io/docs/API/R/) and the [python](https://fairdatapipeline.github.io/docs/API/python/) FAIR Data Pipeline API implementations, this package provides a language-specific automation layer [for the language-agnostic **RESTful API** that is used to interact with the DR.] It also handles the downloading (and pre-processing) of Data Products based on that [meta]data.
+Similar to the [R](https://www.fairdatapipeline.org/docs/API/R/) and the [python](https://www.fairdatapipeline.org/docs/API/python/) FAIR Data Pipeline API implementations, this package provides a language-specific automation layer [for the language-agnostic **RESTful API** that is used to interact with the DR.] It also handles the downloading (and pre-processing) of Data Products based on that [meta]data.
 
 ## Getting started
 
@@ -55,5 +55,3 @@ The package is not currently registered and must be added via the package manage
 ```julia
 pkg> add https://github.com/FAIRDataPipeline/DataPipeline.jl
 ```
-
-[fair-docs]: https://www.fairdatapipeline.org
