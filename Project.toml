@@ -35,7 +35,7 @@ Plots = "1"
 PrettyTables = "1"
 SQLite = "1"
 URIs = "1"
-UnicodePlots = "2"
+UnicodePlots = "2, 3"
 YAML = "0.4"
 julia = "1"
 
