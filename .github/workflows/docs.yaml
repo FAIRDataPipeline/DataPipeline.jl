@@ -61,6 +61,7 @@ jobs:
           echo "git config --local user.email "$GITHUB_ACTOR@users.noreply.github.com" >> ${{ github.workspace }}/tmp/tmp_file.sh
           echo "julia --project=docs/ --color=yes docs/make.jl" >> ${{ github.workspace }}/tmp/tmp_file.sh
           chmod +x tmp/tmp_file.sh
+          source venv/bin/activate
           fair run --script tmp/tmp_file.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
