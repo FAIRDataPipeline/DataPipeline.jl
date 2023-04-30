@@ -57,20 +57,17 @@ jobs:
       with:
         virtualenvs-create: true
         virtualenvs-in-project: true
-    - name: Install and initialise FAIR CLI non-Windows
-      if: matrix.os != 'windows-latest'
+    - name: Activate virtual environment
+      - run: | # On macOS / Ubuntu
+          python -m venv venv
+          source venv/bin/activate
+        if: runner.os != 'Windows'
+      - run: | # On Windows
+          python -m venv venv
+          venv\Scripts\activate.ps1
+        if: runner.os == 'Windows'
+    - name: Install and initialise FAIR CLI
       run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip3 install fair-cli
-        fair registry install
-        fair init --ci
-        fair registry start
-    - name: Install and initialise FAIR CLI on Windows
-      if: matrix.os == 'windows-latest'
-      run: |
-        python -m venv venv
-        venv/Scripts/activate.ps1
         pip3 install fair-cli
         fair registry install
         fair init --ci
