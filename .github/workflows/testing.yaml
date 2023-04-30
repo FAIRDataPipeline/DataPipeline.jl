@@ -7,7 +7,6 @@ on:
     tags:
       - 'v*'
   pull_request:
-  workflow_dispatch:
 
 jobs:
   pipeline-tests:
@@ -57,23 +56,20 @@ jobs:
       with:
         virtualenvs-create: true
         virtualenvs-in-project: true
-    - name: Activate virtual environment
+    - name: Install, initialise and run FAIR CLI
       - run: | # On macOS / Ubuntu
           python -m venv venv
           source venv/bin/activate
         if: runner.os != 'Windows'
       - run: | # On Windows
           python -m venv venv
-          venv\Scripts\activate.ps1
+          venv/Scripts/activate.ps1
         if: runner.os == 'Windows'
-    - name: Install and initialise FAIR CLI
-      run: |
+      - run: | # Install and run example
         pip3 install fair-cli
         fair registry install
         fair init --ci
         fair registry start
-    - name: Run example
-      run: |
         fair pull examples/fdp/SEIRSconfig.yaml
         fair run examples/fdp/SEIRSconfig.yaml
     - name: Run tests
