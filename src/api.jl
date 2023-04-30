@@ -314,7 +314,7 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
     use_component = metadata["use_component"]
 
     # Write array
-    nccreate(path, use_component, vcat([["$use_component-dim-$i", collect(axes(data, i)), Dict()] for i in 1:ndims(data)]...)...)
+    nccreate(path, use_component, vcat([["$use_component-dim-$i", collect(Base.axes(data, i)), Dict()] for i in 1:ndims(data)]...)...)
     ncwrite(data, path, use_component)
 
     # Write metadata to handle
