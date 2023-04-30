@@ -49,8 +49,8 @@ jobs:
         fair registry install
         fair init --ci
         fair registry start
-        fair pull examples/fdp/SEIRSconfig.yaml
-        fair run examples/fdp/SEIRSconfig.yaml
+        fair pull --local examples/fdp/SEIRSconfig.yaml
+        fair run --local examples/fdp/SEIRSconfig.yaml
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
       continue-on-error: true
