@@ -53,43 +53,53 @@ jobs:
             brew install graphviz
         fi
       shell: bash
-    - name: Setup fair and install remote registry
+    - name: Setup fair registry and CLI
       run: |
         # Create venv
         python3 -m venv venv
         # Activate venv
         ${ACTIVATE}
-        # Intall CLI
+        # Install CLI
         pip3 install fair-cli
-        # Install the remote registry
-        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
       env:
         ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
       # working-directory: julia_example # Use the julia_example Directory
-    - name: Start remote registry on Windows
+    - name: Install remote registry
       run: |
+        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
+      shell: bash
+    - name: Start remote registry on Windows
+      if: ${{ runner.os == 'Windows' }}
+      run: |
+        # Activate venv
+        ${ACTIVATE}
         # Start the remote registry
         ${GITHUB_WORKSPACE}\registry-rem\scripts\start_fair_registry_windows.ps1 -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}\registry-rem\token $PWD\token
-      if: ${{ runner.os == 'Windows' }}
+      env:
+        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
     - name: Start remote registry on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
       run: |
+        # Activate venv
+        ${ACTIVATE}
         # Start the remote registry
         ${GITHUB_WORKSPACE}/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
-      if: ${{ runner.os != 'Windows' }}
+      env:
+        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
     - name: Initialise and run fair-cli
       run: |
-        source ${ACTIVATE}
+        ${ACTIVATE}
         fair registry install
         fair registry start
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
       env:
-        ACTIVATE: ${{ runner.os == 'Windows' && 'venv/Scripts/Activate.ps1' || 'venv/bin/activate' }}
+        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
     - name: Process coverage
