@@ -17,6 +17,7 @@ jobs:
       matrix:
         julia-version:
           - '1.6'
+          - '1.8'
           - '1'
         os:
           - ubuntu-latest
@@ -46,35 +47,38 @@ jobs:
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get install graphviz
+            # sudo apt-get install libmemcached-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
             choco install graphviz
         elif [ "$RUNNER_OS" == "Darwin" ]; then
             brew install graphviz
         fi
       shell: bash
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    - name: Activate venv macOS / Ubuntu
-      if: runner.os != 'Windows'
+    - name: Setup fair and install remote registry
       run: |
-        python -m venv venv
-        source venv/bin/activate
-    - name: Activate venv FAIR CLI Windows
-      if: runner.os == 'Windows'
-      run: |
-        python -m venv venv
-        venv/Scripts/activate.ps1
-    - name: Install, initialise and run FAIR CLI
-      run: |
+        # Create venv
+        python3 -m venv venv
+        # Activate venv
+        ./venv/bin/activate
+        # Intall CLI
         pip3 install fair-cli
+        # Install the remote registry
+        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        ${GITHUB_WORKSPACE}/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
+        # Copy the remote token
+        cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
+      shell: bash
+      # working-directory: julia_example # Use the julia_example Directory
+    - name: Initialise and run FAIR CLI
+      run: |
+        ./venv/bin/activate
         fair registry install
-        fair init --ci
         fair registry start
-        fair pull --local examples/fdp/SEIRSconfig.yaml
-        fair run --local examples/fdp/SEIRSconfig.yaml
+        fair init --ci
+        fair pull --debug examples/fdp/SEIRSconfig.yaml
+        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+      shell: bash
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
     - name: Process coverage
