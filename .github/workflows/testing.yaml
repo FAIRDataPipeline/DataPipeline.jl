@@ -76,24 +76,20 @@ jobs:
       if: ${{ runner.os == 'Windows' }}
       run: |
         # Activate venv
-        ${ACTIVATE}
+        venv\Scripts\activate
         # Start the remote registry
         ${GITHUB_WORKSPACE}\registry-rem\scripts\start_fair_registry_windows.ps1 -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}\registry-rem\token $PWD\token
-      env:
-        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
     - name: Start remote registry on Linux / macOS
       if: ${{ runner.os != 'Windows' }}
       run: |
         # Activate venv
-        ${ACTIVATE}
+        source venv/bin/activate
         # Start the remote registry
         ${GITHUB_WORKSPACE}/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
-      env:
-        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
     - name: Initialise and run fair-cli
       run: |
         ${ACTIVATE}
