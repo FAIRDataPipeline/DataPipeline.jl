@@ -37,6 +37,12 @@ jobs:
         arch: ${{ matrix.arch }}
     - name: Build package
       uses: julia-actions/julia-buildpkg@v1
+    - name: Fix manifest for active Julia version
+      run: |
+        using Pkg
+        Pkg.activate("examples/fdp")
+        Pkg.resolve()
+      shell: julia --color=yes {0} 
     - name: Set up python
       uses: actions/setup-python@v4
       with:
