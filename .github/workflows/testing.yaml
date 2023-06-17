@@ -59,7 +59,7 @@ jobs:
         # Create venv
         python3 -m venv venv
         # Activate venv
-        ./venv/bin/activate
+        source venv/bin/activate
         # Intall CLI
         pip3 install fair-cli
         # Install the remote registry
@@ -72,7 +72,7 @@ jobs:
       # working-directory: julia_example # Use the julia_example Directory
     - name: Initialise and run FAIR CLI
       run: |
-        ./venv/bin/activate
+        source venv/bin/activate
         fair registry install
         fair registry start
         fair init --ci
