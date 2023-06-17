@@ -58,13 +58,7 @@ jobs:
         # Create venv
         python3 -m venv venv
         # Activate venv
-        if [ "$RUNNER_OS" == "Linux" ]; then
-            source venv/bin/activate
-        elif [ "$RUNNER_OS" == "Windows" ]; then
-            venv/Scripts/activate.ps1
-        elif [ "$RUNNER_OS" == "Darwin" ]; then
-            source venv/bin/activate
-        fi
+        source venv/bin/activate
         # Intall CLI
         pip3 install fair-cli
         # Install the remote registry
@@ -73,6 +67,7 @@ jobs:
         ${GITHUB_WORKSPACE}/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
+      shell: bash
       # working-directory: julia_example # Use the julia_example Directory
     - name: Initialise and run FAIR CLI
       run: |
