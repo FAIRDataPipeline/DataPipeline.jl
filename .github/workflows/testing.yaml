@@ -42,8 +42,10 @@ jobs:
       with:
         python-version: '3.x'
         architecture: 'x64'
-    - name: Install graphviz
+    - name: Install graphviz and venv
       run: |
+        # Create venv
+        python3 -m venv venv
         if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get install graphviz
             # sudo apt-get install libmemcached-dev
@@ -53,21 +55,23 @@ jobs:
             brew install graphviz
         fi
       shell: bash
-    - name: Setup fair registry and CLI
+    - name: Install fair-cli
       run: |
-        # Create venv
-        python3 -m venv venv
         # Activate venv
         ${ACTIVATE}
-        # Install CLI
+        # Install fair-cli
         pip3 install fair-cli
       env:
         ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Install remote registry
       run: |
+        # Activate venv
+        ${ACTIVATE}
         curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
       shell: bash
+      env:
+        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
     - name: Start remote registry on Windows
       if: ${{ runner.os == 'Windows' }}
       run: |
