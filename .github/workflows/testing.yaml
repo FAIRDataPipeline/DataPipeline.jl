@@ -51,7 +51,7 @@ jobs:
     - name: Install graphviz and venv
       run: |
         # Create venv
-        python3 -m venv venv
+        python3 -m venv ../.venv
         if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get install graphviz
             # sudo apt-get install libmemcached-dev
@@ -65,29 +65,31 @@ jobs:
       if: ${{ runner.os == 'Windows' }}
       run: |
         # Activate venv
-        venv\Scripts\activate
+        ..\.venv\Scripts\activate
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
-        curl https://data.scrc.uk/static/remoteregistry.ps1 > remoteregistry.ps1
-        remoteregistry.ps1 -d ${GITHUB_WORKSPACE}\registry-rem -s drams.test-remote-settings -u admin -p admin
+        mkdir ..\.registry
+        curl https://data.scrc.uk/static/remoteregistry.ps1 > ..\.registry\remoteregistry.ps1
+        ..\.registry\remoteregistry.ps1 -d ..\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        ${GITHUB_WORKSPACE}\registry-rem\scripts\start_fair_registry_windows.ps1 -p 8001 -s drams.test-remote-settings
+        ..\.registry\registry-rem\scripts\start_fair_registry_windows.ps1 -p 8001 -s drams.test-remote-settings
         # Copy the remote token
-        cp ${GITHUB_WORKSPACE}\registry-rem\token $PWD\token
+        cp ..\.registry\registry-rem\token $PWD\token
     - name: Install and start remote registry on Linux / macOS
       if: ${{ runner.os != 'Windows' }}
       run: |
         # Activate venv
-        source venv/bin/activate
+        source ../.venv/bin/activate
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
-        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
+        mkdir ../.registry
+        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ../.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        ${GITHUB_WORKSPACE}/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
+        ../.registry/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
         # Copy the remote token
-        cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
+        cp ../.registry/registry-rem/token $PWD/token
     - name: Initialise and run fair-cli
       run: |
         ${ACTIVATE}
@@ -97,7 +99,7 @@ jobs:
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
       env:
-        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
+        ACTIVATE: ${{ runner.os == 'Windows' && '..\.venv\Scripts\Activate.ps1' || 'source ../.venv/bin/activate' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
