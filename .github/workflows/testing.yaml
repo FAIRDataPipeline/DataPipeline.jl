@@ -58,7 +58,7 @@ jobs:
         # Create venv
         python3 -m venv venv
         # Activate venv
-        source venv/bin/activate
+        source ${ACTIVATE}
         # Intall CLI
         pip3 install fair-cli
         # Install the remote registry
@@ -68,16 +68,20 @@ jobs:
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
       shell: bash
+      env:
+        ACTIVATE: ${{ matrix.os == 'Windows' && 'venv/Scripts/Activate.ps1' || 'venv/bin/activate' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Initialise and run FAIR CLI
       run: |
-        source venv/bin/activate
+        source ${ACTIVATE}
         fair registry install
         fair registry start
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
       shell: bash
+      env:
+        ACTIVATE: ${{ matrix.os == 'Windows' && 'venv/Scripts/Activate.ps1' || 'venv/bin/activate' }}
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
     - name: Process coverage
