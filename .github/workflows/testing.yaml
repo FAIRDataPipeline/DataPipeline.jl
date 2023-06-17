@@ -71,7 +71,7 @@ jobs:
         curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
       shell: bash
       env:
-        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
+        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\activate' || 'source venv/bin/activate' }}
     - name: Start remote registry on Windows
       if: ${{ runner.os == 'Windows' }}
       run: |
