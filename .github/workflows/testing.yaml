@@ -64,13 +64,12 @@ jobs:
         # Install the remote registry
         curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        ${GITHUB_WORKSPACE}${START_FAIR_REGISTRY} -p 8001 -s drams.test-remote-settings
+        ${GITHUB_WORKSPACE}/${START_FAIR_REGISTRY} -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
       env:
         ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'venv/bin/activate' }}
-        START_FAIR_REGISTRY: ${{ runner.os == 'Windows' && '\registry-rem\scripts\start_fair_registry_windows.ps1' || '/registry-rem/scripts/start_fair_registry' }}
-        FAIR_TOKEN: ${{ runner.os == 'Windows' && '\registry-rem\token' || '/registry-rem/token' }}
+        START_FAIR_REGISTRY: ${{ runner.os == 'Windows' && 'registry-rem/scripts/start_fair_registry_windows.ps1' || 'registry-rem/scripts/start_fair_registry' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Initialise and run FAIR CLI
       run: |
