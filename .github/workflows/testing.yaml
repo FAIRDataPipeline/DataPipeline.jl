@@ -59,7 +59,13 @@ jobs:
         # Create venv
         python3 -m venv venv
         # Activate venv
-        source venv/bin/activate
+        if [ "$RUNNER_OS" == "Linux" ]; then
+            source venv/bin/activate
+        elif [ "$RUNNER_OS" == "Windows" ]; then
+            venv/bin/activate.ps1
+        elif [ "$RUNNER_OS" == "Darwin" ]; then
+            source venv/bin/activate
+        fi
         # Intall CLI
         pip3 install fair-cli
         # Install the remote registry
