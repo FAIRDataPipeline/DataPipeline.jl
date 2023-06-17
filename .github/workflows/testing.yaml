@@ -67,7 +67,6 @@ jobs:
         ${GITHUB_WORKSPACE}/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${GITHUB_WORKSPACE}/registry-rem/token $PWD/token
-      shell: bash
       env:
         ACTIVATE: ${{ runner.os == 'Windows' && 'venv/Scripts/Activate.ps1' || 'venv/bin/activate' }}
       # working-directory: julia_example # Use the julia_example Directory
