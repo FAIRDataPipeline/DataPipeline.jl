@@ -58,13 +58,13 @@ jobs:
         # Create venv
         python3 -m venv venv
         # Activate venv
-        source ${ACTIVATE}
+        ${ACTIVATE}
         # Intall CLI
         pip3 install fair-cli
         # Install the remote registry
         curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${GITHUB_WORKSPACE}/registry-rem -s drams.test-remote-settings -u admin -p admin
       env:
-        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'venv/bin/activate' }}
+        ACTIVATE: ${{ runner.os == 'Windows' && 'venv\Scripts\Activate.ps1' || 'source venv/bin/activate' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Start remote registry on Windows
       run: |
