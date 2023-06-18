@@ -73,7 +73,9 @@ jobs:
         curl https://data.scrc.uk/static/remoteregistry.ps1 > $GITHUB_WORKSPACE\.registry\remoteregistry.ps1
         $GITHUB_WORKSPACE\.registry\remoteregistry.ps1 -d $GITHUB_WORKSPACE\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        $GITHUB_WORKSPACE\.registry\registry-rem\scripts\start_fair_registry_windows.ps1 -p 8001 -s drams.test-remote-settings
+        $script = $GITHUB_WORKSPACE,".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
+        Write-Host $script
+        $script -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp $GITHUB_WORKSPACE\.registry\registry-rem\token $PWD\token
     - name: Install and start remote registry on Linux / macOS
@@ -87,7 +89,9 @@ jobs:
         mkdir $GITHUB_WORKSPACE/.registry
         curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d $GITHUB_WORKSPACE/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        $GITHUB_WORKSPACE/.registry/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
+        script=$GITHUB_WORKSPACE/.registry/registry-rem/scripts/start_fair_registry
+        echo $script
+        $script -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp $GITHUB_WORKSPACE/.registry/registry-rem/token $PWD/token
     - name: Initialise and run fair-cli
