@@ -77,7 +77,7 @@ jobs:
         # Temporary fix for downloading old registry
         & $script1 -d ${{ github.workspace }}\.registry\registry-rem -b main -t v1.0.2 -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        $script2 = "${{ github.workspace }}",".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
+        $script2 = "${{ github.workspace }}",".registry\registry-rem\registry\scripts\start_fair_registry_windows.ps1" -join "\"
         Write-Host "Start registry script: " + $script2
         dir $script2
         & $script2 -p 8001 -s drams.test-remote-settings
