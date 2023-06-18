@@ -31,8 +31,8 @@ jobs:
           architecture: 'x64'
       - name: Install and initialise FAIR CLI
         run: |
-          python -m venv ../.venv
-          source ../.venv/bin/activate
+          python -m venv $GITHUB_WORKSPACE/.venv
+          source $GITHUB_WORKSPACE/.venv/bin/activate
           pip3 install fair-cli
           fair registry install
           mkdir ~/.fair/registry/datastore
@@ -56,7 +56,7 @@ jobs:
           echo "git config --local user.email "$GITHUB_ACTOR@users.noreply.github.com" >> ${{ github.workspace }}/tmp/tmp_file.sh
           echo "julia --project=docs/ --color=yes docs/make.jl" >> ${{ github.workspace }}/tmp/tmp_file.sh
           chmod +x tmp/tmp_file.sh
-          source ../.venv/bin/activate
+          source $GITHUB_WORKSPACE/.venv/bin/activate
           # fair run --script tmp/tmp_file.sh
           tmp/tmp_file.sh
         env:
