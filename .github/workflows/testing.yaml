@@ -70,18 +70,18 @@ jobs:
         pip3 install fair-cli
         # Install remote registry
         mkdir ${{ github.workspace }}\.registry
-        $script1 = ${{ github.workspace }},".registry\remoteregistry.ps1" -join "\"
+        $script1 = "${{ github.workspace }}",".registry\remoteregistry.ps1" -join "\"
         Write-Host "Download script: " + $script1
         curl https://data.scrc.uk/static/remoteregistry.ps1 > $script1
         dir $script1
         & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        $script2 = ${{ github.workspace }},".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
+        $script2 = "${{ github.workspace }}",".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
         Write-Host "Start registry script: " + $script2
         dir $script2
         & $script2 -p 8001 -s drams.test-remote-settings
         # Copy the remote token
-        $token = ${{ github.workspace }},".registry\registry-rem\token" -join "\"
+        $token = "${{ github.workspace }}",".registry\registry-rem\token" -join "\"
         Write-Host "Token location: " + $token
         dir $token
         cp $token token
