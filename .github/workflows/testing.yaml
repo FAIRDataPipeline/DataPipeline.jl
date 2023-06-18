@@ -95,7 +95,7 @@ jobs:
         pip3 install fair-cli
         # Install remote registry
         mkdir ${{ github.workspace }}/.registry
-        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        curl -fsSL https://raw.githubusercontent.com/FAIRDataPipeline/data-registry/442f345f19cb58f2ecc2b745eb3e86fef7bb8000/static/remoteregistry.ps1 | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
         script=${{ github.workspace }}/.registry/registry-rem/scripts/start_fair_registry
         echo $script
