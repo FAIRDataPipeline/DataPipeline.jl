@@ -72,10 +72,10 @@ jobs:
         mkdir ${{ github.workspace }}\.registry
         $script1 = "${{ github.workspace }}",".registry\remoteregistry.ps1" -join "\"
         Write-Host "Download script: " $script1
-        curl https://raw.githubusercontent.com/FAIRDataPipeline/data-registry/442f345f19cb58f2ecc2b745eb3e86fef7bb8000/static/remoteregistry.ps1 > $script1
+        curl https://raw.githubusercontent.com/FAIRDataPipeline/data-registry/hotfix/scripts/static/remoteregistry.ps1 > $script1
         dir $script1
         # Temporary fix for downloading old registry
-        & $script1 -d ${{ github.workspace }}\.registry\registry-rem -b hotfix/scripts -s drams.test-remote-settings -u admin -p admin
+        & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
         $script2 = "${{ github.workspace }}",".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
         Write-Host "Start registry script: " $script2
