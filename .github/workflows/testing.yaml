@@ -65,7 +65,7 @@ jobs:
       if: ${{ runner.os == 'Windows' }}
       run: |
         # Activate venv
-        $GITHUB_WORKSPACE\.venv\Scripts\activate
+        .venv\Scripts\activate
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
