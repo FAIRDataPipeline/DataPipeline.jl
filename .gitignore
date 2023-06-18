@@ -1,6 +1,7 @@
-docs/build/
-out/
+/docs/build
+/out
 /.fair
 /.vscode
 /.venv
+/.registry
 /Manifest.toml
