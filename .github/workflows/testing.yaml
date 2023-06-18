@@ -74,12 +74,12 @@ jobs:
         Write-Host "Download script: " + $script1
         curl https://data.scrc.uk/static/remoteregistry.ps1 > $script1
         dir $script1
-        $script1 -d $GITHUB_WORKSPACE\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
+        & $script1 -d $GITHUB_WORKSPACE\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
         $script2 = $GITHUB_WORKSPACE,".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
         Write-Host "Start registry script: " + $script2
         dir $script2
-        $script2 -p 8001 -s drams.test-remote-settings
+        & $script2 -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         $token = $GITHUB_WORKSPACE,".registry\registry-rem\token" -join "\"
         Write-Host "Token location: " + $token
