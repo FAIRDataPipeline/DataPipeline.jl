@@ -39,14 +39,14 @@ jobs:
     - name: Install graphviz and venv
       run: |
         # Create venv
-        python3 -m venv $GITHUB_WORKSPACE/.venv
+        python3 -m venv .venv
         sudo apt-get install graphviz
         # sudo apt-get install libmemcached-dev
       shell: bash
     - name: Install and start remote registry
       run: |
         # Activate venv
-        source $GITHUB_WORKSPACE/.venv/bin/activate
+        source .venv/bin/activate
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
@@ -55,10 +55,10 @@ jobs:
         # Start the remote registry
         $GITHUB_WORKSPACE/.registry/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
         # Copy the remote token
-        cp $GITHUB_WORKSPACE/.registry/registry-rem/token $PWD/token
+        cp $GITHUB_WORKSPACE/.registry/registry-rem/token ./token
     - name: Initialise and run fair-cli
       run: |
-        $GITHUB_WORKSPACE/.venv/bin/activate
+        .venv/bin/activate
         fair registry install
         fair registry start
         fair init --ci

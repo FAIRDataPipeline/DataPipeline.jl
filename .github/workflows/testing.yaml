@@ -51,7 +51,7 @@ jobs:
     - name: Install graphviz and venv
       run: |
         # Create venv
-        python3 -m venv $GITHUB_WORKSPACE/.venv
+        python3 -m venv .venv
         if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get install graphviz
             # sudo apt-get install libmemcached-dev
@@ -80,7 +80,7 @@ jobs:
       if: ${{ runner.os != 'Windows' }}
       run: |
         # Activate venv
-        source $GITHUB_WORKSPACE/.venv/bin/activate
+        source .venv/bin/activate
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
@@ -99,7 +99,7 @@ jobs:
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
       env:
-        ACTIVATE: ${{ runner.os == 'Windows' && '$GITHUB_WORKSPACE\.venv\Scripts\Activate.ps1' || 'source $GITHUB_WORKSPACE/.venv/bin/activate' }}
+        ACTIVATE: ${{ runner.os == 'Windows' && '.venv\Scripts\Activate.ps1' || 'source .venv/bin/activate' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
