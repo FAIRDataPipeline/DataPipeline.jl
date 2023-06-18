@@ -69,19 +69,19 @@ jobs:
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
-        mkdir $GITHUB_WORKSPACE\.registry
-        $script1 = $GITHUB_WORKSPACE,".registry\remoteregistry.ps1" -join "\"
+        mkdir ${{ github.workspace }}\.registry
+        $script1 = ${{ github.workspace }},".registry\remoteregistry.ps1" -join "\"
         Write-Host "Download script: " + $script1
         curl https://data.scrc.uk/static/remoteregistry.ps1 > $script1
         dir $script1
-        & $script1 -d $GITHUB_WORKSPACE\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
+        & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        $script2 = $GITHUB_WORKSPACE,".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
+        $script2 = ${{ github.workspace }},".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
         Write-Host "Start registry script: " + $script2
         dir $script2
         & $script2 -p 8001 -s drams.test-remote-settings
         # Copy the remote token
-        $token = $GITHUB_WORKSPACE,".registry\registry-rem\token" -join "\"
+        $token = ${{ github.workspace }},".registry\registry-rem\token" -join "\"
         Write-Host "Token location: " + $token
         dir $token
         cp $token token
@@ -93,14 +93,14 @@ jobs:
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
-        mkdir $GITHUB_WORKSPACE/.registry
-        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d $GITHUB_WORKSPACE/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        mkdir ${{ github.workspace }}/.registry
+        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        script=$GITHUB_WORKSPACE/.registry/registry-rem/scripts/start_fair_registry
+        script=${{ github.workspace }}/.registry/registry-rem/scripts/start_fair_registry
         echo $script
         $script -p 8001 -s drams.test-remote-settings
         # Copy the remote token
-        cp $GITHUB_WORKSPACE/.registry/registry-rem/token $PWD/token
+        cp ${{ github.workspace }}/.registry/registry-rem/token $PWD/token
     - name: Initialise and run fair-cli
       run: |
         ${ACTIVATE}
