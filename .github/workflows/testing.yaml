@@ -72,7 +72,7 @@ jobs:
         mkdir ${{ github.workspace }}\.registry
         $script1 = "${{ github.workspace }}",".registry\remoteregistry.ps1" -join "\"
         Write-Host "Download script: " $script1
-        curl https://raw.githubusercontent.com/FAIRDataPipeline/data-registry/hotfix/scripts/static/remoteregistry.ps1 > $script1
+        curl https://raw.githubusercontent.com/FAIRDataPipeline/data-registry/main/static/remoteregistry.ps1 > $script1
         dir $script1
         # Temporary fix for downloading old registry
         & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
@@ -80,7 +80,7 @@ jobs:
         $script2 = "${{ github.workspace }}",".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
         Write-Host "Start registry script: " $script2
         dir $script2
-        & $script2 -p 8001 -s drams.test-remote-settings
+        & $script2 -p 8001 -s drams.test-remote-settings -b
         # Copy the remote token
         $token = "${{ github.workspace }}",".registry\registry-rem\token" -join "\"
         Write-Host "Token location: " $token
