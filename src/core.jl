@@ -190,7 +190,7 @@ end
 Get local repository access token.
 """
 function _gettoken()
-    fp = expanduser("~/.fair/registry/token")
+    fp = expanduser(@static Sys.iswindows() ? "~/.fair/registry/token.txt" : "~/.fair/registry/token")
     if isfile(fp)
         token = open(fp) do file
             read(file, String)
