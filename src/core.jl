@@ -190,5 +190,5 @@ end
 Get local repository access token.
 """
 function _gettoken()
-    return string("token ", FDP_LOCAL_TOKEN)
+    return string("token ", FDP_LOCAL_TOKEN())
 end
