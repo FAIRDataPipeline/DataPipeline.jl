@@ -6,14 +6,7 @@ using DataFrames
 using Plots
 
 # Initialise code run
-config_file = joinpath(ENV["FDP_CONFIG_DIR"], "config.yaml")
-@static if Sys.iswindows()
-    submission_script = joinpath(ENV["FDP_CONFIG_DIR"], "script.bat")
-else
-    submission_script = joinpath(ENV["FDP_CONFIG_DIR"], "script.sh")
-end
-    
-handle = initialise(config_file, submission_script)
+handle = initialise()
 
 # Read model parameters
 path = link_read!(handle, "SEIRS_model/parameters")
