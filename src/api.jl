@@ -4,7 +4,10 @@
 Reads in  working config.yaml file, generates a new Code Run entry, and returns a 
 `DataRegistryHandle` containing various metadata.
 """
-function initialise(config_file::String, submission_script::String)
+function initialise(config_file::String = joinpath(ENV["FDP_CONFIG_DIR"],
+                                                   "config.yaml"),
+                    submission_script::String = joinpath(ENV["FDP_CONFIG_DIR"],
+                                                         FDP_CONFIG_FILE))
     # Read working config file
     print("processing config file: ", config_file)
     config = YAML.load_file(config_file)
