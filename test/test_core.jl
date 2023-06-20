@@ -41,10 +41,10 @@ end
 #     DataPipeline._getfilehash()
 # end
 
-# Test.@testset "_gettoken()" begin
-#     token = DataPipeline._gettoken()
-#     tmp = match(r"token (.*)", token)
-#     @test length(tmp[1]) == 40
-# end
+Test.@testset "_gettoken()" begin
+    token = DataPipeline._gettoken()
+    tmp = match(r"token (.*)", token)
+    @test length(tmp[1]) == 40
+end
 
 end
