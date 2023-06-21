@@ -125,10 +125,10 @@ jobs:
       if: ${{ runner.os == 'Windows' }}
       uses: julia-actions/julia-runtest@v1
       env:
-        WORKSPACE: $( sed -e 's#\\#/#g' <<< "${{ github.workspace }}" )
+        WORKSPACE: sed -e 's#\\#/#g' <<< "${{ github.workspace }}"
         ACTIVATE_DIR: 'Scripts'
       with:
-        prefix: $( sed -e 's#\\#/#g' <<< "${{ github.workspace }}/test/runtests-windows.sh" )
+        prefix: sed -e 's#\\#/#g' <<< "${{ github.workspace }}/test/runtests-windows.sh"
     - name: Run tests on Linux / macOS
       if: ${{ runner.os != 'Windows' }}
       uses: julia-actions/julia-runtest@v1
