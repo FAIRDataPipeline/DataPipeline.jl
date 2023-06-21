@@ -3,7 +3,8 @@ run_metadata:
   default_output_namespace: testing
   description: Test script
   script: |
-    TEST_SCRIPT
+    cd $PWD
+    $TEST_SCRIPT
 
 read:
 - data_product: parameters
