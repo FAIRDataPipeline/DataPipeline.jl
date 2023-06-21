@@ -8,9 +8,9 @@
 
 ## What is the FAIR Data Pipeline?
 
-The *FAIR Data Pipeline* can be understood by considering the central kernel of its technological implementation: the **[Data Registry](https://data.scrc.uk/) (DR)**. Essentially it consists of a relational database, and a [RESTful API](https://data.scrc.uk/api/) for reading and writing to the database.
+The *FAIR Data Pipeline* can be understood by considering the central kernel of its technological implementation: the **[Data Registry](https://data.fairdatapipeline.org/) (DR)**. Essentially it consists of a relational database, and a [RESTful API](https://data.fairdatapipeline.org/api/) for reading and writing to the database.
 
-The [database schema](https://data.scrc.uk/static/images/schema.svg) (as illustrated below) is detailed, but key entity types of relevance here include:
+The [database schema](https://data.fairdatapipeline.org/static/images/schema.svg) (as illustrated below) is detailed, but key entity types of relevance here include:
 
 - **Data Products** - *metadata*, or information about data 'products'. To elaborate: a data product typically includes a link to, e.g. a table of scientific data, but [for the most part] the underlying data is not actually stored in the DR. This may appear at first glance to be a limitation but there is a key benefit to the approach which is discussed briefly in due course.
 - **Code Repo Releases** - i.e. 'models', or a given version of some code that implements, e.g. a statistical model.
@@ -37,10 +37,10 @@ For that reason, features such as these are instead provided by what can be rega
 #### Data Registry schema
 
 ```@raw html
-<img src="https://data.scrc.uk/static/images/schema.svg" alt="Data Registry" schema="height: 80px;"/>
+<img src="https://data.fairdatapipeline.org/static/images/schema.svg" alt="Data Registry" schema="height: 80px;"/>
 ```
 
-Hint: click [here](https://data.scrc.uk/static/images/schema.svg) to expand the image.
+Hint: click [here](https://data.fairdatapipeline.org/static/images/schema.svg) to expand the image.
 
 ## What does this package do?
 

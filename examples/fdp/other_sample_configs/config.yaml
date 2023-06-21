@@ -2,7 +2,7 @@ fail_on_hash_mismatch: True
 run_metadata:
   description: A simple analysis
   local_data_registry_url: https://localhost:8000/api/
-  remote_data_registry_url: https://data.scrc.uk/api/
+  remote_data_registry_url: https://data.fairdatapipeline.org/api/
   default_input_namespace: SCRC
   default_output_namespace: johnsmith
   default_data_store: /datastore/

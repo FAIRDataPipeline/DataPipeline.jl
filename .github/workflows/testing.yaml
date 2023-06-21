@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -72,7 +76,7 @@ jobs:
         mkdir ${{ github.workspace }}\.registry
         $script1 = "${{ github.workspace }}",".registry\remoteregistry.ps1" -join "\"
         Write-Host "Download script: " $script1
-        curl https://raw.githubusercontent.com/FAIRDataPipeline/data-registry/main/static/remoteregistry.ps1 > $script1
+        curl https://data.fairdatapipeline.org/static/remoteregistry.ps1 > $script1
         dir $script1
         # Temporary fix for downloading old registry
         & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
@@ -86,7 +90,7 @@ jobs:
         Write-Host "Token location: " $token
         dir $token
         cp $token token
-        dir .venv\Scripts
+        deactivate
     - name: Install and start remote registry on Linux / macOS
       if: ${{ runner.os != 'Windows' }}
       run: |
@@ -96,13 +100,14 @@ jobs:
         pip3 install fair-cli
         # Install remote registry
         mkdir ${{ github.workspace }}/.registry
-        curl -fsSL https://data.scrc.uk/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        curl -fsSL https://data.fairdatapipeline.org/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
         script=${{ github.workspace }}/.registry/registry-rem/scripts/start_fair_registry
         echo $script
         $script -p 8001 -s drams.test-remote-settings
         # Copy the remote token
         cp ${{ github.workspace }}/.registry/registry-rem/token $PWD/token
+        deactivate
     - name: Initialise and run fair-cli
       run: |
         source .venv/${ACTIVATE_DIR}/activate
@@ -111,12 +116,27 @@ jobs:
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        deactivate
       shell: bash
       env:
-        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin/' }}
+        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}
       # working-directory: julia_example # Use the julia_example Directory
-    - name: Run tests
+    - name: Run tests on Windows
+      if: ${{ runner.os == 'Windows' }}
       uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: ${{ github.workspace }}
+        ACTIVATE_DIR: 'Scripts'
+      with:
+        prefix: ${{ github.workspace }}\\test\\runtests-windows.sh
+    - name: Run tests on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
+      uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: ${{ github.workspace }}
+        ACTIVATE_DIR: 'bin'
+      with:
+        prefix: ${{ github.workspace }}/test/runtests.sh
     - name: Process coverage
       uses: julia-actions/julia-processcoverage@v1
     - name: Coveralls

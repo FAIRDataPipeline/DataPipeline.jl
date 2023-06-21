@@ -25,11 +25,15 @@ const STR_ROOT = string(LOCAL_DR_PORTLESS, "storage_root/")
 const API_ROOT = string(LOCAL_DR_STEM, ":8000", "/api/")
 const SL_ROOT = string(LOCAL_DR_PORTLESS, "storage_location/")
 const DATA_OUT = "./out/"
+FDP_CONFIG_DIR() = get(ENV, "FDP_CONFIG_DIR", ".")
 @static if Sys.iswindows()
-    const FDP_CONFIG_FILE = "script.bat"
+    const FDP_SUBMISSION_SCRIPT = "script.bat"
 else
-    const FDP_CONFIG_FILE = "script.sh"
+    const FDP_SUBMISSION_SCRIPT = "script.sh"
 end
+FDP_PATH_CONFIG() = joinpath(FDP_CONFIG_DIR(), "config.yaml")
+FDP_PATH_SUBMISSION() = joinpath(FDP_CONFIG_DIR(), FDP_SUBMISSION_SCRIPT)
+FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", "fake_token")
 
 include("core.jl")
 

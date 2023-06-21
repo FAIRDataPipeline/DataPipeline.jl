@@ -1,7 +1,7 @@
 run_metadata:
   description: pre_example stuff
   local_data_registry_url: http://localhost:8000/api/
-  remote_data_registry_url: http://data.scrc.uk/api/
+  remote_data_registry_url: http://data.fairdatapipeline.org/api/
   default_input_namespace: martinburke
   default_output_namespace: martinburke
   write_data_store: /media/martin/storage/projects/AtomProjects/DataPipeline.jl/examples/simple2/data/
