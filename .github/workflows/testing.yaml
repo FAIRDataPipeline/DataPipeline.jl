@@ -113,15 +113,15 @@ jobs:
         fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
       shell: bash
       env:
-        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin/' }}
+        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
       env:
         WORKSPACE: ${{ github.workspace }}
-        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin/' }}
+        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}
       with:
-        prefix: source ./runtests.sh
+        prefix: ${{ github.workspace }}/test/runtests.sh
     - name: Process coverage
       uses: julia-actions/julia-processcoverage@v1
     - name: Coveralls
