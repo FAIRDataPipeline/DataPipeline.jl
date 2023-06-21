@@ -23,5 +23,6 @@ fair run --debug --dirty $WORKSPACE/examples/fdp/SEIRSconfig.yaml
 
 TEST_SCRIPT=$@
 sed -e "s,\$TEST_SCRIPT,$TEST_SCRIPT," $TEST_DIR/pre_config.yaml > $TEST_DIR/config.yaml
-fair run --debug --dirty config.yaml
+cat $TEST_DIR/config.yaml
+fair run --debug --dirty $TEST_DIR/config.yaml
 rm -f config.yaml
