@@ -24,7 +24,8 @@ fair pull --debug $WORKSPACE/examples/fdp/SEIRSconfig.yaml
 fair run --debug --dirty $WORKSPACE/examples/fdp/SEIRSconfig.yaml
 
 TEST_SCRIPT=$@
-sed -e "s,\$TEST_SCRIPT,$TEST_SCRIPT," $TEST_DIR/pre_config.yaml > $TEST_DIR/config.yaml
+ESCAPED_SCRIPT=$(printf '%s\n' "$TEST_SCRIPT" | sed -e 's/[\,&]/\\&/g')
+sed -e "s,\$TEST_SCRIPT,$ESCAPED_SCRIPT," $TEST_DIR/pre_config.yaml > $TEST_DIR/config.yaml
 cat $TEST_DIR/config.yaml
 fair run --debug --dirty $TEST_DIR/config.yaml
 rm -f config.yaml
