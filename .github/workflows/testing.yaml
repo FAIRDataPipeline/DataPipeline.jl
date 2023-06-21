@@ -125,7 +125,7 @@ jobs:
       if: ${{ runner.os == 'Windows' }}
       uses: julia-actions/julia-runtest@v1
       env:
-        WORKSPACE: ${{ github.workspace }}
+        WORKSPACE: ${ sed -e 's#\\#/#g' <<< "${{ github.workspace }}" }
         ACTIVATE_DIR: 'Scripts'
       with:
         prefix: ${{ github.workspace }}\\test\\runtests-windows.sh
