@@ -6,8 +6,10 @@ if [ "$WORKSPACE" = "" ]; then
     export TEST_DIR=$PWD
   else
     export WORKSPACE=. # Don't really know where the workspace is!
-    export PWD=$WORKSPACE/test
+    export TEST_DIR=$WORKSPACE/test
   fi
+else
+  export TEST_DIR=$WORKSPACE/test
 fi
 
 if [ "$ACTIVATE_DIR" = "" ]; then
