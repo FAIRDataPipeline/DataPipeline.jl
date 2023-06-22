@@ -126,6 +126,7 @@ jobs:
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        exit $?
         deactivate
       shell: bash
       env:
