@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -16,7 +20,7 @@ jobs:
     strategy:
       matrix:
         julia-version:
-          - '1.6'
+          - '1.8'
           - '1'
         os:
           - ubuntu-latest
@@ -28,6 +32,13 @@ jobs:
           - false
       fail-fast: false
     steps:
+    - name: Check stuff on Windows
+      if: ${{ runner.os == 'Windows' }}
+      run: |
+        pwd
+        echo $PWD
+        ls -latrF
+      shell: bash
     - name: Checkout code
       uses: actions/checkout@v3
     - name: Set up julia
@@ -37,46 +48,102 @@ jobs:
         arch: ${{ matrix.arch }}
     - name: Build package
       uses: julia-actions/julia-buildpkg@v1
+    - name: Fix manifest for active Julia version
+      run: |
+        using Pkg
+        Pkg.activate("examples/fdp")
+        Pkg.resolve()
+      shell: julia --color=yes {0} 
     - name: Set up python
       uses: actions/setup-python@v4
       with:
         python-version: '3.x'
         architecture: 'x64'
-    - name: Install graphviz
+    - name: Install graphviz and venv
       run: |
+        # Create venv
+        python3 -m venv .venv
         if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get install graphviz
+            # sudo apt-get install libmemcached-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
             choco install graphviz
         elif [ "$RUNNER_OS" == "Darwin" ]; then
             brew install graphviz
         fi
       shell: bash
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    - name: Activate venv macOS / Ubuntu
-      if: runner.os != 'Windows'
+    - name: Install and start remote registry on Windows
+      if: ${{ runner.os == 'Windows' }}
       run: |
-        python -m venv venv
-        source venv/bin/activate
-    - name: Activate venv FAIR CLI Windows
-      if: runner.os == 'Windows'
-      run: |
-        python -m venv venv
-        venv/Scripts/activate.ps1
-    - name: Install, initialise and run FAIR CLI
-      run: |
+        # Activate venv
+        .venv\Scripts\activate
+        # Install fair-cli
         pip3 install fair-cli
+        # Install remote registry
+        mkdir ${{ github.workspace }}\.registry
+        $script1 = "${{ github.workspace }}",".registry\remoteregistry.ps1" -join "\"
+        Write-Host "Download script: " $script1
+        curl https://data.fairdatapipeline.org/static/remoteregistry.ps1 > $script1
+        dir $script1
+        # Temporary fix for downloading old registry
+        & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        $script2 = "${{ github.workspace }}",".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
+        Write-Host "Start registry script: " $script2
+        dir $script2
+        & $script2 -p 8001 -s drams.test-remote-settings -b
+        # Copy the remote token
+        $token = "${{ github.workspace }}",".registry\registry-rem\token" -join "\"
+        Write-Host "Token location: " $token
+        dir $token
+        cp $token token
+        deactivate
+    - name: Install and start remote registry on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
+      run: |
+        # Activate venv
+        source .venv/bin/activate
+        # Install fair-cli
+        pip3 install fair-cli
+        # Install remote registry
+        mkdir ${{ github.workspace }}/.registry
+        curl -fsSL https://data.fairdatapipeline.org/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        script=${{ github.workspace }}/.registry/registry-rem/scripts/start_fair_registry
+        echo $script
+        $script -p 8001 -s drams.test-remote-settings
+        # Copy the remote token
+        cp ${{ github.workspace }}/.registry/registry-rem/token $PWD/token
+        deactivate
+    - name: Initialise and run fair-cli
+      run: |
+        source .venv/${ACTIVATE_DIR}/activate
         fair registry install
-        fair init --ci
         fair registry start
-        fair pull --local examples/fdp/SEIRSconfig.yaml
-        fair run --local examples/fdp/SEIRSconfig.yaml
-    - name: Run tests
+        fair init --ci
+        fair pull --debug examples/fdp/SEIRSconfig.yaml
+        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        deactivate
+      shell: bash
+      env:
+        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}
+      # working-directory: julia_example # Use the julia_example Directory
+    - name: Run tests on Windows
+      if: ${{ runner.os == 'Windows' }}
       uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: .
+        ACTIVATE_DIR: 'Scripts'
+      with:
+        prefix: ./test/runtests-windows.sh
+    - name: Run tests on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
+      uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: ${{ github.workspace }}
+        ACTIVATE_DIR: 'bin'
+      with:
+        prefix: ${{ github.workspace }}/test/runtests.sh
     - name: Process coverage
       uses: julia-actions/julia-processcoverage@v1
     - name: Coveralls

@@ -190,15 +190,5 @@ end
 Get local repository access token.
 """
 function _gettoken()
-    fp = expanduser(@static Sys.iswindows() ? "~/.fair/registry/token.txt" : "~/.fair/registry/token")
-    if isfile(fp)
-        token = open(fp) do file
-            read(file, String)
-        end
-        output = string("token ", chomp(token))
-    else
-        token = ENV["FDP_LOCAL_TOKEN"]
-        output = string("token ", token)
-    end
-    return output
+    return string("token ", FDP_LOCAL_TOKEN())
 end

@@ -23,34 +23,48 @@ jobs:
         arch: x64
     - name: Build package
       uses: julia-actions/julia-buildpkg@v1
+    - name: Fix manifest for nightly Julia
+      run: |
+        using Pkg
+        Pkg.activate(".")
+        Pkg.resolve()
+        Pkg.activate("examples/fdp")
+        Pkg.resolve()
+      shell: julia --color=yes {0} 
     - name: Set up python
       uses: actions/setup-python@v4
       with:
         python-version: '3.x'
         architecture: 'x64'
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    - name: Activate venv macOS / Ubuntu
-      if: runner.os != 'Windows'
+    - name: Install graphviz and venv
       run: |
-        python -m venv venv
-        source venv/bin/activate
-    - name: Activate venv FAIR CLI Windows
-      if: runner.os == 'Windows'
+        # Create venv
+        python3 -m venv .venv
+        sudo apt-get install graphviz
+        # sudo apt-get install libmemcached-dev
+      shell: bash
+    - name: Install and start remote registry
       run: |
-        python -m venv venv
-        venv/Scripts/activate.ps1
-    - name: Install, initialise and run FAIR CLI
-      run: |
+        # Activate venv
+        source .venv/bin/activate
+        # Install fair-cli
         pip3 install fair-cli
+        # Install remote registry
+        mkdir $GITHUB_WORKSPACE/.registry
+        curl -fsSL https://data.fairdatapipeline.org/static/remoteregistry.sh | /bin/bash -s -- -d $GITHUB_WORKSPACE/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        $GITHUB_WORKSPACE/.registry/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
+        # Copy the remote token
+        cp $GITHUB_WORKSPACE/.registry/registry-rem/token ./token
+    - name: Initialise and run fair-cli
+      run: |
+        .venv/bin/activate
         fair registry install
-        fair init --ci
         fair registry start
-        fair pull --local examples/fdp/SEIRSconfig.yaml
-        fair run --local examples/fdp/SEIRSconfig.yaml
+        fair init --ci
+        fair pull --local --debug examples/fdp/SEIRSconfig.yaml
+        fair run --local --debug --dirty examples/fdp/SEIRSconfig.yaml
+      # working-directory: julia_example # Use the julia_example Directory
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
       continue-on-error: true
