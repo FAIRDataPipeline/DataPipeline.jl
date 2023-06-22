@@ -20,7 +20,7 @@ register:
   file_type: csv
   release_date: 2020-06-01T12:00
   version: "1.0.0"
-  primary: True
+  primary: False
 
 write:
 - data_product: model_output
