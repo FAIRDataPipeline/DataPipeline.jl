@@ -16,7 +16,6 @@ on:
 jobs:
   pipeline-tests:
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
         julia-version:
