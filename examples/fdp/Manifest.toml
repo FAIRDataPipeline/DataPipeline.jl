@@ -144,7 +144,7 @@ version = "1.5.0"
 deps = ["AxisArrays", "CSV", "DataFrames", "Dates", "FTPClient", "HDF5", "HTTP", "JSON", "NetCDF", "Plots", "PrettyTables", "SHA", "SQLite", "TOML", "URIs", "UnicodePlots", "YAML"]
 path = "../.."
 uuid = "9ced6f0a-eb77-43a8-bbd1-bbf3031b0d12"
-version = "0.53.0"
+version = "0.53.2"
 
 [[deps.DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
