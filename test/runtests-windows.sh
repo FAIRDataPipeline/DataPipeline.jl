@@ -32,7 +32,7 @@ ESCAPED_SCRIPT=$(printf '%s\n' "$TEST_SCRIPT" | sed -e 's/[\,&]/\\&/g')
 echo Escaped test: "$ESCAPED_SCRIPT"
 sed -e "s,\$TEST_SCRIPT,$ESCAPED_SCRIPT," $TEST_DIR/pre_config.yaml > $TEST_DIR/config.yaml
 cat $TEST_DIR/config.yaml
-fair run --dirty --local --debug $TEST_DIR/config.yaml
+fair run --dirty --local $TEST_DIR/config.yaml
 rm -f $TEST_DIR/config.yaml
 
 deactivate

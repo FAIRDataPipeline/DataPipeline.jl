@@ -61,14 +61,18 @@ jobs:
         architecture: 'x64'
     - name: Install graphviz and venv
       run: |
+        # You may need to install python: https://python.org
         # Create venv
+        # If not installed: pip3 install venv
         python3 -m venv .venv
         if [ "$RUNNER_OS" == "Linux" ]; then
+            # If your Linux installation doesn't use apt, then use your package manager
             sudo apt-get install graphviz
-            # sudo apt-get install libmemcached-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
+            # If choco is not installed: Install from https://chocolatey.org
             choco install graphviz
         elif [ "$RUNNER_OS" == "Darwin" ]; then
+            # If brew not installed: Install from https://brew.sh
             brew install graphviz
         fi
       shell: bash
