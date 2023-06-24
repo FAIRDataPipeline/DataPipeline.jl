@@ -29,6 +29,9 @@ if ! fair run --dirty --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exi
 TEST_SCRIPT="$(printf ' %q' "$@")"
 echo Test: "$TEST_SCRIPT"
 ESCAPED_SCRIPT=$(printf '%s\n' "$TEST_SCRIPT" | sed -e 's/[\,&]/\\&/g')
+if [ "$RUNNER_OS" = "Windows" ]; then
+  ESCAPED_SCRIPT=$TEST_SCRIPT
+fi
 echo Escaped test: "$ESCAPED_SCRIPT"
 sed -e "s,\$TEST_SCRIPT,$ESCAPED_SCRIPT," $TEST_DIR/pre_config.yaml > $TEST_DIR/config.yaml
 cat $TEST_DIR/config.yaml
