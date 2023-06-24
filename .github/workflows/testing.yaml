@@ -139,7 +139,7 @@ jobs:
         WORKSPACE: .
         ACTIVATE_DIR: 'Scripts'
       with:
-        prefix: ./test/runtests-windows.sh
+        prefix: ./test/runtests.sh
     - name: Run tests on Linux / macOS
       if: ${{ runner.os != 'Windows' }}
       uses: julia-actions/julia-runtest@v1
