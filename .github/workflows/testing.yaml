@@ -32,13 +32,6 @@ jobs:
           - false
       fail-fast: false
     steps:
-    - name: Check stuff on Windows
-      if: ${{ runner.os == 'Windows' }}
-      run: |
-        pwd
-        echo $PWD
-        ls -latrF
-      shell: bash
     - name: Checkout code
       uses: actions/checkout@v3
     - name: Set up julia

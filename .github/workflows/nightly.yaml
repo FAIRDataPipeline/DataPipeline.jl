@@ -41,7 +41,6 @@ jobs:
         # Create venv
         python3 -m venv .venv
         sudo apt-get install graphviz
-        # sudo apt-get install libmemcached-dev
       shell: bash
     - name: Install and start remote registry
       run: |
@@ -50,21 +49,32 @@ jobs:
         # Install fair-cli
         pip3 install fair-cli
         # Install remote registry
-        mkdir $GITHUB_WORKSPACE/.registry
-        curl -fsSL https://data.fairdatapipeline.org/static/remoteregistry.sh | /bin/bash -s -- -d $GITHUB_WORKSPACE/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        mkdir ${{ github.workspace }}/.registry
+        curl -fsSL https://data.fairdatapipeline.org/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
         # Start the remote registry
-        $GITHUB_WORKSPACE/.registry/registry-rem/scripts/start_fair_registry -p 8001 -s drams.test-remote-settings
+        script=${{ github.workspace }}/.registry/registry-rem/scripts/start_fair_registry
+        echo $script
+        $script -p 8001 -s drams.test-remote-settings
         # Copy the remote token
-        cp $GITHUB_WORKSPACE/.registry/registry-rem/token ./token
+        cp ${{ github.workspace }}/.registry/registry-rem/token $PWD/token
+        deactivate
     - name: Initialise and run fair-cli
       run: |
-        .venv/bin/activate
+        source .venv/${ACTIVATE_DIR}/activate
         fair registry install
         fair registry start
         fair init --ci
-        fair pull --local --debug examples/fdp/SEIRSconfig.yaml
-        fair run --local --debug --dirty examples/fdp/SEIRSconfig.yaml
+        fair pull --debug examples/fdp/SEIRSconfig.yaml
+        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        deactivate
+      shell: bash
+      env:
+        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}
       # working-directory: julia_example # Use the julia_example Directory
     - name: Run tests
       uses: julia-actions/julia-runtest@v1
-      continue-on-error: true
+      env:
+        WORKSPACE: ${{ github.workspace }}
+        ACTIVATE_DIR: 'bin'
+      with:
+        prefix: ${{ github.workspace }}/test/runtests.sh
