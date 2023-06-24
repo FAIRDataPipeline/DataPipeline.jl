@@ -29,6 +29,7 @@ jobs:
         Pkg.activate(".")
         Pkg.resolve()
         Pkg.activate("examples/fdp")
+        Pkg.update()
         Pkg.resolve()
       shell: julia --color=yes {0} 
     - name: Set up python
