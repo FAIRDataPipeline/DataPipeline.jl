@@ -141,7 +141,7 @@ uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 version = "1.5.0"
 
 [[deps.DataPipeline]]
-deps = ["AxisArrays", "CSV", "DataFrames", "Dates", "FTPClient", "HTTP", "JSON", "NetCDF", "Plots", "PrettyTables", "SHA", "SQLite", "TOML", "URIs", "UnicodePlots", "YAML"]
+deps = ["AxisArrays", "CSV", "DataFrames", "Dates", "HTTP", "JSON", "NetCDF", "Plots", "PrettyTables", "SHA", "SQLite", "TOML", "URIs", "UnicodePlots", "YAML"]
 path = "../.."
 uuid = "9ced6f0a-eb77-43a8-bbd1-bbf3031b0d12"
 version = "0.53.2"
@@ -205,12 +205,6 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "74faea50c1d007c85837327f6775bea60b5492dd"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.2+2"
-
-[[deps.FTPClient]]
-deps = ["LibCURL", "URIParser"]
-git-tree-sha1 = "fcdcac297167852b23bae6d7bb3bf82a726ff70c"
-uuid = "01fcc997-4f28-56b8-8a06-30002c134abb"
-version = "1.2.1"
 
 [[deps.FilePathsBase]]
 deps = ["Compat", "Dates", "Mmap", "Printf", "Test", "UUIDs"]
@@ -885,12 +879,6 @@ deps = ["Random", "Test"]
 git-tree-sha1 = "9a6ae7ed916312b41236fcef7e0af564ef934769"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.13"
-
-[[deps.URIParser]]
-deps = ["Unicode"]
-git-tree-sha1 = "53a9f49546b8d2dd2e688d216421d050c9a31d0d"
-uuid = "30578b45-9adc-5946-b283-645ec420af67"
-version = "0.4.1"
 
 [[deps.URIs]]
 git-tree-sha1 = "074f993b0ca030848b897beff716d93aca60f06a"
