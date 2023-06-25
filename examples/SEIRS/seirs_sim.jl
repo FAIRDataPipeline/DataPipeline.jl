@@ -39,4 +39,4 @@ path = link_write!(handle, "figure")
 savefig(g, path)
 
 # Register code run in local registry
-finalise(handle)
+DataPipeline.finalise(handle)

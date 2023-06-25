@@ -33,7 +33,6 @@ else
 end
 FDP_PATH_CONFIG() = joinpath(FDP_CONFIG_DIR(), "config.yaml")
 FDP_PATH_SUBMISSION() = joinpath(FDP_CONFIG_DIR(), FDP_SUBMISSION_SCRIPT)
-FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", "fake_token")
 
 include("core.jl")
 
