@@ -20,19 +20,15 @@ using URIs
 
 const C_DEBUG_MODE = false
 const LOCAL_DR_STEM = "http://localhost"
-const LOCAL_DR_PORTLESS = string(LOCAL_DR_STEM, "/api/")
-const STR_ROOT = string(LOCAL_DR_PORTLESS, "storage_root/")
 const API_ROOT = string(LOCAL_DR_STEM, ":8000", "/api/")
-const SL_ROOT = string(LOCAL_DR_PORTLESS, "storage_location/")
-const DATA_OUT = "./out/"
+const SL_ROOT = string(API_ROOT, "storage_location/")
 FDP_CONFIG_DIR() = get(ENV, "FDP_CONFIG_DIR", ".")
 @static if Sys.iswindows()
     const FDP_SUBMISSION_SCRIPT = "script.bat"
 else
     const FDP_SUBMISSION_SCRIPT = "script.sh"
 end
-FDP_PATH_CONFIG() = joinpath(FDP_CONFIG_DIR(), "config.yaml")
-FDP_PATH_SUBMISSION() = joinpath(FDP_CONFIG_DIR(), FDP_SUBMISSION_SCRIPT)
+const FDP_CONFIG_FILE = "config.yaml"
 
 include("core.jl")
 

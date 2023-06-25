@@ -6,8 +6,8 @@ using NetCDF
 Reads in  working config.yaml file, generates a new Code Run entry, and returns a 
 `DataRegistryHandle` containing various metadata.
 """
-function initialise(config_file::String = FDP_PATH_CONFIG(),
-                    submission_script::String = FDP_PATH_SUBMISSION())
+function initialise(config_file::String = joinpath(FDP_CONFIG_DIR(), FDP_CONFIG_FILE),
+                    submission_script::String = joinpath(FDP_CONFIG_DIR(), FDP_SUBMISSION_SCRIPT))
     # Read working config file
     print("processing config file: ", config_file)
     config = YAML.load_file(config_file)
