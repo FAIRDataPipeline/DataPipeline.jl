@@ -28,7 +28,7 @@ function _createconfig(path)
                         "write_data_store" => write_data_store,
                         "script_path" => expanduser("~/.fair/registry/datastore/script.sh"),
                         "description" => "A description", 
-                        "script" => "julia examples/fdp/seirs_sim.jl",
+                        "script" => "julia examples/SEIRS/seirs_sim.jl",
                         "remote_repo" => "https://github.com/FAIRDataPipeline/DataPipeline.jl.git",
                         "local_data_registry_url" => "http://localhost:8000/api/")
     data = Dict("run_metadata" => run_metadata)

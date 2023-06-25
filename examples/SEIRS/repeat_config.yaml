@@ -1,0 +1,23 @@
+run_metadata:
+  default_input_namespace: PSU
+  description: SEIRS Model repeat julia
+  script: |
+    julia --project=examples/SEIRS -e "using Pkg; Pkg.instantiate()"
+    julia --project=examples/SEIRS examples/SEIRS/seirs_sim.jl
+
+read:
+- data_product: SEIRS_model/parameters
+  version: "1.0.0"
+
+write:
+- data_product: model_output
+  description: SEIRS model results
+  file_type: csv
+  use: 
+    data_product: SEIRS_model/results/model_output/julia
+
+- data_product: figure
+  description: SEIRS output plot
+  file_type: pdf
+  use: 
+    data_product: SEIRS_model/results/figure/julia

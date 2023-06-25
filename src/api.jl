@@ -143,7 +143,7 @@ end
     read_array(handle, data_product[, component])
 
 Read [array] data product.
-- note that it must already have been downloaded from the remote data store using `fdp pull`.
+- note that it must already have been downloaded from the remote data store using `fair pull`.
 - the latest version of the data is read unless otherwise specified.
 """
 function read_array(handle::DataRegistryHandle, data_product::String, component=nothing)
@@ -174,7 +174,7 @@ end
 
 Read [table] data product.
 - note that it must already have been downloaded from the remote data store using 
-  `fdp pull`.
+  `fair pull`.
 - the latest version of the data is read unless otherwise specified.
 """
 function read_table(handle::DataRegistryHandle, data_product::String, component=nothing)
@@ -190,7 +190,7 @@ end
 
 Read TOML-based data product.
 - note that it must already have been downloaded from the remote data store using 
-  `fdp pull`.
+  `fair pull`.
 - the specific version can be specified in the config file (else the latest version is 
   used.)
 """
@@ -216,7 +216,7 @@ end
 
 Read TOML-based data product.
 - note that it must already have been downloaded from the remote data store using 
-  `fdp pull`.
+  `fair pull`.
 - the specific version can be specified in the config file (else the latest version is 
   used.)
 """

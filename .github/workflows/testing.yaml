@@ -43,7 +43,7 @@ jobs:
     - name: Fix manifest for active Julia version
       run: |
         using Pkg
-        Pkg.activate("examples/fdp")
+        Pkg.activate("examples/SEIRS")
         Pkg.resolve()
       shell: julia --color=yes {0} 
     - name: Set up python
@@ -117,8 +117,8 @@ jobs:
         fair registry install
         fair registry start
         fair init --ci
-        fair pull --debug examples/fdp/SEIRSconfig.yaml
-        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        fair pull --debug examples/SEIRS/full_config.yaml
+        fair run --debug --dirty examples/SEIRS/full_config.yaml
         exit $?
         deactivate
       shell: bash

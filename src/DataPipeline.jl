@@ -38,7 +38,6 @@ FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", "fake_token")
 include("core.jl")
 
 include("api.jl")
-export initialise, finalise
 export link_read!, link_write!
 export read_array, read_table, read_distribution, read_estimate
 export write_array, write_table, write_distribution, write_estimate
@@ -52,7 +51,7 @@ include("api_audit.jl")         # DR audits
 include("testing.jl")
 
 # ---- SEIRS model ----
-module SeirsModel
+module SEIRSModel
 
 include("model.jl")
 export modelseirs, plotseirs, getparameter

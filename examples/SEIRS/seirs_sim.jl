@@ -1,12 +1,12 @@
 ### SEIRS model example
 using DataPipeline
-using DataPipeline.SeirsModel
+using DataPipeline.SEIRSModel
 using CSV
 using DataFrames
 using Plots
 
 # Initialise code run
-handle = initialise()
+handle = DataPipeline.initialise()
 
 # Read model parameters
 path = link_read!(handle, "SEIRS_model/parameters")

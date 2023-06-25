@@ -2,10 +2,10 @@
 # - implements: https://fairdatapipeline.github.io/docs/interface/example0/
 
 ## BASELINE FDP FUNCTIONALITY:
-# fdp pull config.yaml
-# fdp run config.yaml
-# fdp push config.yaml
-## NB. 'fdp' -> FAIR
+# fair pull config.yaml
+# fair run config.yaml
+# fair push config.yaml
+## NB. 'fair' -> FAIR
 
 ## LOCAL DR INSTRUCTIONS:
 # - start using: ~/.fair/registry/scripts/start_fair_registry
