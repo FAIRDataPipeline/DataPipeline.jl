@@ -28,7 +28,7 @@ jobs:
         using Pkg
         Pkg.activate(".")
         Pkg.resolve()
-        Pkg.activate("examples/fdp")
+        Pkg.activate("examples/SEIRS")
         Pkg.update()
         Pkg.resolve()
       shell: julia --color=yes {0} 
@@ -65,8 +65,8 @@ jobs:
         fair registry install
         fair registry start
         fair init --ci
-        fair pull --debug examples/fdp/SEIRSconfig.yaml
-        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        fair pull --debug examples/SEIRS/full_config.yaml
+        fair run --debug --dirty examples/SEIRS/full_config.yaml
         deactivate
       shell: bash
       env:

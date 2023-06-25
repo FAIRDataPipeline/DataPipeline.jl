@@ -1,11 +1,15 @@
+using YAML
+using Dates
+using NetCDF
+
 """
     initialise(config_file, submission_script)
 
 Reads in  working config.yaml file, generates a new Code Run entry, and returns a 
 `DataRegistryHandle` containing various metadata.
 """
-function initialise(config_file::String = FDP_PATH_CONFIG(),
-                    submission_script::String = FDP_PATH_SUBMISSION())
+function initialise(config_file::String = joinpath(FDP_CONFIG_DIR(), FDP_CONFIG_FILE),
+                    submission_script::String = joinpath(FDP_CONFIG_DIR(), FDP_SUBMISSION_SCRIPT))
     # Read working config file
     print("processing config file: ", config_file)
     config = YAML.load_file(config_file)
@@ -141,7 +145,7 @@ end
     read_array(handle, data_product[, component])
 
 Read [array] data product.
-- note that it must already have been downloaded from the remote data store using `fdp pull`.
+- note that it must already have been downloaded from the remote data store using `fair pull`.
 - the latest version of the data is read unless otherwise specified.
 """
 function read_array(handle::DataRegistryHandle, data_product::String, component=nothing)
@@ -172,7 +176,7 @@ end
 
 Read [table] data product.
 - note that it must already have been downloaded from the remote data store using 
-  `fdp pull`.
+  `fair pull`.
 - the latest version of the data is read unless otherwise specified.
 """
 function read_table(handle::DataRegistryHandle, data_product::String, component=nothing)
@@ -188,7 +192,7 @@ end
 
 Read TOML-based data product.
 - note that it must already have been downloaded from the remote data store using 
-  `fdp pull`.
+  `fair pull`.
 - the specific version can be specified in the config file (else the latest version is 
   used.)
 """
@@ -214,7 +218,7 @@ end
 
 Read TOML-based data product.
 - note that it must already have been downloaded from the remote data store using 
-  `fdp pull`.
+  `fair pull`.
 - the specific version can be specified in the config file (else the latest version is 
   used.)
 """
@@ -313,9 +317,8 @@ function write_array(handle::DataRegistryHandle, data::Array, data_product::Stri
     use_component = metadata["use_component"]
 
     # Write array
-    HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
-        write(file, use_component, data)
-    end       
+    nccreate(path, use_component, vcat([["$use_component-dim-$i", collect(Base.axes(data, i)), Dict()] for i in 1:ndims(data)]...)...)
+    ncwrite(data, path, use_component)
 
     # Write metadata to handle
     handle.outputs[(data_product, component)] = metadata

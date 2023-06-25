@@ -17,11 +17,11 @@ show(run(`fair init --ci`))
 
 ```@example
 print(pwd())
-read(`fair pull /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/SEIRSconfig.yaml`, String)
+read(`fair pull /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/SEIRS/full_config.yaml`, String)
 ```
 
 dsf
 
 ```@example
-show(run(`fair run /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/SEIRSconfig.yaml`))
+show(run(`fair run /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/SEIRS/full_config.yaml`))
 ```

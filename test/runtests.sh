@@ -23,8 +23,8 @@ source $WORKSPACE/.venv/$ACTIVATE_DIR/activate
 fair registry install
 fair registry start
 fair init --ci
-if ! fair pull --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
-if ! fair run --dirty --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
+if ! fair pull --local $WORKSPACE/examples/SEIRS/full_config.yaml; then exit 1; fi
+if ! fair run --dirty --local $WORKSPACE/examples/SEIRS/full_config.yaml; then exit 1; fi
 
 TEST_SCRIPT="$(printf ' %q' "$@")"
 echo Test: "$TEST_SCRIPT"
