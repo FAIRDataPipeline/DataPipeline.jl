@@ -7,17 +7,6 @@ language-agnostic RESTful API that is used to interact with the Data Registry.
 
 module DataPipeline
 
-using CSV
-using DataFrames
-using Dates
-using FTPClient
-using HTTP
-using JSON
-using Plots
-using SHA
-using YAML
-using URIs
-
 const C_DEBUG_MODE = false
 const LOCAL_DR_STEM = "http://localhost"
 const API_ROOT = string(LOCAL_DR_STEM, ":8000", "/api/")

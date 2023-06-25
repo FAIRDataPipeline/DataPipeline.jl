@@ -1,3 +1,8 @@
+using JSON
+using HTTP
+using URIs
+using SHA
+
 """
     DataRegistryHandle
 

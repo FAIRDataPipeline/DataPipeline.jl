@@ -1,6 +1,7 @@
 using TOML
 using AxisArrays
 using NetCDF
+using CSV
 
 ### hdf5 file processing ###
 const ARRAY_OBJ_NAME = "array"

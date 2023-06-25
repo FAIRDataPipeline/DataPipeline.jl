@@ -25,7 +25,7 @@ function modelseirs(initial_state::Dict, timesteps::Int64, years::Int64,
     mu = time_unit_days / (inv_mu * 365.25)
     sigma = time_unit_days / inv_sigma
 
-    results = DataFrames.DataFrame(time=0, S=S, E=E, I=I, R=R)
+    results = DataFrame(time=0, S=S, E=E, I=I, R=R)
 
     for t = 1:timesteps
         N = S + E + I + R
@@ -49,9 +49,8 @@ function modelseirs(initial_state::Dict, timesteps::Int64, years::Int64,
         new_I = results.I[t] + I_rate
         new_R = results.R[t] + R_rate
 
-        new = DataFrames.DataFrame(time=t * time_unit_days, 
-     S=new_S, E=new_E, 
-     I=new_I, R=new_R)
+        new = DataFrame(time=t * time_unit_days, S=new_S,
+                        E=new_E, I=new_I, R=new_R)
 
         results = vcat(results, new)
     end

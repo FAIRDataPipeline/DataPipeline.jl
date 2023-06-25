@@ -1,3 +1,7 @@
+using JSON
+using URIs
+using TOML
+
 ### new interface for FAIR data pipeline ###
 # - implements: https://fairdatapipeline.github.io/docs/interface/example0/
 
@@ -71,8 +75,10 @@ function _registerobject(path::String, root::String, description::String;
     end
 
     # Register object
-    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, 
-                        "authors" => [authors_url], "file_type" => file_type_url)
+    object_query = Dict("description" => description,
+                        "storage_location" => storage_loc_uri, 
+                        "authors" => [authors_url],
+                        "file_type" => file_type_url)
     object_url = _postentry("object", object_query)
 
     return object_url
