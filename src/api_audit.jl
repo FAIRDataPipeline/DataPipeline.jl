@@ -1,3 +1,5 @@
+using URIs
+
 ### what's my file
 # NB. THIS IS NOW BROKEN DUE TO CHANGES TO THE DR SCHEMA ***********
 function whats_my_hash(fh::String)
