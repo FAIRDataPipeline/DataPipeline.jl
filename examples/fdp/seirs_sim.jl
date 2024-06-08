@@ -5,12 +5,8 @@ using CSV
 using DataFrames
 using Plots
 
-# ENV["FDP_CONFIG_DIR"] = "/var/folders/0f/fj5r_1ws15x4jzgnm27h_y6h0000gr/T/tmpnq2t4wqy/data_store/jobs/2021-09-27_16_53_43_149467"
-
 # Initialise code run
-config_file = joinpath(ENV["FDP_CONFIG_DIR"], "config.yaml")
-submission_script = joinpath(ENV["FDP_CONFIG_DIR"], "script.sh")
-handle = initialise(config_file, submission_script)
+handle = initialise()
 
 # Read model parameters
 path = link_read!(handle, "SEIRS_model/parameters")

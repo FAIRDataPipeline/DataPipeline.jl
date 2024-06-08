@@ -1,0 +1,16 @@
+run_metadata:
+  default_input_namespace: testing
+  default_output_namespace: testing
+  description: Test script
+  script: |
+    $TEST_SCRIPT
+
+read:
+- data_product: parameters
+  use:
+    namespace: PSU
+    data_product: SEIRS_model/parameters
+
+- data_product: model_output
+  use:
+    data_product: SEIRS_model/results/model_output/julia

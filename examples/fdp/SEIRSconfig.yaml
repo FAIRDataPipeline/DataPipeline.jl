@@ -3,7 +3,7 @@ run_metadata:
   default_output_namespace: testing
   description: SEIRS Model julia
   script: |
-    julia --project=examples/fdp -e 'using Pkg; Pkg.instantiate()'
+    julia --project=examples/fdp -e "using Pkg; Pkg.instantiate()"
     julia --project=examples/fdp examples/fdp/seirs_sim.jl
 
 register:
@@ -21,7 +21,7 @@ register:
   file_type: csv
   release_date: 2021-09-20T12:00
   version: "1.0.0"
-  primary: True
+  primary: False
 
 write:
 - data_product: model_output

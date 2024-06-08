@@ -1,7 +1,7 @@
 run_metadata:
   description: Register a file in the pipeline
   local_data_registry_url: https://localhost:8000/api/
-  remote_data_registry_url: https://data.scrc.uk/api/
+  remote_data_registry_url: https://data.fairdatapipeline.org/api/
   default_input_namespace: SCRC
   default_output_namespace: soniamitchell
   default_data_store: /Users/SoniaM/datastore/

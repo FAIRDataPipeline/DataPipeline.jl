@@ -2,18 +2,16 @@
 
 !!! note
 
-    See [here](https://fairdatapipeline.github.io/) for the main FAIR Data Pipeline documentation, and information about the SCRC. This website is for the Julia package only.
+    See [here](https://www.fairdatapipeline.org) for the main FAIR Data Pipeline documentation, and information about the SCRC. This website is for the Julia package only.
 
-**DataPipeline.jl**  -  *the SCRC 'Data Pipeline' in Julia*
+**DataPipeline.jl**  -  *the Julia implementation of the FAIR Data Pipeline*
 
-## What is the SCRC data pipeline?
-Per the SCRC docs, the **Scottish COVID-19 Response Consortium [SCRC]** is a research consortia concisting *"of dozens of individuals from over 30 academic and commercial organisations"* formed in response to [RAMP: Rapid Assistance in Modelling the Pandemic](https://epcced.github.io/ramp/), a directive to the scientific community coordinated by the Royal Society.
+## What is the FAIR Data Pipeline?
 
-A key outcome of the project is to develop more epidemiological models of COVID-19 spread in order to develop a more robust and clearer understanding of the impacts of different exit strategies from lockdown - see the [SCRC docs](https://fairdatapipeline.github.io/) for more information.
+The *FAIR Data Pipeline* can be understood by considering the central kernel of its technological implementation: the **[Data Registry](https://data.fairdatapipeline.org/) (DR)**. Essentially it consists of a relational database, and a [RESTful API](https://data.fairdatapipeline.org/api/) for reading and writing to the database.
 
-As a working process developed by the SCRC, the *data pipeline* can be understood by considering the central kernel of its technological implementation: the **[Data Registry](https://data.scrc.uk/) (DR)**. Essentially it consists of a relational database, and a [RESTful API](https://data.scrc.uk/api/) for reading and writing to the database.
+The [database schema](https://data.fairdatapipeline.org/static/images/schema.svg) (as illustrated below) is detailed, but key entity types of relevance here include:
 
-The [database schema](https://data.scrc.uk/static/images/schema.svg) (as illustrated below) is detailed, but key entity types of relevance here include:
 - **Data Products** - *metadata*, or information about data 'products'. To elaborate: a data product typically includes a link to, e.g. a table of scientific data, but [for the most part] the underlying data is not actually stored in the DR. This may appear at first glance to be a limitation but there is a key benefit to the approach which is discussed briefly in due course.
 - **Code Repo Releases** - i.e. 'models', or a given version of some code that implements, e.g. a statistical model.
 - **Code runs** - or model runs, such as the output from a single realisation of the model.
@@ -39,13 +37,14 @@ For that reason, features such as these are instead provided by what can be rega
 #### Data Registry schema
 
 ```@raw html
-<img src="https://data.scrc.uk/static/images/schema.svg" alt="Data Registry schema="height: 80px;"/>
+<img src="https://data.fairdatapipeline.org/static/images/schema.svg" alt="Data Registry" schema="height: 80px;"/>
 ```
-Hint: click [here](https://data.scrc.uk/static/images/schema.svg) to expand the image.
+
+Hint: click [here](https://data.fairdatapipeline.org/static/images/schema.svg) to expand the image.
 
 ## What does this package do?
 
-Similar to the [R](https://fairdatapipeline.github.io/docs/API/R/) and the [python](https://fairdatapipeline.github.io/docs/API/python/) FAIR Data Pipeline API implementations, this package provides a language-specific automation layer [for the language-agnostic **RESTful API** that is used to interact with the DR.] It also handles the downloading (and pre-processing) of Data Products based on that [meta]data.
+Similar to the [R](https://www.fairdatapipeline.org/docs/API/R/) and the [python](https://www.fairdatapipeline.org/docs/API/python/) FAIR Data Pipeline API implementations, this package provides a language-specific automation layer [for the language-agnostic **RESTful API** that is used to interact with the DR.] It also handles the downloading (and pre-processing) of Data Products based on that [meta]data.
 
 ## Getting started
 
@@ -53,6 +52,6 @@ Similar to the [R](https://fairdatapipeline.github.io/docs/API/R/) and the [pyth
 
 The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
 
-```
+```julia
 pkg> add https://github.com/FAIRDataPipeline/DataPipeline.jl
 ```

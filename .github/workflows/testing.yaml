@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -7,63 +11,144 @@ on:
     tags:
       - 'v*'
   pull_request:
+  workflow_dispatch:
 
 jobs:
-  dp-tests:
+  pipeline-tests:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
         julia-version:
-          - "1.7.1"
+          - '1.8'
+          - '1'
         os:
           - ubuntu-latest
-#          - macOS-latest
-#          - windows-latest
+          - macOS-latest
+          - windows-latest
         arch:
           - x64
         experimental:
           - false
       fail-fast: false
-      
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Set up julia
       uses: julia-actions/setup-julia@v1
       with:
         version: ${{ matrix.julia-version }}
         arch: ${{ matrix.arch }}
     - name: Build package
-      uses: julia-actions/julia-buildpkg@master
+      uses: julia-actions/julia-buildpkg@v1
+    - name: Fix manifest for active Julia version
+      run: |
+        using Pkg
+        Pkg.activate("examples/fdp")
+        Pkg.resolve()
+      shell: julia --color=yes {0} 
     - name: Set up python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.x'
         architecture: 'x64'
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    - name: Install and initialise FAIR CLI
+    - name: Install graphviz and venv
       run: |
-        python -m venv venv
-        source venv/bin/activate
+        # You may need to install python: https://python.org
+        # Create venv
+        # If not installed: pip3 install venv
+        python3 -m venv .venv
+        if [ "$RUNNER_OS" == "Linux" ]; then
+            # If your Linux installation doesn't use apt, then use your package manager
+            sudo apt-get install graphviz
+        elif [ "$RUNNER_OS" == "Windows" ]; then
+            # If choco is not installed: Install from https://chocolatey.org
+            choco install graphviz
+        elif [ "$RUNNER_OS" == "Darwin" ]; then
+            # If brew not installed: Install from https://brew.sh
+            brew install graphviz
+        fi
+      shell: bash
+    - name: Install and start remote registry on Windows
+      if: ${{ runner.os == 'Windows' }}
+      run: |
+        # Activate venv
+        .venv\Scripts\activate
+        # Install fair-cli
         pip3 install fair-cli
+        # Install remote registry
+        mkdir ${{ github.workspace }}\.registry
+        $script1 = "${{ github.workspace }}",".registry\remoteregistry.ps1" -join "\"
+        Write-Host "Download script: " $script1
+        curl https://data.fairdatapipeline.org/static/remoteregistry.ps1 > $script1
+        dir $script1
+        # Temporary fix for downloading old registry
+        & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        $script2 = "${{ github.workspace }}",".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
+        Write-Host "Start registry script: " $script2
+        dir $script2
+        & $script2 -p 8001 -s drams.test-remote-settings -b
+        # Copy the remote token
+        $token = "${{ github.workspace }}",".registry\registry-rem\token" -join "\"
+        Write-Host "Token location: " $token
+        dir $token
+        cp $token token
+        deactivate
+    - name: Install and start remote registry on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
+      run: |
+        # Activate venv
+        source .venv/bin/activate
+        # Install fair-cli
+        pip3 install fair-cli
+        # Install remote registry
+        mkdir ${{ github.workspace }}/.registry
+        curl -fsSL https://data.fairdatapipeline.org/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        script=${{ github.workspace }}/.registry/registry-rem/scripts/start_fair_registry
+        echo $script
+        $script -p 8001 -s drams.test-remote-settings
+        # Copy the remote token
+        cp ${{ github.workspace }}/.registry/registry-rem/token $PWD/token
+        deactivate
+    - name: Initialise and run fair-cli
+      run: |
+        source .venv/${ACTIVATE_DIR}/activate
         fair registry install
-        mkdir ~/.fair/registry/datastore
-        fair init --ci
         fair registry start
-
-    - name: Running
-      uses: julia-actions/julia-runtest@master
+        fair init --ci
+        fair pull --debug examples/fdp/SEIRSconfig.yaml
+        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        deactivate
+      shell: bash
+      env:
+        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}
+      # working-directory: julia_example # Use the julia_example Directory
+    - name: Run tests on Windows
+      if: ${{ runner.os == 'Windows' }}
+      uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: .
+        ACTIVATE_DIR: 'Scripts'
+      with:
+        prefix: ./test/runtests.sh
+    - name: Run tests on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
+      uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: ${{ github.workspace }}
+        ACTIVATE_DIR: 'bin'
+      with:
+        prefix: ${{ github.workspace }}/test/runtests.sh
     - name: Process coverage
       uses: julia-actions/julia-processcoverage@v1
     - name: Coveralls
-      uses: coverallsapp/github-action@master
+      uses: coverallsapp/github-action@v2
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        path-to-lcov: ./lcov.info
+        file: ./lcov.info
     - name: Codecov
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v3
+      with:
+        files: lcov.info
