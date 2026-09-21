@@ -18,7 +18,10 @@ Test.@testset "_convertquery()" begin
     # Test multiple key-value pairs
     test_string2 = DataPipeline._convertquery(Dict("description" => "Short description",
                                                    "key" => "value"))
-    @test test_string2 == "?key=value&description=Short%20description"
+    # Dict iteration order is unspecified, so compare the pairs rather than the string
+    @test startswith(test_string2, "?")
+    @test Set(split(test_string2[2:end], "&")) ==
+          Set(["key=value", "description=Short%20description"])
 
     # Test datetimes
     rt = Dates.now()
