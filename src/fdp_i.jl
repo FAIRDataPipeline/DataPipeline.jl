@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
 ### new interface for FAIR data pipeline ###
 # - implements: https://fairdatapipeline.github.io/docs/interface/example0/
 

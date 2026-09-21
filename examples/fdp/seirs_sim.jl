@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
 ### SEIRS model example
 using DataPipeline
 using DataPipeline.SeirsModel

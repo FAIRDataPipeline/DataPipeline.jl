@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
 using Test
 
 # Identify files in test/ that are testing matching files in src/

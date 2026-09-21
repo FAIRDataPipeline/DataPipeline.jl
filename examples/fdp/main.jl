@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
 ### SEIRD model simulation example
 import DataPipeline
 import BayesianWorkflows
