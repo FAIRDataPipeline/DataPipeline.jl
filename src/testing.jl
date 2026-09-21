@@ -4,7 +4,7 @@
     _startregistry()
 
 Start FAIR registry.
-""" 
+"""
 function _startregistry()
     path = expanduser("~/.fair/registry/scripts/start_fair_registry")
     cmd = `sh $path`
@@ -16,7 +16,7 @@ end
     _createconfig()
 
 Generate `run_metadata` section of (user-written) config.yaml file.
-""" 
+"""
 function _createconfig(path)
 
     # Generate run_metadata block
@@ -25,11 +25,12 @@ function _createconfig(path)
                         "latest_commit" => "b8af9e4c5d77521c608188ba63273f959149b532",
                         "local_repo" => "/Users/Soniam/Desktop/git/FAIRDataPipeline/DataPipeline.jl",
                         "remote_data_registry_url" => "http://localhost:8001/api/",
-                        "default_input_namespace" => "testing", 
-                        "default_output_namespace" => "testing", 
+                        "default_input_namespace" => "testing",
+                        "default_output_namespace" => "testing",
                         "write_data_store" => write_data_store,
-                        "script_path" => expanduser("~/.fair/registry/datastore/script.sh"),
-                        "description" => "A description", 
+                        "script_path" =>
+                            expanduser("~/.fair/registry/datastore/script.sh"),
+                        "description" => "A description",
                         "script" => "julia examples/fdp/seirs_sim.jl",
                         "remote_repo" => "https://github.com/FAIRDataPipeline/DataPipeline.jl.git",
                         "local_data_registry_url" => "http://localhost:8000/api/")
@@ -38,23 +39,23 @@ function _createconfig(path)
     # Create file path
     fullpath = joinpath(write_data_store, path)
     !isfile(fullpath) ? mkpath(dirname(fullpath)) : nothing
-    
+
     # Write config yaml file
     YAML.write_file(fullpath, data)
 
     # Return path
-    return(fullpath)
+    return fullpath
 end
 
 """
     _addwrite()
 
 Add `write` section to (working) config.yaml file.
-""" 
-function _addwrite(path::String, data_product::String, description::String; 
-                   version=nothing, file_type=nothing, 
-                   use_data_product=nothing, use_component=nothing, 
-                   use_version=nothing, use_namespace=nothing)
+"""
+function _addwrite(path::String, data_product::String, description::String;
+                   version = nothing, file_type = nothing,
+                   use_data_product = nothing, use_component = nothing,
+                   use_version = nothing, use_namespace = nothing)
     # Read in config file 
     data = YAML.load_file(path)
 
@@ -65,42 +66,46 @@ function _addwrite(path::String, data_product::String, description::String;
     new_write = Dict()
     new_write["data_product"] = data_product
     new_write["description"] = description
-    if !isnothing(version) new_write["version"] = version end
-    if !isnothing(file_type) new_write["file_type"] = file_type end
+    if !isnothing(version)
+        new_write["version"] = version
+    end
+    if !isnothing(file_type)
+        new_write["file_type"] = file_type
+    end
 
     if !isnothing(use_data_product)
         new_write["use"] = Dict("data_product" => use_data_product)
     end
 
     if !isnothing(use_component)
-        new_write["use"] = Dict("component" => use_component) 
+        new_write["use"] = Dict("component" => use_component)
     end
 
     if !isnothing(use_version)
-        new_write["use"] = Dict("version" => use_version) 
+        new_write["use"] = Dict("version" => use_version)
     end
 
     if !isnothing(use_namespace)
         new_write["use"] = Dict("namespace" => use_namespace)
     end
-        
+
     push!(writes, new_write)
     data["write"] = writes
 
     # Write to config file
     YAML.write_file(path, data)
-    return(path)
+    return path
 end
 
 """
     _addread()
 
 Add `read` section to (user-written) config.yaml file.
-""" 
-function _addread(path::String, data_product::String; version=nothing, 
-                  use_data_product=nothing, 
-                  use_component=nothing, use_version=nothing, 
-                  use_namespace=nothing)
+"""
+function _addread(path::String, data_product::String; version = nothing,
+                  use_data_product = nothing,
+                  use_component = nothing, use_version = nothing,
+                  use_namespace = nothing)
     # Read in config file 
     data = YAML.load_file(path)
 
@@ -110,21 +115,23 @@ function _addread(path::String, data_product::String; version=nothing,
     # Add new read
     new_read = Dict()
     new_read["data_product"] = data_product
-    if !isnothing(version) new_read["version"] = version end
+    if !isnothing(version)
+        new_read["version"] = version
+    end
 
-    if !isnothing(use_data_product) 
+    if !isnothing(use_data_product)
         new_read["use"] = Dict("data_product" => use_data_product)
     end
 
-    if !isnothing(use_component) 
+    if !isnothing(use_component)
         new_read["use"] = Dict("component" => use_component)
     end
 
-    if !isnothing(use_version) 
+    if !isnothing(use_version)
         new_read["use"] = Dict("version" => use_version)
     end
 
-    if !isnothing(use_namespace) 
+    if !isnothing(use_namespace)
         new_read["use"] = Dict("namespace" => use_namespace)
     end
 
@@ -133,7 +140,7 @@ function _addread(path::String, data_product::String; version=nothing,
 
     # Write to config file
     YAML.write_file(path, data)
-    return(path)
+    return path
 end
 
 """

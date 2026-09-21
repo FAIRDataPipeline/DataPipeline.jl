@@ -36,9 +36,8 @@ Register object in local registry and return the URL of the entry.
   public (`true`) or not (`false`).
 ...
 """
-function _registerobject(path::String, root::String, description::String; 
-                         public::Bool=true)
-
+function _registerobject(path::String, root::String, description::String;
+                         public::Bool = true)
     full_path = joinpath(root, path)
     hash = _getfilehash(full_path)
 
@@ -48,13 +47,16 @@ function _registerobject(path::String, root::String, description::String;
 
     # Does a storage location already exist with the same `root`, `hash`, `public`?
     storage_root_id = _extractid(root_uri)
-    script_exists = _geturl("storage_location", Dict("hash" => hash, 
-                            "public" => true, "storage_root" => storage_root_id))
-    
+    script_exists = _geturl("storage_location",
+                            Dict("hash" => hash,
+                                 "public" => true,
+                                 "storage_root" => storage_root_id))
+
     # If it doesn't, then register storage location
-    if isnothing(script_exists)    
+    if isnothing(script_exists)
         storage_loc = replace(path, root => s"")
-        storage_loc_query = Dict("path" => storage_loc, "hash" => hash, "public" => public, 
+        storage_loc_query = Dict("path" => storage_loc, "hash" => hash,
+                                 "public" => public,
                                  "storage_root" => root_uri)
         storage_loc_uri = _postentry("storage_location", storage_loc_query)
     else
@@ -73,8 +75,10 @@ function _registerobject(path::String, root::String, description::String;
     end
 
     # Register object
-    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, 
-                        "authors" => [authors_url], "file_type" => file_type_url)
+    object_query = Dict("description" => description,
+                        "storage_location" => storage_loc_uri,
+                        "authors" => [authors_url],
+                        "file_type" => file_type_url)
     object_url = _postentry("object", object_query)
 
     return object_url
@@ -94,8 +98,9 @@ Register object in local registry and return the URL of the entry.
   public (`true`) or not (`false`).
 ...
 """
-function _registerrepo(path::String, root::String, description::String, hash::String, 
-                       public::Bool=true)
+function _registerrepo(path::String, root::String, description::String,
+                       hash::String,
+                       public::Bool = true)
 
     # Register storage root 
     storage_root_query = Dict("root" => root, "local" => false)
@@ -103,13 +108,16 @@ function _registerrepo(path::String, root::String, description::String, hash::St
 
     # Does a storage location already exist with the same `root`, `hash`, `public`?
     storage_root_id = _extractid(root_uri)
-    script_exists = _geturl("storage_location", Dict("hash" => hash, 
-                            "public" => true, "storage_root" => storage_root_id))
-    
+    script_exists = _geturl("storage_location",
+                            Dict("hash" => hash,
+                                 "public" => true,
+                                 "storage_root" => storage_root_id))
+
     # If it doesn't, then register storage location
-    if isnothing(script_exists)    
+    if isnothing(script_exists)
         storage_loc = replace(path, root => s"")
-        storage_loc_query = Dict("path" => storage_loc, "hash" => hash, "public" => public, 
+        storage_loc_query = Dict("path" => storage_loc, "hash" => hash,
+                                 "public" => public,
                                  "storage_root" => root_uri)
         storage_loc_uri = _postentry("storage_location", storage_loc_query)
     else
@@ -128,8 +136,10 @@ function _registerrepo(path::String, root::String, description::String, hash::St
     end
 
     # Register object
-    object_query = Dict("description" => description, "storage_location" => storage_loc_uri, 
-                        "authors" => [authors_url], "file_type" => file_type_url)
+    object_query = Dict("description" => description,
+                        "storage_location" => storage_loc_uri,
+                        "authors" => [authors_url],
+                        "file_type" => file_type_url)
     object_url = _postentry("object", object_query)
 
     return object_url
@@ -143,15 +153,16 @@ Register code run
 function _patchcoderun(handle::DataRegistryHandle, inputs, outputs)
     coderun_url = handle.code_run_obj
     token = _gettoken()
-    headers = Dict("Authorization" => token, "Content-Type" => "application/json")
+    headers = Dict("Authorization" => token,
+                   "Content-Type" => "application/json")
     data = Dict("inputs" => inputs, "outputs" => outputs)
     body = JSON.json(data)
-  
-    r = HTTP.request("PATCH", coderun_url, headers=headers, body=body)
+
+    r = HTTP.request("PATCH", coderun_url, headers = headers, body = body)
     resp = String(r.body)
     json_resp = JSON.parse(resp)
     entry_url = json_resp["url"]
-   
+
     return entry_url
 end
 
@@ -173,40 +184,45 @@ end
 
 Get data product path
 """
-function _readdataproduct(handle::DataRegistryHandle, data_product::String, 
+function _readdataproduct(handle::DataRegistryHandle, data_product::String,
                           component::String)
     # Get metadata
     rmd = _getmetadata(handle, data_product, "read")
     use_data_product = get(rmd["use"], "data_product", data_product)
     use_component = get(rmd["use"], "component", component)
-    use_namespace = get(rmd["use"], "namespace", 
+    use_namespace = get(rmd["use"], "namespace",
                         handle.config["run_metadata"]["default_input_namespace"])
     use_version = rmd["use"]["version"]
-   
+
     # Is the data product in the registry?
     namespace_id = _getid("namespace", Dict("name" => use_namespace))
-    dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
-                                              "namespace" => namespace_id, 
-                                              "version" => use_version))
+    dp_entry = _getentry("data_product",
+                         Dict("name" => use_data_product,
+                              "namespace" => namespace_id,
+                              "version" => use_version))
 
     if isnothing(dp_entry)
         # If the data product isn't in the registry, throw an error
-        msg = string("no data products found matching: ", use_data_product, " :-(ns: ", 
+        msg = string("no data products found matching: ", use_data_product,
+                     " :-(ns: ",
                      use_namespace, " - v: ", use_version, ")")
         throw(ReadWriteException(msg))
-    else 
+    else
         # Get object entry
         obj_url = dp_entry["object"]
         obj_id = _extractid(obj_url)
-        component_url = _geturl("object_component", Dict("name" => use_component, 
-                                                         "object" => obj_id))
-      
+        component_url = _geturl("object_component",
+                                Dict("name" => use_component,
+                                     "object" => obj_id))
+
         # Get storage location
         path = _getstoragelocation(obj_url)
-      
+
         # Write to handle
-        metadata = Dict("use_dp" => use_data_product, "use_namespace" => use_namespace, 
-                        "use_version" => use_version, "component_url" => component_url)
+        metadata = Dict("use_dp" => use_data_product,
+                        "use_namespace" => use_namespace,
+                        "use_version" => use_version,
+                        "component_url" => component_url)
         handle.inputs[(data_product, component)] = metadata
 
         return path
@@ -232,7 +248,8 @@ end
 
 Get data product metadata
 """
-function _getmetadata(handle::DataRegistryHandle, data_product::String, section::String)
+function _getmetadata(handle::DataRegistryHandle, data_product::String,
+                      section::String)
     if haskey(handle.config, section)
         wmd = handle.config[section]
         for i in eachindex(wmd)
@@ -240,11 +257,12 @@ function _getmetadata(handle::DataRegistryHandle, data_product::String, section:
                 return wmd[i]
             end
         end
-        msg = string(data_product, "' not found in '", section, "' - check config file.")
+        msg = string(data_product, "' not found in '", section,
+                     "' - check config file.")
     else
         msg = string("no '", section, "' section found - check config file.")
     end
-    throw(ConfigFileException(msg))
+    return throw(ConfigFileException(msg))
 end
 
 """
@@ -252,7 +270,7 @@ end
 
 Register data product (from `link_write()`)
 """
-function _registerdataproduct(handle::DataRegistryHandle, data_product::String, 
+function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
                               component::Any)
     # Get metadata
     wmd = handle.outputs[(data_product, component)]
@@ -262,28 +280,30 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
     use_namespace = wmd["use_namespace"]
     use_version = wmd["use_version"]
     filepath = joinpath(datastore, wmd["path"])
-      
+
     if isfile(filepath)
         # Rename file
         oldname = split.(basename(filepath), ".")[1]
         hash = _getfilehash(filepath)
         new_filepath = replace(filepath, oldname => hash)
-        isfile(filepath) ? mv(filepath, new_filepath, force=true) : nothing
+        isfile(filepath) ? mv(filepath, new_filepath, force = true) : nothing
     else
         # Is the data product already in the registry?
         namespace_id = _getid("namespace", Dict("name" => use_namespace))
-        dp_entry = _getentry("data_product", Dict("name" => use_data_product, 
-                                                  "namespace" => namespace_id, 
-                                                  "version" => use_version))
+        dp_entry = _getentry("data_product",
+                             Dict("name" => use_data_product,
+                                  "namespace" => namespace_id,
+                                  "version" => use_version))
 
         # If file doesn't exist but the data product is listed in the handle, then
         # the user may have forgotten to write the file after !link_write() was called
         if isnothing(dp_entry)
-            msg = string("File not found: ", use_data_product, "is present in handle ",
-            "but not in data store.")
+            msg = string("File not found: ", use_data_product,
+                         "is present in handle ",
+                         "but not in data store.")
             throw(ReadWriteException(msg))
         end
-        
+
         obj_entry = DataPipeline._getentry(URIs.URI(dp_entry["object"]))
         location_entry = DataPipeline._getentry(URIs.URI(obj_entry["storage_location"]))
         root_entry = DataPipeline._getentry(URIs.URI(location_entry["storage_root"]))
@@ -296,9 +316,9 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
 
     # Register Object
     new_path = replace(new_filepath, datastore => s"")
-    obj_url = _registerobject(new_path, 
-                              datastore, 
-                              wmd["dataproduct_description"], 
+    obj_url = _registerobject(new_path,
+                              datastore,
+                              wmd["dataproduct_description"],
                               public = wmd["public"])
 
     # Register DataProduct
@@ -306,10 +326,11 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
     if isnothing(ns_url)
         ns_url = _postentry("namespace", Dict("name" => use_namespace))
     end
-    body = Dict("namespace" => ns_url, "name" => use_data_product, "object" => obj_url, 
+    body = Dict("namespace" => ns_url, "name" => use_data_product,
+                "object" => obj_url,
                 "version" => use_version)
     resp = _postentry("data_product", body)
-   
+
     # Register Component
     if isnothing(use_component)
         obj_entry = _getentry(URIs.URI(obj_url))
@@ -330,7 +351,8 @@ end
 Registers a file-based data product based on information provided in the working config 
 file, e.g. for writing external objects.
 """
-function _resolvewrite(handle::DataRegistryHandle, data_product::String, component::String, 
+function _resolvewrite(handle::DataRegistryHandle, data_product::String,
+                       component::String,
                        file_type::String, description::String)
     # Get metadata
     wmd = _getmetadata(handle, data_product, "write")
@@ -362,13 +384,15 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
     if length(path) == 0
 
         # Does the data product already exist?
-        namespace_id = DataPipeline._getid("namespace", Dict("name" => use_namespace))
-        dataproduct_query = Dict("name" => use_data_product, 
-                                 "version" => use_version, 
+        namespace_id = DataPipeline._getid("namespace",
+                                           Dict("name" => use_namespace))
+        dataproduct_query = Dict("name" => use_data_product,
+                                 "version" => use_version,
                                  "namespace" => namespace_id)
         exists = DataPipeline._getentry("data_product", dataproduct_query)
         if !isnothing(exists)
-            msg = string("data product already exists in registry: ", use_data_product, 
+            msg = string("data product already exists in registry: ",
+                         use_data_product,
                          " :-(ns: ", use_namespace, " - v: ", use_version, ")")
             throw(ReadWriteException(msg))
         end
@@ -384,18 +408,15 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String, compone
         path = joinpath(directory, filename)
     end
 
-
-  
-
-    metadata = Dict("use_dp" => use_data_product, 
-                    "use_component" => use_component, 
-                    "use_namespace" => use_namespace, 
-                    "use_version" => use_version, 
-                    "path" => path, 
-                    "public" => public, 
+    metadata = Dict("use_dp" => use_data_product,
+                    "use_component" => use_component,
+                    "use_namespace" => use_namespace,
+                    "use_version" => use_version,
+                    "path" => path,
+                    "public" => public,
                     "dataproduct_description" => dp_description,
                     "component_description" => description)
-    
+
     return metadata
 end
 
@@ -403,12 +424,14 @@ end
     _writekeyval(handle, data, data_product, component)
 
 Write key val (i.e. Dict) - internal
-""" 
-function _writekeyval(handle::DataRegistryHandle, data::Dict, data_product::String, 
+"""
+function _writekeyval(handle::DataRegistryHandle, data::Dict,
+                      data_product::String,
                       component::String, description::String)
 
     # Get metadata
-    metadata = _resolvewrite(handle, data_product, component, "toml", description)
+    metadata = _resolvewrite(handle, data_product, component, "toml",
+                             description)
     use_component = metadata["use_component"]
     path = metadata["path"]
 
@@ -422,10 +445,10 @@ function _writekeyval(handle::DataRegistryHandle, data::Dict, data_product::Stri
     else
         output = Dict(use_component => data)
     end
- 
+
     # Write data to TOML
     open(path, "w") do io
-        TOML.print(io, output)
+        return TOML.print(io, output)
     end
 
     # Write metadata to handle
@@ -438,7 +461,7 @@ end
     _getcomponents(url)
 
 get object associated with entity
-"""  
+"""
 function _getcomponents(url::String)
     resp = _getentry(URIs.URI(url))
     haskey(resp, "whole_object") && (return [url])
@@ -474,7 +497,7 @@ end
     _getstoragelocation(object_url)
 
 Get storage location
-""" 
+"""
 function _getstoragelocation(object_url)
     obj_entry = _getentry(URIs.URI(object_url))
     storage_loc_entry = _getentry(URIs.URI(obj_entry["storage_location"]))

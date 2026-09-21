@@ -16,21 +16,24 @@ Search the Data Registry for matches with a given local file (or directory of fi
 - `path`        -- local file path, or directory.
 - `show_path`   -- (optional) display the [remote] path of any matching files.
 """
-function whats_my_file(path::String; show_path=false)
+function whats_my_file(path::String; show_path = false)
     if isfile(path)     ## single file
         # ft = get_file_type(path)
-        println("Searching the Data Registry for files similar to ", basename(path))
+        println("Searching the Data Registry for files similar to ",
+                basename(path))
         println(" - filepath: ", path)
         println(" - type:     ", get_file_type(path))
         fh = _getfilehash(path)
         resp = whats_my_hash(fh)
         ## process results
-        println(" -> Results: ", resp["count"], " matching data product", resp["count"]==1 ? "" : "s")
+        println(" -> Results: ", resp["count"], " matching data product",
+                resp["count"]==1 ? "" : "s")
         for i in eachindex(resp["results"])
             ## get object
             sl = resp["results"][i]["url"]
             println("SL: ", resp["results"][i])
-            obj_url = string(API_ROOT, "object/?storage_location=", get_id_from_root(sl, SL_ROOT))
+            obj_url = string(API_ROOT, "object/?storage_location=",
+                             get_id_from_root(sl, SL_ROOT))
             obj_resp = _getentry(URIs.URI(obj_url)["results"][1])
             dp_resp = _getentry(URIs.URI(obj_resp["data_product"]))
             ns_resp = _getentry(URIs.URI(dp_resp["namespace"]))
@@ -45,7 +48,8 @@ function whats_my_file(path::String; show_path=false)
             println(" - object:     ", obj_resp["url"])
             println(" - storage:  ", sl)
             println(" -- root:    ", sr_resp["name"])
-            show_path && println(" -- path:    ", joinpath(sr_resp["root"], resp["results"][i]["path"]))
+            show_path && println(" -- path:    ",
+                    joinpath(sr_resp["root"], resp["results"][i]["path"]))
         end
     elseif isdir(path)  ## recurse
         println("Scanning directory... ")
@@ -55,7 +59,7 @@ function whats_my_file(path::String; show_path=false)
             for file in files
                 none || println()
                 none = false
-                whats_my_file(joinpath(root, file), show_path=show_path)
+                whats_my_file(joinpath(root, file), show_path = show_path)
             end
         end
         none && println(" - no files found.")
@@ -63,7 +67,6 @@ function whats_my_file(path::String; show_path=false)
         println("ERROR: invalid path:", path)
     end
 end
-
 
 ### audit trail ph
 # NB - what about auth for user info? ***
@@ -121,11 +124,12 @@ Any issues that impact upon provenance (i.e. [a subset of] the graph of Registry
 - `url`     -- the URL of e.g. a data product or code repo release in the Data Registry.
 - `trace`   -- `"inputs"`, `"outputs"` or `"both"` -- also the default.
 """
-function registry_audit(url::String; trace::String="both")
-    function print_thing(resp, thing::String, lbl=thing)
-        haskey(resp, thing) && println(" - ", lbl, ": ", resp[thing])
+function registry_audit(url::String; trace::String = "both")
+    function print_thing(resp, thing::String, lbl = thing)
+        return haskey(resp, thing) && println(" - ", lbl, ": ", resp[thing])
     end
-    el_count(cnt) = string(cnt==0 ? "no issues" : (cnt==1 ? "one issue" : string(cnt, " issues")))
+    el_count(cnt) = string(cnt==0 ? "no issues" :
+                           (cnt==1 ? "one issue" : string(cnt, " issues")))
     ## fetch e.g. data product
     # - ADD ERROR HANDLING
     resp = _getentry(URIs.URI(url))
@@ -136,7 +140,7 @@ function registry_audit(url::String; trace::String="both")
     ## record object issues
     ic = zeros(Int64, 3)
     obj = _getentry(URIs.URI(resp["object"]))
-    issues = Dict{String,Int64}()
+    issues = Dict{String, Int64}()
     ic[1] += record_issues!(issues, obj)
     ## record component issues
     for c in eachindex(obj["components"])
@@ -148,14 +152,16 @@ function registry_audit(url::String; trace::String="both")
     if trace!="outputs"
         println("AUDITING INPUTS:")
         ic[2] += registry_audit_recursive(obj, "inputs")
-        status = string(status, "\n - inputs affected by ", el_count(ic[2]), ".")
+        status = string(status, "\n - inputs affected by ", el_count(ic[2]),
+                        ".")
     end
     if trace!="inputs"
         println("AUDITING OUTPUTS:")
         ic[3] += registry_audit_recursive(obj, "outputs")
-        status = string(status, "\n - outputs affected by ", el_count(ic[3]), ".")
+        status = string(status, "\n - outputs affected by ", el_count(ic[3]),
+                        ".")
     end
     ## print end status
     println("AUDIT COMPLETE - ", el_count(sum(ic)), " detected for ", url)
-    sum(ic) > 0 && println(status)
+    return sum(ic) > 0 && println(status)
 end

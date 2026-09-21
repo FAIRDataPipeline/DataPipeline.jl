@@ -59,6 +59,6 @@ module SeirsModel
 include("model.jl")
 export modelseirs, plotseirs, getparameter
 
-end 
+end
 
-end 
+end

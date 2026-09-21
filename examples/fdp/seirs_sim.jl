@@ -27,8 +27,8 @@ years = 5
 initial_state = Dict("S" => 0.999, "E" => 0.001, "I" => 0, "R" => 0)
 
 # Run the model
-results = modelseirs(initial_state, timesteps, years, alpha, beta, 
-                                  inv_gamma, inv_omega, inv_mu, inv_sigma);
+results = modelseirs(initial_state, timesteps, years, alpha, beta,
+                     inv_gamma, inv_omega, inv_mu, inv_sigma);
 
 ENV["GKSwstype"]="100"
 g = plotseirs(results);

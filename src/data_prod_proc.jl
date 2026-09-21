@@ -11,16 +11,17 @@ const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"
 const CSV_OBJ_NAME = TABLE_OBJ_NAME # "csv"
 
-
 ## does what it says on the tin
 function read_h5_table(obj_grp, use_axis_arrays::Bool)
     obj = HDF5.read(obj_grp[TABLE_OBJ_NAME])
     if use_axis_arrays      # - option for 2d AxisArray output
         cn = collect(keys(obj[1]))
-        rn = haskey(obj_grp, ROWN_OBJ_NAME) ? HDF5.read(obj_grp[ROWN_OBJ_NAME]) : [1:length(obj)]
+        rn = haskey(obj_grp, ROWN_OBJ_NAME) ?
+             HDF5.read(obj_grp[ROWN_OBJ_NAME]) : [1:length(obj)]
         arr = [collect(obj[i]) for i in eachindex(obj)]
         d = permutedims(reshape(hcat(arr...), length(cn), length(arr)))
-        return AxisArrays.AxisArray(d, AxisArrays.Axis{:row}(rn), AxisArrays.Axis{:col}(cn))
+        return AxisArrays.AxisArray(d, AxisArrays.Axis{:row}(rn),
+                                    AxisArrays.Axis{:col}(cn))
     else
         return obj
     end
@@ -32,12 +33,13 @@ function process_h5_file_group!(output_dict::Dict, h5, use_axis_arrays::Bool)
     if haskey(h5, TABLE_OBJ_NAME)
         d = read_h5_table(h5, use_axis_arrays)
         output_dict[gnm] = d
-    elseif (haskey(h5, ARRAY_OBJ_NAME) && typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
+    elseif (haskey(h5, ARRAY_OBJ_NAME) &&
+            typeof(h5[ARRAY_OBJ_NAME])!=HDF5.Group)
         d = HDF5.read(h5)
         output_dict[gnm] = d
     elseif typeof(h5) == HDF5.Dataset
         d = HDF5.read(h5)
-        output_dict[gnm] = d        
+        output_dict[gnm] = d
     else    # group - recurse
         for g in keys(h5)
             process_h5_file_group!(output_dict, h5[g], use_axis_arrays)
@@ -65,12 +67,16 @@ Read HDF5, CSV or TOML file from local system.
 - `use_axis_arrays` -- convert the output to AxisArrays, where applicable.
 - `verbose`         -- set to `true` to show extra output in the console.
 """
-function _readdataproduct_from_file(filepath::String; use_axis_arrays::Bool = false)
+function _readdataproduct_from_file(filepath::String;
+                                    use_axis_arrays::Bool = false)
     println("processing file: ", filepath)
     HDF5.ishdf5(filepath) && (return process_h5_file(filepath, use_axis_arrays))
-    occursin(".h5", filepath) && (return process_h5_file(filepath, use_axis_arrays))
+    occursin(".h5", filepath) &&
+        (return process_h5_file(filepath, use_axis_arrays))
     occursin(".toml", filepath) && (return TOML.parsefile(filepath))
     occursin(".tml", filepath) && (return TOML.parsefile(filepath))
-    occursin(".csv", filepath) && (return CSV.read(filepath, DataFrames.DataFrame))
+    occursin(".csv", filepath) &&
+        (return CSV.read(filepath, DataFrames.DataFrame))
     println(" - WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
+    return nothing
 end

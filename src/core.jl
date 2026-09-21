@@ -44,10 +44,11 @@ function _postentry(table::String, query::Dict)
         end
 
         token = _gettoken()
-        headers = Dict("Authorization" => token, "Content-Type" => "application/json",
+        headers = Dict("Authorization" => token,
+                       "Content-Type" => "application/json",
                        "Accept" => "application/json; version=1.0.0")
         body = JSON.json(query)
-        r = HTTP.request("POST", url, headers=headers, body=body)
+        r = HTTP.request("POST", url, headers = headers, body = body)
         resp = String(r.body)
         json_resp = JSON.parse(resp)
         entry_url = json_resp["url"]
@@ -60,7 +61,7 @@ end
 
 Convert dictionary to url query.
 """
-function _convertquery(query::Dict) 
+function _convertquery(query::Dict)
     url = "?"
 
     for (key, value) in query
@@ -76,7 +77,7 @@ function _convertquery(query::Dict)
         end
         url = "$url$key=$tmp&"
     end
-    url = chop(url, tail=1)
+    url = chop(url, tail = 1)
     return url
 end
 
@@ -97,7 +98,7 @@ function _getentry(table::String, query::Dict)
         @assert length(results) == 1
         entry = results[1]
         return entry
-    end 
+    end
 end
 
 """
@@ -107,7 +108,8 @@ Use URL to get entry from local data registry.
 """
 function _getentry(url::URIs.URI)
     token = _gettoken()
-    headers = Dict("Authorization" => token, "Content-Type" => "application/json")
+    headers = Dict("Authorization" => token,
+                   "Content-Type" => "application/json")
     try
         r = HTTP.request("GET", url, headers)
         entry = JSON.parse(String(r.body))
@@ -127,7 +129,7 @@ Use query to get entry URL from local data registry.
 """
 function _geturl(table::String, query::Dict)
     entry = _getentry(table, query)
-    output = isnothing(entry) ? nothing : entry["url"] 
+    output = isnothing(entry) ? nothing : entry["url"]
     return output
 end
 
@@ -138,7 +140,7 @@ Use query to get entry ID from local data registry.
 """
 function _getid(table::String, query::Dict)
     url = _geturl(table, query)
-    output = isnothing(url) ? nothing :  _extractid(url)
+    output = isnothing(url) ? nothing : _extractid(url)
     return output
 end
 
@@ -181,7 +183,7 @@ Get file hash.
 """
 function _getfilehash(filepath::String)
     fhash = open(filepath) do file
-        bytes2hex(SHA.sha1(file))
+        return bytes2hex(SHA.sha1(file))
     end
     return fhash
 end

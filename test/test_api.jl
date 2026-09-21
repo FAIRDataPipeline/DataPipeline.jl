@@ -22,13 +22,13 @@ component1 = "component/1"
 component2 = "component/2"
 component3 = "component/3"
 
-data1 = reshape(rand(10), 2, :)  
-data2 = reshape(rand(10), 2, :)  
+data1 = reshape(rand(10), 2, :)
+data2 = reshape(rand(10), 2, :)
 
 estimate1 = rand(1)
 estimate2 = rand(1)
 
-distribution = Dict("parameters" => Dict("mean" => rand(1), "SD" => rand(1)), 
+distribution = Dict("parameters" => Dict("mean" => rand(1), "SD" => rand(1)),
                     "distribution" => "Gaussian", "type" => "distribution")
 
 Test.@testset "link_write()" begin
@@ -38,20 +38,22 @@ Test.@testset "link_write()" begin
 
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description", file_type = file_type, 
+    DataPipeline._addwrite(config, data_product, "description",
+                           file_type = file_type,
                            use_version = version)
-    DataPipeline._addwrite(config, data_product2, "description", file_type = file_type, 
+    DataPipeline._addwrite(config, data_product2, "description",
+                           file_type = file_type,
                            use_version = version)
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
     # Check function output
-    path1 = link_write!(handle, data_product)    
+    path1 = link_write!(handle, data_product)
     @test path1 == handle.outputs[(data_product, nothing)]["path"]
     @test length(handle.outputs) == 1
-    path1 = link_write!(handle, data_product)    
+    path1 = link_write!(handle, data_product)
     @test length(handle.outputs) == 1
-    path2 = link_write!(handle, data_product2)   
+    path2 = link_write!(handle, data_product2)
     @test length(handle.outputs) == 2
 
     open(path1, "w") do file
@@ -66,18 +68,20 @@ Test.@testset "link_write()" begin
     finalise(handle)
 
     # Check path
-    test_path = joinpath("$(datastore)$(namespace)", "$data_product", 
+    test_path = joinpath("$(datastore)$(namespace)", "$data_product",
                          "xxxxxxxxxx.$file_type")
     @test path1 == test_path
-    test_path2 = joinpath("$(datastore)$(namespace)", "$data_product2", 
+    test_path2 = joinpath("$(datastore)$(namespace)", "$data_product2",
                           "xxxxxxxxxx.$file_type")
     @test path2 == test_path2
 
     # Check file
-    should_be_here = joinpath(datastore, handle.outputs[(data_product, nothing)]["path"])
+    should_be_here = joinpath(datastore,
+                              handle.outputs[(data_product, nothing)]["path"])
     @test isfile(should_be_here)
 
-    should_be_here = joinpath(datastore, handle.outputs[(data_product2, nothing)]["path"])
+    should_be_here = joinpath(datastore,
+                              handle.outputs[(data_product2, nothing)]["path"])
     @test isfile(should_be_here)
 end
 
@@ -94,7 +98,7 @@ Test.@testset "link_read()" begin
     path1 = link_read!(handle, data_product)
     @test handle.inputs[(data_product, nothing)]["use_dp"] == data_product
     @test length(handle.inputs) == 1
-    path1 = link_read!(handle, data_product)  
+    path1 = link_read!(handle, data_product)
     @test length(handle.inputs) == 1
 
     # Finalise Code Run
@@ -117,7 +121,8 @@ Test.@testset "write_array()" begin
 
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description", use_version = version)
+    DataPipeline._addwrite(config, data_product, "description",
+                           use_version = version)
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
@@ -150,7 +155,7 @@ Test.@testset "write_array()" begin
     c2 = HDF5.h5open(newpath2, "r") do file
         read(file, component2)
     end
-    @test data2 == c2    
+    @test data2 == c2
 
     # Check handle 
     hash = DataPipeline._getfilehash(newpath1)
@@ -189,15 +194,16 @@ Test.@testset "write_estimate()" begin
 
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description", use_version = version)
+    DataPipeline._addwrite(config, data_product, "description",
+                           use_version = version)
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
     # Write components
-    write_estimate(handle, estimate1, data_product, component1, "description1")  
+    write_estimate(handle, estimate1, data_product, component1, "description1")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_estimate(handle, estimate1, data_product, component1, "description1") 
+    write_estimate(handle, estimate1, data_product, component1, "description1")
     @test length(handle.outputs) == 1
     write_estimate(handle, estimate2, data_product, component2, "description2")
     @test length(handle.outputs) == 2
@@ -240,7 +246,7 @@ Test.@testset "read_estimate()" begin
     dat2 = read_estimate(handle, data_product, component2)
     @test dat1 == estimate1
     @test dat2 == estimate2
-  
+
     # Finalise Code Run
     finalise(handle)
 
@@ -254,19 +260,23 @@ Test.@testset "write_distribution()" begin
 
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description", use_version = version)
+    DataPipeline._addwrite(config, data_product, "description",
+                           use_version = version)
     handle = initialise(config, config)
     @test handle.outputs == Dict()
 
     # Write components
-    write_distribution(handle, distribution["distribution"], distribution["parameters"], 
-                       data_product, component1, "symptom-delay")    
+    write_distribution(handle, distribution["distribution"],
+                       distribution["parameters"],
+                       data_product, component1, "symptom-delay")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_distribution(handle, distribution["distribution"], distribution["parameters"], 
-                       data_product, component1, "symptom-delay")    
+    write_distribution(handle, distribution["distribution"],
+                       distribution["parameters"],
+                       data_product, component1, "symptom-delay")
     @test length(handle.outputs) == 1
-    write_distribution(handle, distribution["distribution"], distribution["parameters"], 
+    write_distribution(handle, distribution["distribution"],
+                       distribution["parameters"],
                        data_product, component2, "symptom-delay")
     @test length(handle.outputs) == 2
 
@@ -319,21 +329,25 @@ end
 # If an attempt is made to write a new component to a data product that was createtd in 
 # a previous Code Run, then an error should be thrown.
 Test.@testset "new components aren't added to existing data products" begin
-    
+
     # write_array() -------------------------------------------------------------------
 
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description", use_version = version)
+    DataPipeline._addwrite(config, data_product, "description",
+                           use_version = version)
     handle = initialise(config, config)
 
     # Write component
-    msg = string("data product already exists in registry: ", data_product, " :-(ns: ",
+    msg = string("data product already exists in registry: ", data_product,
+                 " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_array(
-        handle, data1, data_product, component3, "description3")
+    @test_throws DataPipeline.ReadWriteException(msg) write_array(handle, data1,
+                                                                  data_product,
+                                                                  component3,
+                                                                  "description3")
 
     # write_estimate() ----------------------------------------------------------------
 
@@ -341,30 +355,40 @@ Test.@testset "new components aren't added to existing data products" begin
 
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description", use_version = version)
+    DataPipeline._addwrite(config, data_product, "description",
+                           use_version = version)
     handle = initialise(config, config)
 
     # Write component
-    msg = string("data product already exists in registry: ", data_product, " :-(ns: ",
+    msg = string("data product already exists in registry: ", data_product,
+                 " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_estimate(
-        handle, estimate1, data_product, component3, "description3") 
+    @test_throws DataPipeline.ReadWriteException(msg) write_estimate(handle,
+                                                                     estimate1,
+                                                                     data_product,
+                                                                     component3,
+                                                                     "description3")
 
     # write_distribution() ------------------------------------------------------------
-    
+
     data_product = "data_product/write_distribution/$uid"
 
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description", use_version = version)
+    DataPipeline._addwrite(config, data_product, "description",
+                           use_version = version)
     handle = initialise(config, config)
 
     # Write component
-    msg = string("data product already exists in registry: ", data_product, " :-(ns: ",
+    msg = string("data product already exists in registry: ", data_product,
+                 " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_distribution(
-        handle, distribution["distribution"], distribution["parameters"], 
-        data_product, component3, "symptom-delay")
+    @test_throws DataPipeline.ReadWriteException(msg) write_distribution(handle,
+                                                                         distribution["distribution"],
+                                                                         distribution["parameters"],
+                                                                         data_product,
+                                                                         component3,
+                                                                         "symptom-delay")
 end
 
 end

@@ -16,7 +16,7 @@ Test.@testset "_convertquery()" begin
     @test test_string == "?name=string%2F1"
 
     # Test multiple key-value pairs
-    test_string2 = DataPipeline._convertquery(Dict("description" => "Short description", 
+    test_string2 = DataPipeline._convertquery(Dict("description" => "Short description",
                                                    "key" => "value"))
     @test test_string2 == "?key=value&description=Short%20description"
 
@@ -33,8 +33,8 @@ Test.@testset "_convertquery()" begin
     @test test_url == "?namespace=19"
 
     # Test URLs in array
-    author_query = Dict("authors" => ["http://localhost:8000/api/author/1/", 
-                        "http://localhost:8000/api/author/2/"])
+    author_query = Dict("authors" => ["http://localhost:8000/api/author/1/",
+                            "http://localhost:8000/api/author/2/"])
     test_url = DataPipeline._convertquery(author_query)
     @test test_url == "?authors=1,2"
 end
