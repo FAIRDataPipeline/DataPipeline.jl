@@ -478,6 +478,38 @@ Test.@testset "raise_issue()" begin
           issues_of(registry, whole(handle.repo_obj))
 end
 
+Test.@testset "\${{RUN_ID}} in an output name" begin
+    data_product = "data_product/run_id/$uid"
+    use_name = "data_product/run_id/$uid/run-\${{ RUN_ID }}"
+
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, data_product, "description",
+                           file_type = "txt", use_version = version,
+                           use_data_product = use_name)
+    handle = initialise(config, config)
+    path = link_write!(handle, data_product)
+    # The placeholder is not known until finalise, so the temporary file sits
+    # in a directory named with it
+    @test occursin("\${{ RUN_ID }}", path)
+    write(path, "run id $uid\n")
+    raise_issue(handle, data_product, "run id issue $uid")
+    finalise(handle)
+
+    registered = replace(use_name, "\${{ RUN_ID }}" => handle.code_run_uuid)
+    wmd = handle.outputs[(data_product, nothing)]
+    @test wmd["use_dp"] == registered
+    @test !occursin("RUN_ID", wmd["path"])
+    @test dirname(wmd["path"]) == joinpath(datastore, namespace, registered)
+    @test isfile(wmd["path"])
+    @test !isdir(dirname(path))
+    entry = DataPipeline._finddataproduct(handle.registry, namespace,
+                                          registered, version)
+    @test entry["name"] == registered
+    @test DataPipeline._getentry(handle.registry, "issue",
+                                 Dict("description" => "run id issue $uid"))["component_issues"] ==
+          [wmd["component_url"]]
+end
+
 Test.@testset "registry from the working config" begin
     data_product = "data_product/link_write/$uid"
     launched = DataPipeline.RegistryEndpoint(launch_url)

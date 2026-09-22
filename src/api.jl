@@ -150,7 +150,8 @@ end
 
 Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
-hash and registers it.
+hash and registers it, replacing `\${{RUN_ID}}` in the registered name with
+the code run's uuid.
 """
 function link_write!(handle::DataRegistryHandle, data_product::String)
     key = (data_product, nothing)

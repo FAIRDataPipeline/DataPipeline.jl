@@ -18,6 +18,9 @@
     write function.
   - `DataRegistryHandle` prints a summary rather than its whole contents.
   - Julia 1.11 or later is required.
+  - `${{RUN_ID}}` in a `write:` data product name is replaced by the code run's
+    uuid at `finalise`, as the pipeline documentation describes (the CLI leaves
+    it for the API to fill in).
 - v0.53.2
 - v0.53.1
 - v0.53.0

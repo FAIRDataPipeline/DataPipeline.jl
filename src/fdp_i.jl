@@ -231,20 +231,27 @@ function _getmetadata(handle::DataRegistryHandle, data_product::String,
     return throw(ConfigFileException(msg))
 end
 
+# The placeholder in a `write:` name that stands for the code run's uuid, which
+# the CLI leaves for the API to fill in at `finalise`
+const RUN_ID_PLACEHOLDER = r"\$\{\{\s*RUN_ID\s*\}\}"
+
 """
     _registerdataproduct(handle, data_product, component)
 
-Register one output of the handle: move its file to its hash name, then
+Register one output of the handle: substitute the code run's uuid for
+`\${{RUN_ID}}` in its registered name, move its file to its hash name, then
 register the object, the data product and the component (the `whole_object`
-component when `component` is `nothing`). Record the component URL in the
-handle and return it.
+component when `component` is `nothing`). Record the registered name and the
+component URL in the handle and return the URL.
 """
 function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
                               component::Union{Nothing, String})
     registry = handle.registry
     wmd = handle.outputs[(data_product, component)]
     datastore = handle.config["run_metadata"]["write_data_store"]
-    use_data_product = wmd["use_dp"]
+    use_data_product = replace(wmd["use_dp"],
+                               RUN_ID_PLACEHOLDER => handle.code_run_uuid)
+    wmd["use_dp"] = use_data_product
     use_component = wmd["use_component"]
     use_namespace = wmd["use_namespace"]
     use_version = wmd["use_version"]
@@ -259,6 +266,12 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
                                 "$hash.$extension")
         mkpath(dirname(new_filepath))
         mv(filepath, new_filepath, force = true)
+        # A directory named with the placeholder is left empty by the move
+        old_directory = dirname(filepath)
+        if old_directory != dirname(new_filepath) &&
+           isempty(readdir(old_directory))
+            rm(old_directory)
+        end
     else
         dp_entry = _finddataproduct(registry, use_namespace, use_data_product,
                                     use_version)
