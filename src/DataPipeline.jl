@@ -36,13 +36,17 @@ FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", "fake_token")
 include("core.jl")
 
 include("api.jl")
-export initialise, finalise
 export link_read!, link_read_files!, link_write!
 export read_array, read_table, read_distribution, read_estimate
 export write_array, write_table, write_distribution, write_estimate
 export raise_issue
-export AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
-export ConfigDataProduct, ExistingDataProduct
+# Supported but qualified: the code run's brackets, whose names any model
+# might use itself, and the types a script names rather than calls
+public initialise, finalise
+public DataRegistryHandle, RegistryEndpoint
+public ReadWriteException, ConfigFileException
+public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
+public ConfigDataProduct, ExistingDataProduct
 
 include("fdp_i.jl")
 

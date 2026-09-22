@@ -13,7 +13,7 @@ datetime = Dates.format(Dates.now(), "yyyymmdd-HHMMSS")
 cpath = joinpath("coderun", datetime, "config.yaml")
 
 config = DataPipeline._createconfig(cpath)
-handle = initialise(config, config)
+handle = DataPipeline.initialise(config, config)
 datastore = handle.config["run_metadata"]["write_data_store"]
 namespace = handle.config["run_metadata"]["default_output_namespace"]
 launch_url = handle.registry.url
@@ -46,7 +46,7 @@ Test.@testset "link_write()" begin
     DataPipeline._addwrite(config, data_product2, "description",
                            file_type = file_type,
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.outputs == Dict()
 
     # Check function output
@@ -67,7 +67,7 @@ Test.@testset "link_write()" begin
     end
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Check path: a temporary name in the data product's directory
     @test dirname(path1) == joinpath(datastore, namespace, data_product)
@@ -98,7 +98,7 @@ Test.@testset "link_read()" begin
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.inputs == Dict()
 
     # Check function output
@@ -109,7 +109,7 @@ Test.@testset "link_read()" begin
     @test length(handle.inputs) == 1
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Check data
     dat = open(path1) do file
@@ -130,7 +130,7 @@ Test.@testset "write_array()" begin
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description",
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.outputs == Dict()
 
     # Write components
@@ -148,7 +148,7 @@ Test.@testset "write_array()" begin
     isfile(path1)
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     newpath1 = handle.outputs[(data_product, component1)]["path"]
     newpath2 = handle.outputs[(data_product, component2)]["path"]
@@ -179,7 +179,7 @@ Test.@testset "read_array()" begin
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.outputs == Dict()
 
     # Read components
@@ -195,7 +195,7 @@ Test.@testset "read_array()" begin
     @test_throws MethodError read_array(handle, data_product)
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Check handle
     @test handle.inputs[(data_product, component1)]["use_dp"] == data_product
@@ -211,7 +211,7 @@ Test.@testset "write_estimate()" begin
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description",
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.outputs == Dict()
 
     # Write components
@@ -234,7 +234,7 @@ Test.@testset "write_estimate()" begin
     @test c2 == estimate2
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Check handle 
     newpath1 = handle.outputs[(data_product, component1)]["path"]
@@ -253,7 +253,7 @@ Test.@testset "read_estimate()" begin
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.outputs == Dict()
 
     # Read components
@@ -266,7 +266,7 @@ Test.@testset "read_estimate()" begin
     @test_throws MethodError read_estimate(handle, data_product)
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Check handle 
     @test handle.inputs[(data_product, component1)]["use_dp"] == data_product
@@ -280,7 +280,7 @@ Test.@testset "write_distribution()" begin
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description",
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.outputs == Dict()
 
     # Write components
@@ -309,7 +309,7 @@ Test.@testset "write_distribution()" begin
     @test c2 == distribution
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Check handle 
     newpath1 = handle.outputs[(data_product, component1)]["path"]
@@ -327,7 +327,7 @@ Test.@testset "read_distribution()" begin
     # Create working config.yaml
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, data_product, use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.outputs == Dict()
 
     # Read components
@@ -337,7 +337,7 @@ Test.@testset "read_distribution()" begin
     @test dat2 == distribution
 
     # Finalise Code Run
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Check handle
     @test handle.inputs[(data_product, component1)]["use_dp"] == data_product
@@ -356,7 +356,7 @@ Test.@testset "new components aren't added to existing data products" begin
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description",
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
 
     # Write component
     msg = string("data product already exists in registry: ", data_product,
@@ -375,7 +375,7 @@ Test.@testset "new components aren't added to existing data products" begin
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description",
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
 
     # Write component
     msg = string("data product already exists in registry: ", data_product,
@@ -395,7 +395,7 @@ Test.@testset "new components aren't added to existing data products" begin
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addwrite(config, data_product, "description",
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
 
     # Write component
     msg = string("data product already exists in registry: ", data_product,
@@ -423,23 +423,30 @@ Test.@testset "raise_issue()" begin
     DataPipeline._addread(config, written, use_version = version)
     DataPipeline._addwrite(config, data_product, "description",
                            use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     registry = handle.registry
     @test isempty(handle.issues)
 
     # Queued, not registered, until finalise
-    raise_issue(handle, WorkingConfig(), "config $uid", severity = 3)
-    raise_issue(handle, [SubmissionScript(), CodeRepository()], "run $uid",
+    raise_issue(handle, DataPipeline.WorkingConfig(), "config $uid",
+                severity = 3)
+    raise_issue(handle,
+                [
+                    DataPipeline.SubmissionScript(),
+                    DataPipeline.CodeRepository()
+                ], "run $uid",
                 severity = 7)
     raise_issue(handle, written, "input $uid")
-    raise_issue(handle, ConfigDataProduct(data_product, component = component1),
+    raise_issue(handle,
+                DataPipeline.ConfigDataProduct(data_product,
+                                               component = component1),
                 "output $uid", severity = 1)
     raise_issue(handle,
-                ExistingDataProduct(namespace, estimates, version,
-                                    component = component2),
+                DataPipeline.ExistingDataProduct(namespace, estimates, version,
+                                                 component = component2),
                 "existing $uid", severity = 2)
     @test length(handle.issues) == 5
-    @test handle.issues[3].targets == [ConfigDataProduct(written)]
+    @test handle.issues[3].targets == [DataPipeline.ConfigDataProduct(written)]
     @test handle.issues[3].severity == 0
     @test isnothing(DataPipeline._getentry(registry, "issue",
                                            Dict("description" => "config $uid")))
@@ -452,7 +459,7 @@ Test.@testset "raise_issue()" begin
 
     link_read!(handle, written)
     write_estimate(handle, estimate1, data_product, component1, "description1")
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     # Each call is one registry issue, on the components of its targets
     whole(object_url) = DataPipeline._wholeobjectcomponent(registry,
@@ -487,7 +494,7 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     for name in (written, written2, arrays)
         DataPipeline._addread(config, name, use_version = version)
     end
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
 
     # A * matches one segment, so the four-segment name is left out
     @test link_read_files!(handle, "data_product/link_write/*") ==
@@ -527,7 +534,7 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     @test readdir(only2) == ["data_product_link_write_$(uid)_2.txt"]
     @test length(handle.inputs) == 3
 
-    finalise(handle)
+    DataPipeline.finalise(handle)
     code_run = DataPipeline._getentry(handle.registry,
                                       URIs.URI(handle.code_run_obj))
     @test length(code_run["inputs"]) == 3
@@ -541,14 +548,14 @@ Test.@testset "\${{RUN_ID}} in an output name" begin
     DataPipeline._addwrite(config, data_product, "description",
                            file_type = "txt", use_version = version,
                            use_data_product = use_name)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     path = link_write!(handle, data_product)
     # The placeholder is not known until finalise, so the temporary file sits
     # in a directory named with it
     @test occursin("\${{ RUN_ID }}", path)
     write(path, "run id $uid\n")
     raise_issue(handle, data_product, "run id issue $uid")
-    finalise(handle)
+    DataPipeline.finalise(handle)
 
     registered = replace(use_name, "\${{ RUN_ID }}" => handle.code_run_uuid)
     wmd = handle.outputs[(data_product, nothing)]
@@ -577,7 +584,7 @@ Test.@testset "registry from the working config" begin
                                         local_data_registry_url = other_url,
                                         api_version = "1.0.0")
     DataPipeline._addread(config, data_product, use_version = version)
-    handle = initialise(config, config)
+    handle = DataPipeline.initialise(config, config)
     @test handle.registry.url == other_url
     @test handle.registry.api_version == "1.0.0"
     @test startswith(handle.code_run_obj, other_url)
@@ -587,7 +594,7 @@ Test.@testset "registry from the working config" begin
     @test isfile(path)
     @test startswith(handle.inputs[(data_product, nothing)]["component_url"],
                      other_url)
-    finalise(handle)
+    DataPipeline.finalise(handle)
     code_run = DataPipeline._getentry(handle.registry,
                                       URIs.URI(handle.code_run_obj))
     @test length(code_run["inputs"]) == 1
@@ -595,7 +602,8 @@ Test.@testset "registry from the working config" begin
     # A registry that is not there is reported as such
     config = DataPipeline._createconfig(cpath,
                                         local_data_registry_url = "http://127.0.0.1:1/api/")
-    @test_throws DataPipeline.ReadWriteException initialise(config, config)
+    @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
+                                                                         config)
 end
 
 end

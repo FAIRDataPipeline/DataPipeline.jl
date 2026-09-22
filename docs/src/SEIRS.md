@@ -20,10 +20,10 @@ print(read(joinpath(example, "SEIRSconfig.yaml"), String))
 
 ## The model script
 
-`examples/fdp/seirs_sim.jl` brackets the model with the API: `initialise`
+`examples/fdp/seirs_sim.jl` brackets the model with the API: `DataPipeline.initialise`
 opens a code run from the working config `fair run` wrote, `link_read!` gives
 the path of the parameter table and records it as an input, `link_write!`
-gives a path for each output and records it, and `finalise` names the output
+gives a path for each output and records it, and `DataPipeline.finalise` names the output
 files by their hash, registers them, and attaches everything to the code run.
 
 ```@example seirs

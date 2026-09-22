@@ -9,10 +9,12 @@ Depth = 3
 ## Managing code runs
 
 ```@docs
-initialise
-finalise
+DataPipeline.initialise
+DataPipeline.finalise
 DataPipeline.DataRegistryHandle
 DataPipeline.RegistryEndpoint
+DataPipeline.ReadWriteException
+DataPipeline.ConfigFileException
 ```
 
 ## Reading data
@@ -40,12 +42,12 @@ link_write!
 
 ```@docs
 raise_issue
-AbstractIssueTarget
-WorkingConfig
-SubmissionScript
-CodeRepository
-ConfigDataProduct
-ExistingDataProduct
+DataPipeline.AbstractIssueTarget
+DataPipeline.WorkingConfig
+DataPipeline.SubmissionScript
+DataPipeline.CodeRepository
+DataPipeline.ConfigDataProduct
+DataPipeline.ExistingDataProduct
 ```
 
 ## Index

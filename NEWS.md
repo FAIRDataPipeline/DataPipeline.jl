@@ -16,6 +16,11 @@
   - Don't allow last argument on read_*() to be optional (they were broken anyway).
   - Output files get a temporary `dat-<random>` name until `finalise`, in every
     write function.
+  - `initialise` and `finalise` are no longer exported but `public`: call them
+    as `DataPipeline.initialise()` and `DataPipeline.finalise(handle)`, since a
+    model is likely to have functions of those names itself. The issue-target
+    types, `DataRegistryHandle`, `RegistryEndpoint` and the two exceptions are
+    `public` too.
   - `DataRegistryHandle` prints a summary rather than its whole contents.
   - Julia 1.11 or later is required.
   - `${{RUN_ID}}` in a `write:` data product name is replaced by the code run's
