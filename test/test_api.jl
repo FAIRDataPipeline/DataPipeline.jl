@@ -556,11 +556,13 @@ Test.@testset "an output with already-registered bytes" begin
     write(path2, "the same bytes $uid\n")
     DataPipeline.finalise(handle)
 
-    # One file in the store, both data products pointing at it
+    # One file in the store, both data products pointing at it; finalise
+    # registers in name order, so it is the first's that is kept
     kept = handle.outputs[(first, nothing)]["path"]
     @test handle.outputs[(second, nothing)]["path"] == kept
+    @test dirname(kept) == dirname(path1)
     @test isfile(kept)
-    @test !isfile(path2)
+    @test !isfile(path1) && !isfile(path2)
     @test !isdir(dirname(path2))
     @test isdir(joinpath(datastore, namespace, "data_product/duplicate/$uid"))
     registry = handle.registry

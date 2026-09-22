@@ -61,10 +61,13 @@ and append the code run's uuid to `coderuns.txt` beside the working config,
 where the CLI's `fair add` and `fair push` find it.
 """
 function finalise(handle::DataRegistryHandle)
+    # In name order, so which of two identical outputs keeps its file, and the
+    # order of the code run's inputs and outputs, are the same on every machine
     outputs = String[_registerdataproduct(handle, data_product, component)
-                     for (data_product, component) in keys(handle.outputs)]
-    inputs = String[metadata["component_url"]
-                    for metadata in values(handle.inputs)]
+                     for (data_product, component) in sort(collect(keys(handle.outputs)),
+                                                           by = string)]
+    inputs = String[handle.inputs[key]["component_url"]
+                    for key in sort(collect(keys(handle.inputs)), by = string)]
     _registerissues(handle)
     url = _patchcoderun(handle, inputs, outputs)
 
