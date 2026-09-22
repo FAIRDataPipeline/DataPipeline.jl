@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         julia-version:
-          - '1.8'
+          - '1.11'
           - '1'
         os:
           - ubuntu-latest
@@ -41,12 +41,6 @@ jobs:
         arch: ${{ matrix.arch }}
     - name: Build package
       uses: julia-actions/julia-buildpkg@v1
-    - name: Fix manifest for active Julia version
-      run: |
-        using Pkg
-        Pkg.activate("examples/fdp")
-        Pkg.resolve()
-      shell: julia --color=yes {0} 
     - name: Set up python
       uses: actions/setup-python@v4
       with:
@@ -119,7 +113,7 @@ jobs:
         fair registry start
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
-        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        fair run --debug examples/fdp/SEIRSconfig.yaml
         deactivate
       shell: bash
       env:

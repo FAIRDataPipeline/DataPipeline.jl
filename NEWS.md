@@ -17,6 +17,7 @@
   - Output files get a temporary `dat-<random>` name until `finalise`, in every
     write function.
   - `DataRegistryHandle` prints a summary rather than its whole contents.
+  - Julia 1.11 or later is required.
 - v0.53.2
 - v0.53.1
 - v0.53.0

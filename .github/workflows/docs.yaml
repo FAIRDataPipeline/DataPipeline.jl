@@ -63,3 +63,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
           GITHUB_EVENT_NAME: push
+          FDP_DOCS_RUN_EXAMPLE: "true"

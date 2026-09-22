@@ -24,7 +24,7 @@ fair registry install
 fair registry start
 fair init --ci
 if ! fair pull --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
-if ! fair run --dirty --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
+if ! fair run --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
 
 TEST_SCRIPT="$(printf ' %q' "$@")"
 echo Test: "$TEST_SCRIPT"
@@ -35,7 +35,7 @@ fi
 echo Escaped test: "$ESCAPED_SCRIPT"
 sed -e "s,\$TEST_SCRIPT,$ESCAPED_SCRIPT," $TEST_DIR/pre_config.yaml > $TEST_DIR/config.yaml
 cat $TEST_DIR/config.yaml
-if ! fair run --dirty --local --debug $TEST_DIR/config.yaml; then exit 1; fi
+if ! fair run --local --debug $TEST_DIR/config.yaml; then exit 1; fi
 rm -f $TEST_DIR/config.yaml
 
 deactivate
