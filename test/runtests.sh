@@ -28,12 +28,24 @@ if [ ! -d "$WORKSPACE/.fair" ]; then fair init --ci; fi
 if ! fair pull --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
 if ! fair run --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
 
-TEST_SCRIPT="$(printf ' %q' "$@")"
-echo Test: "$TEST_SCRIPT"
-ESCAPED_SCRIPT=$(printf '%s\n' "$TEST_SCRIPT" | sed -e 's/[\,&]/\\&/g')
+# The test command becomes the script of a fair run, so it must be quoted for
+# the shell that will run it: sh everywhere but Windows, where it is cmd.exe,
+# which knows nothing of backslash escapes - there an argument with a space or
+# a quote is double-quoted, with inner quotes as \" for Julia's argument parser
 if [ "$RUNNER_OS" = "Windows" ]; then
-  ESCAPED_SCRIPT=$(printf '%s\n' "$ESCAPED_SCRIPT" | sed -e 's/\\\[/[/g' -e 's/\\]/]/g')
+  TEST_SCRIPT=""
+  for arg in "$@"; do
+    case "$arg" in
+      *[!A-Za-z0-9_./=@:-]*) arg="\"$(printf '%s' "$arg" | sed 's/"/\\"/g')\"" ;;
+    esac
+    TEST_SCRIPT="$TEST_SCRIPT $arg"
+  done
+else
+  TEST_SCRIPT="$(printf ' %q' "$@")"
 fi
+echo Test: "$TEST_SCRIPT"
+# Escape the sed delimiter, & and backslashes so the line lands unchanged
+ESCAPED_SCRIPT=$(printf '%s\n' "$TEST_SCRIPT" | sed -e 's/[\,&]/\\&/g')
 echo Escaped test: "$ESCAPED_SCRIPT"
 sed -e "s,\$TEST_SCRIPT,$ESCAPED_SCRIPT," $TEST_DIR/pre_config.yaml > $TEST_DIR/config.yaml
 cat $TEST_DIR/config.yaml
