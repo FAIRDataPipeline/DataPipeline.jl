@@ -4,4 +4,4 @@
 /.vscode
 /.venv
 /.registry
-/Manifest.toml
+Manifest.toml

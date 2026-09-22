@@ -1,146 +1,124 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
+# Helpers for the test suite, which runs as the script of a `fair run` and
+# builds its own working configs from the one it was launched with.
+
 """
     _startregistry()
 
-Start FAIR registry.
-""" 
+Start the FAIR registry installed under `~/.fair`.
+"""
 function _startregistry()
     path = expanduser("~/.fair/registry/scripts/start_fair_registry")
-    cmd = `sh $path`
-    run(cmd)
+    run(`sh $path`)
     return nothing
 end
 
 """
-    _createconfig()
+    _createconfig(path; kwargs...)
 
-Generate `run_metadata` section of (user-written) config.yaml file.
-""" 
-function _createconfig(path)
-
-    # Generate run_metadata block
-    write_data_store = expanduser("~/.fair/registry/datastore/")
-    run_metadata = Dict("public" => true,
-                        "latest_commit" => "b8af9e4c5d77521c608188ba63273f959149b532",
-                        "local_repo" => "/Users/Soniam/Desktop/git/FAIRDataPipeline/DataPipeline.jl",
-                        "remote_data_registry_url" => "http://localhost:8001/api/",
-                        "default_input_namespace" => "testing", 
-                        "default_output_namespace" => "testing", 
-                        "write_data_store" => write_data_store,
-                        "script_path" => expanduser("~/.fair/registry/datastore/script.sh"),
-                        "description" => "A description", 
-                        "script" => "julia examples/fdp/seirs_sim.jl",
-                        "remote_repo" => "https://github.com/FAIRDataPipeline/DataPipeline.jl.git",
-                        "local_data_registry_url" => "http://localhost:8000/api/")
+Write a working config holding only a `run_metadata` section at `path` under
+the data store, and return its full path. The metadata is that of the working
+config the tests were launched with (`\$FDP_CONFIG_DIR/config.yaml`) when
+there is one, else a fixed stand-in; any keyword overrides one key of it.
+"""
+function _createconfig(path; kwargs...)
+    launch_config = FDP_PATH_CONFIG()
+    if isfile(launch_config)
+        run_metadata = YAML.load_file(launch_config)["run_metadata"]
+    else
+        write_data_store = expanduser("~/.fair/registry/datastore/")
+        run_metadata = Dict("public" => true,
+                            "latest_commit" => "b8af9e4c5d77521c608188ba63273f959149b532",
+                            "local_repo" => pwd(),
+                            "remote_data_registry_url" => "http://localhost:8001/api/",
+                            "default_input_namespace" => "testing",
+                            "default_output_namespace" => "testing",
+                            "write_data_store" => write_data_store,
+                            "script_path" => joinpath(write_data_store,
+                                     "script.sh"),
+                            "description" => "A description",
+                            "script" => "julia examples/fdp/seirs_sim.jl",
+                            "remote_repo" => "https://github.com/FAIRDataPipeline/DataPipeline.jl.git",
+                            "local_data_registry_url" => DEFAULT_REGISTRY_URL)
+    end
+    for (key, value) in kwargs
+        run_metadata[String(key)] = value
+    end
     data = Dict("run_metadata" => run_metadata)
 
-    # Create file path
-    fullpath = joinpath(write_data_store, path)
-    !isfile(fullpath) ? mkpath(dirname(fullpath)) : nothing
-    
-    # Write config yaml file
+    fullpath = joinpath(run_metadata["write_data_store"], path)
+    mkpath(dirname(fullpath))
     YAML.write_file(fullpath, data)
-
-    # Return path
-    return(fullpath)
+    return fullpath
 end
 
 """
-    _addwrite()
+    _addwrite(path, data_product, description; version, file_type,
+              use_data_product, use_component, use_version, use_namespace)
 
-Add `write` section to (working) config.yaml file.
-""" 
-function _addwrite(path::String, data_product::String, description::String; 
-                   version=nothing, file_type=nothing, 
-                   use_data_product=nothing, use_component=nothing, 
-                   use_version=nothing, use_namespace=nothing)
-    # Read in config file 
+Append a `write:` entry to the working config at `path` and return `path`.
+"""
+function _addwrite(path::String, data_product::String, description::String;
+                   version = nothing, file_type = nothing,
+                   use_data_product = nothing, use_component = nothing,
+                   use_version = nothing, use_namespace = nothing)
     data = YAML.load_file(path)
-
-    # Existing writes
     writes = get(data, "write", Vector{Dict}())
 
-    # Add new write
-    new_write = Dict()
-    new_write["data_product"] = data_product
-    new_write["description"] = description
-    if !isnothing(version) new_write["version"] = version end
-    if !isnothing(file_type) new_write["file_type"] = file_type end
+    new_write = Dict{String, Any}("data_product" => data_product,
+                                  "description" => description)
+    isnothing(version) || (new_write["version"] = version)
+    isnothing(file_type) || (new_write["file_type"] = file_type)
+    new_write["use"] = _usesection(use_data_product, use_component,
+                                   use_version, use_namespace)
 
-    if !isnothing(use_data_product)
-        new_write["use"] = Dict("data_product" => use_data_product)
-    end
-
-    if !isnothing(use_component)
-        new_write["use"] = Dict("component" => use_component) 
-    end
-
-    if !isnothing(use_version)
-        new_write["use"] = Dict("version" => use_version) 
-    end
-
-    if !isnothing(use_namespace)
-        new_write["use"] = Dict("namespace" => use_namespace)
-    end
-        
     push!(writes, new_write)
     data["write"] = writes
-
-    # Write to config file
     YAML.write_file(path, data)
-    return(path)
+    return path
 end
 
 """
-    _addread()
+    _addread(path, data_product; version, use_data_product, use_component,
+             use_version, use_namespace)
 
-Add `read` section to (user-written) config.yaml file.
-""" 
-function _addread(path::String, data_product::String; version=nothing, 
-                  use_data_product=nothing, 
-                  use_component=nothing, use_version=nothing, 
-                  use_namespace=nothing)
-    # Read in config file 
+Append a `read:` entry to the working config at `path` and return `path`.
+"""
+function _addread(path::String, data_product::String; version = nothing,
+                  use_data_product = nothing,
+                  use_component = nothing, use_version = nothing,
+                  use_namespace = nothing)
     data = YAML.load_file(path)
-
-    # Existing reads
     reads = get(data, "read", Vector{Dict}())
 
-    # Add new read
-    new_read = Dict()
-    new_read["data_product"] = data_product
-    if !isnothing(version) new_read["version"] = version end
-
-    if !isnothing(use_data_product) 
-        new_read["use"] = Dict("data_product" => use_data_product)
-    end
-
-    if !isnothing(use_component) 
-        new_read["use"] = Dict("component" => use_component)
-    end
-
-    if !isnothing(use_version) 
-        new_read["use"] = Dict("version" => use_version)
-    end
-
-    if !isnothing(use_namespace) 
-        new_read["use"] = Dict("namespace" => use_namespace)
-    end
+    new_read = Dict{String, Any}("data_product" => data_product)
+    isnothing(version) || (new_read["version"] = version)
+    new_read["use"] = _usesection(use_data_product, use_component,
+                                  use_version, use_namespace)
 
     push!(reads, new_read)
     data["read"] = reads
-
-    # Write to config file
     YAML.write_file(path, data)
-    return(path)
+    return path
+end
+
+# The `use:` block of a config entry, holding only the keys that were given
+function _usesection(data_product, component, version, namespace)
+    use = Dict{String, Any}()
+    isnothing(data_product) || (use["data_product"] = data_product)
+    isnothing(component) || (use["component"] = component)
+    isnothing(version) || (use["version"] = version)
+    isnothing(namespace) || (use["namespace"] = namespace)
+    return use
 end
 
 """
     _randomhash()
 
-Generate random hash.
+Return a random 40-character hexadecimal string, for temporary file names,
+the length of the SHA-1 the Python and R APIs use for the same purpose.
 """
 function _randomhash()
-    date = Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS")
-    hash = bytes2hex(SHA.sha2_256(date))
-    return hash
+    return bytes2hex(rand(UInt8, 20))
 end

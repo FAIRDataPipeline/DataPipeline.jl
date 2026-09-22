@@ -1,13 +1,15 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+
 using Test
 
 # Identify files in test/ that are testing matching files in src/
 #  - src/Source.jl will be matched by test/test_Source.jl
 
 filebase = map(file -> replace(file, r"(.*).jl$" => s"\1"),
-                filter(file -> occursin(r".*\.jl$", file),
-                       readdir("../src")))
+               filter(file -> occursin(r".*\.jl$", file),
+                      readdir("../src")))
 testbase = map(file -> replace(file, r"test_(.*).jl$" => s"\1"),
-                filter(str -> occursin(r"^test_.*\.jl$", str), readdir()))
+               filter(str -> occursin(r"^test_.*\.jl$", str), readdir()))
 
 println()
 @info "Running tests for files:"
@@ -46,8 +48,8 @@ end
 # test/pkg_Package.jl should validate results against the Package package
 
 pkgbase = map(file -> replace(file, r"pkg_(.*).jl$" => s"\1"),
-                   filter(str -> occursin(r"^pkg_.*\.jl$", str),
-                          readdir()))
+              filter(str -> occursin(r"^pkg_.*\.jl$", str),
+                     readdir()))
 
 if length(pkgbase) > 0
     @info "Running cross-validation against:"

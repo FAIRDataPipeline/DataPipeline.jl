@@ -16,19 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
       - name: Set up julia
-        uses: julia-actions/setup-julia@v1
+        uses: julia-actions/setup-julia@v3
         with:
           version: '1'
-          arch: x64
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
       - name: Set up python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: '3.x'
-          architecture: 'x64'
       - name: Install and initialise FAIR CLI
         run: |
           python -m venv .venv
@@ -40,13 +38,11 @@ jobs:
           fair init --export ci.yaml
           fair registry start
       - name: Install dependencies
+        # docs/Project.toml names this checkout under [sources], so nothing
+        # here modifies a tracked file: the SEIRS page's fair run needs a clean tree
         run: |
             import Pkg
-            Pkg.develop(Pkg.PackageSpec(path=pwd()))
             Pkg.instantiate()
-            Pkg.add("DataFrames")
-            Pkg.add("YAML")
-            Pkg.add("Documenter")
         shell: julia --project=docs/ --color=yes {0}
       - name: Build and deploy
         run: |
@@ -63,3 +59,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
           GITHUB_EVENT_NAME: push
+          FDP_DOCS_RUN_EXAMPLE: "true"

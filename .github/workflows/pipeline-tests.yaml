@@ -1,0 +1,143 @@
+name: Pipeline tests
+# The one place the package is built, the pipeline installed and the tests run
+# through it; called by testing.yaml over its matrix and by nightly.yaml
+
+on:
+  workflow_call:
+    inputs:
+      julia-version:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      arch:
+        # The runner's own architecture unless given; macOS runners are arm64
+        required: false
+        type: string
+        default: default
+      experimental:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  pipeline-tests:
+    runs-on: ${{ inputs.os }}
+    continue-on-error: ${{ inputs.experimental }}
+    env:
+      # fair run echoes the script's output; Julia's Pkg prints characters the
+      # Windows runner's default cp1252 stdout cannot encode
+      PYTHONUTF8: 1
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+    - name: Set up julia
+      uses: julia-actions/setup-julia@v3
+      with:
+        version: ${{ inputs.julia-version }}
+        arch: ${{ inputs.arch }}
+    - name: Build package
+      uses: julia-actions/julia-buildpkg@v1
+    - name: Set up python
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.x'
+    - name: Install graphviz and venv
+      run: |
+        # You may need to install python: https://python.org
+        # Create venv
+        # If not installed: pip3 install venv
+        python3 -m venv .venv
+        if [ "$RUNNER_OS" == "Linux" ]; then
+            # If your Linux installation doesn't use apt, then use your package manager
+            sudo apt-get install graphviz
+        elif [ "$RUNNER_OS" == "Windows" ]; then
+            # If choco is not installed: Install from https://chocolatey.org
+            choco install graphviz
+        elif [ "$RUNNER_OS" == "Darwin" ]; then
+            # If brew not installed: Install from https://brew.sh
+            brew install graphviz
+        fi
+      shell: bash
+    - name: Install and start remote registry on Windows
+      if: ${{ runner.os == 'Windows' }}
+      run: |
+        # Activate venv
+        .venv\Scripts\activate
+        # Install fair-cli
+        pip3 install fair-cli
+        # Install remote registry
+        mkdir ${{ github.workspace }}\.registry
+        $script1 = "${{ github.workspace }}",".registry\remoteregistry.ps1" -join "\"
+        Write-Host "Download script: " $script1
+        curl https://data.fairdatapipeline.org/static/remoteregistry.ps1 > $script1
+        dir $script1
+        # Temporary fix for downloading old registry
+        & $script1 -d ${{ github.workspace }}\.registry\registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        $script2 = "${{ github.workspace }}",".registry\registry-rem\scripts\start_fair_registry_windows.ps1" -join "\"
+        Write-Host "Start registry script: " $script2
+        dir $script2
+        & $script2 -p 8001 -s drams.test-remote-settings -b
+        # Copy the remote token
+        $token = "${{ github.workspace }}",".registry\registry-rem\token" -join "\"
+        Write-Host "Token location: " $token
+        dir $token
+        cp $token token
+        deactivate
+    - name: Install and start remote registry on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
+      run: |
+        # Activate venv
+        source .venv/bin/activate
+        # Install fair-cli
+        pip3 install fair-cli
+        # Install remote registry
+        mkdir ${{ github.workspace }}/.registry
+        curl -fsSL https://data.fairdatapipeline.org/static/remoteregistry.sh | /bin/bash -s -- -d ${{ github.workspace }}/.registry/registry-rem -s drams.test-remote-settings -u admin -p admin
+        # Start the remote registry
+        script=${{ github.workspace }}/.registry/registry-rem/scripts/start_fair_registry
+        echo $script
+        $script -p 8001 -s drams.test-remote-settings
+        # Copy the remote token
+        cp ${{ github.workspace }}/.registry/registry-rem/token $PWD/token
+        deactivate
+    - name: Initialise and run fair-cli
+      run: |
+        source .venv/${ACTIVATE_DIR}/activate
+        fair registry install
+        fair registry start
+        fair init --ci
+        fair pull --debug examples/fdp/SEIRSconfig.yaml
+        # --dirty: a pull_request checkout is a detached merge commit on no
+        # remote branch, which fair run otherwise refuses as not level with origin
+        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        deactivate
+      shell: bash
+      env:
+        ACTIVATE_DIR: ${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}
+      # working-directory: julia_example # Use the julia_example Directory
+    - name: Run tests on Windows
+      if: ${{ runner.os == 'Windows' }}
+      uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: .
+        ACTIVATE_DIR: 'Scripts'
+      with:
+        prefix: ./test/runtests.sh
+    - name: Run tests on Linux / macOS
+      if: ${{ runner.os != 'Windows' }}
+      uses: julia-actions/julia-runtest@v1
+      env:
+        WORKSPACE: ${{ github.workspace }}
+        ACTIVATE_DIR: 'bin'
+      with:
+        prefix: ${{ github.workspace }}/test/runtests.sh
+    - name: Process coverage
+      uses: julia-actions/julia-processcoverage@v1
+    - name: Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        files: lcov.info
+        token: ${{ secrets.CODECOV_TOKEN }}
