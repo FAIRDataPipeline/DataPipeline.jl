@@ -40,13 +40,11 @@ jobs:
           fair init --export ci.yaml
           fair registry start
       - name: Install dependencies
+        # docs/Project.toml names this checkout under [sources], so nothing
+        # here modifies a tracked file: the SEIRS page's fair run needs a clean tree
         run: |
             import Pkg
-            Pkg.develop(Pkg.PackageSpec(path=pwd()))
             Pkg.instantiate()
-            Pkg.add("DataFrames")
-            Pkg.add("YAML")
-            Pkg.add("Documenter")
         shell: julia --project=docs/ --color=yes {0}
       - name: Build and deploy
         run: |

@@ -16,6 +16,10 @@ on:
 jobs:
   pipeline-tests:
     runs-on: ${{ matrix.os }}
+    env:
+      # fair run echoes the script's output; Julia's Pkg prints characters the
+      # Windows runner's default cp1252 stdout cannot encode
+      PYTHONUTF8: 1
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
