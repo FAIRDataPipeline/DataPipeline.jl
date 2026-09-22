@@ -77,16 +77,63 @@ end
 
 """
     link_read!(handle, data_product)
+    link_read!(handle, pattern)
 
 Return the path of the file behind a `read:` data product of the working
 config, recording it as an input of the code run.
+
+Given a pattern instead - a name with one or more `*`, each matching one
+segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
+`era5/t2m/a/b` - return the path of a temporary directory holding a symbolic
+link to the file of every `read:` data product that matches, each recorded as
+an input (the directory itself is not). A link is named after its data
+product with `/` replaced by `_`, plus the file's extension; the directory is
+named by the SHA-1 of the sorted list of link names and file hashes, so the
+same set of files gives the same name. The directory is removed when Julia
+exits.
 """
 function link_read!(handle::DataRegistryHandle, data_product::String)
+    occursin('*', data_product) && return _link_read_directory!(handle,
+                                 data_product)
     key = (data_product, nothing)
     haskey(handle.inputs, key) && return handle.inputs[key]["path"]
     path = _readdataproduct(handle, data_product, nothing)
     println("data product found: ", handle.inputs[key]["use_dp"])
     return path
+end
+
+"""
+    link_read_files!(handle, pattern)
+
+Return the paths of the files behind every `read:` data product of the working
+config whose name matches `pattern`, in name order, recording each as an
+input of the code run. A pattern is a name with one or more `*`, each
+matching one segment of a name, as for [`link_read!`](@ref).
+"""
+function link_read_files!(handle::DataRegistryHandle, pattern::String)
+    return [link_read!(handle, name)
+            for name in _matchingreads(handle, pattern)]
+end
+
+# The directory of links `link_read!` returns for a pattern
+function _link_read_directory!(handle::DataRegistryHandle, pattern::String)
+    names = _matchingreads(handle, pattern)
+    paths = [link_read!(handle, name) for name in names]
+    links = [replace(name, "/" => "_") * "." * _extension(path)
+             for (name, path) in zip(names, paths)]
+    hashes = [handle.inputs[(name, nothing)]["hash"] for name in names]
+    manifest = join(("$link\t$hash\n" for (link, hash) in zip(links, hashes)))
+    directory = joinpath(mktempdir(), bytes2hex(SHA.sha1(manifest)))
+    mkdir(directory)
+    for (link, path) in zip(links, paths)
+        try
+            symlink(path, joinpath(directory, link))
+        catch e
+            isa(e, Base.IOError) || rethrow()
+            throw(ReadWriteException("cannot make a symbolic link in $directory: $(e.msg)"))
+        end
+    end
+    return directory
 end
 
 # The path of a `read:` data product's file, read on first use and recorded as

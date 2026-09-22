@@ -478,6 +478,61 @@ Test.@testset "raise_issue()" begin
           issues_of(registry, whole(handle.repo_obj))
 end
 
+Test.@testset "link_read!() with a pattern and link_read_files!()" begin
+    written = "data_product/link_write/$uid"          # three segments
+    written2 = "$written/2"                            # four
+    arrays = "data_product/write_array/$uid"           # three
+
+    config = DataPipeline._createconfig(cpath)
+    for name in (written, written2, arrays)
+        DataPipeline._addread(config, name, use_version = version)
+    end
+    handle = initialise(config, config)
+
+    # A * matches one segment, so the four-segment name is left out
+    @test link_read_files!(handle, "data_product/link_write/*") ==
+          [link_read!(handle, written)]
+    @test length(handle.inputs) == 1
+    # Anchored at both ends: the middle segment varies, the ends are fixed
+    paths = link_read_files!(handle, "data_product/*/$uid")
+    @test paths == [link_read!(handle, written), link_read!(handle, arrays)]
+    @test length(handle.inputs) == 2
+    @test_throws DataPipeline.ConfigFileException link_read_files!(handle,
+                                                                   "nothing/*")
+    @test_throws ArgumentError link_read_files!(handle, written)
+
+    # The same pattern through link_read! gives a directory of links
+    directory = link_read!(handle, "data_product/*/$uid")
+    @test isdir(directory)
+    links = sort(readdir(directory))
+    @test links == ["data_product_link_write_$uid.txt",
+        "data_product_write_array_$uid.h5"]
+    @test [readlink(joinpath(directory, link)) for link in links] == paths
+    @test read(joinpath(directory, links[1]), String) == read(paths[1], String)
+    @test length(handle.inputs) == 2
+
+    # The directory is named by the hash of what it links to
+    manifest = join("$link\t$(DataPipeline._getfilehash(path))\n"
+                    for (link, path) in zip(links, paths))
+    @test basename(directory) == bytes2hex(DataPipeline.SHA.sha1(manifest))
+    @test handle.inputs[(written, nothing)]["hash"] ==
+          DataPipeline._getfilehash(paths[1])
+    # The same set again gives the same name in a new temporary parent
+    again = link_read!(handle, "data_product/*/$uid")
+    @test basename(again) == basename(directory)
+    @test again != directory
+
+    # A pattern reaching the four-segment name links only that one
+    only2 = link_read!(handle, "$written/*")
+    @test readdir(only2) == ["data_product_link_write_$(uid)_2.txt"]
+    @test length(handle.inputs) == 3
+
+    finalise(handle)
+    code_run = DataPipeline._getentry(handle.registry,
+                                      URIs.URI(handle.code_run_obj))
+    @test length(code_run["inputs"]) == 3
+end
+
 Test.@testset "\${{RUN_ID}} in an output name" begin
     data_product = "data_product/run_id/$uid"
     use_name = "data_product/run_id/$uid/run-\${{ RUN_ID }}"

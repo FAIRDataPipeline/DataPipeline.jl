@@ -21,6 +21,10 @@
   - `${{RUN_ID}}` in a `write:` data product name is replaced by the code run's
     uuid at `finalise`, as the pipeline documentation describes (the CLI leaves
     it for the API to fill in).
+  - `link_read!` given a pattern (a name with `*`s, each matching one segment)
+    returns a temporary directory of links to every matching `read:` data
+    product, and the new `link_read_files!` returns their paths; each match is
+    recorded as an input.
 - v0.53.2
 - v0.53.1
 - v0.53.0

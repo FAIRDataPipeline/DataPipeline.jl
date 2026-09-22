@@ -184,7 +184,7 @@ function _readdataproduct(handle::DataRegistryHandle, data_product::String,
                                 rmd.data_product, rmd.version)
     obj_url = dp_entry["object"]
     component_url = _componenturl(handle.registry, obj_url, rmd.component)
-    path = _getstoragelocation(handle.registry, obj_url)
+    location = _getstoragelocation(handle.registry, obj_url)
 
     handle.inputs[(data_product, component)] = Dict("use_dp" =>
                                                         rmd.data_product,
@@ -196,8 +196,9 @@ function _readdataproduct(handle::DataRegistryHandle, data_product::String,
                                                         rmd.component,
                                                     "component_url" =>
                                                         component_url,
-                                                    "path" => path)
-    return path
+                                                    "path" => location.path,
+                                                    "hash" => location.hash)
+    return location.path
 end
 
 """
@@ -400,7 +401,8 @@ end
 """
     _getstoragelocation(registry, object_url)
 
-Return the path on disk of the file behind a registry object.
+Return the path on disk of the file behind a registry object and the hash the
+registry holds for it, as `(path, hash)`.
 """
 function _getstoragelocation(registry::RegistryEndpoint, object_url::String)
     obj_entry = _getentry(registry, URIs.URI(object_url))
@@ -409,7 +411,38 @@ function _getstoragelocation(registry::RegistryEndpoint, object_url::String)
     storage_root_entry = _getentry(registry,
                                    URIs.URI(storage_loc_entry["storage_root"]))
     root = replace(storage_root_entry["root"], "file://" => "")
-    return joinpath(root, storage_loc_entry["path"])
+    return (path = joinpath(root, storage_loc_entry["path"]),
+            hash = String(storage_loc_entry["hash"]))
+end
+
+"""
+    _globregex(pattern)
+
+Return the anchored regular expression for a data product name pattern, in
+which each `*` matches one segment of the name (one or more characters other
+than `/`) and every other character is literal.
+"""
+function _globregex(pattern::AbstractString)
+    occursin('*', pattern) ||
+        throw(ArgumentError("a pattern needs at least one *: $pattern"))
+    literal(s) = replace(s, r"([\\^\$.|?+()\[\]{}])" => s"\\\1")
+    return Regex("^" * join(map(literal, split(pattern, '*')), "[^/]+") * "\$")
+end
+
+"""
+    _matchingreads(handle, pattern)
+
+Return the names of the `read:` data products of the working config that
+match a pattern, sorted; throw if there is none.
+"""
+function _matchingreads(handle::DataRegistryHandle, pattern::AbstractString)
+    regex = _globregex(pattern)
+    names = sort!([String(entry["data_product"])
+                   for entry in get(handle.config, "read", [])
+                   if occursin(regex, entry["data_product"])])
+    isempty(names) &&
+        throw(ConfigFileException("no read data product matches '$pattern' - check config file"))
+    return names
 end
 
 """

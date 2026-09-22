@@ -77,6 +77,27 @@ Test.@testset "_extractid()" begin
           ["10", "11"]
 end
 
+Test.@testset "_globregex()" begin
+    g = DataPipeline._globregex
+    # One * is one segment of a name: no /, and not empty
+    @test occursin(g("era5/t2m/*"), "era5/t2m/1940-1949")
+    @test !occursin(g("era5/t2m/*"), "era5/t2m/a/b")
+    @test !occursin(g("era5/t2m/*"), "era5/t2m/")
+    # Anchored at both ends
+    @test !occursin(g("era5/t2m/*"), "archive/era5/t2m/1930-1939")
+    @test !occursin(g("era5/t2m/*"), "era5/t2m/1940-1949/extra")
+    # As many * as needed, anywhere
+    @test occursin(g("era5/*/1940-*"), "era5/tp/1940-1949")
+    @test !occursin(g("era5/*/1940-*"), "era5/tp/1950-1959")
+    @test occursin(g("*"), "single")
+    @test !occursin(g("*"), "two/segments")
+    # Everything else is literal, regex metacharacters included
+    @test occursin(g("chelsa/bio1.2/*"), "chelsa/bio1.2/x")
+    @test !occursin(g("chelsa/bio1.2/*"), "chelsa/bio1x2/x")
+    @test occursin(g("a+b(c)[d]{e}|f?^\$/*"), "a+b(c)[d]{e}|f?^\$/x")
+    @test_throws ArgumentError g("era5/t2m")
+end
+
 Test.@testset "_randomhash()" begin
     hashes = [DataPipeline._randomhash() for _ in 1:100]
     @test all(h -> length(h) == 40 && all(c -> c in "0123456789abcdef", h),

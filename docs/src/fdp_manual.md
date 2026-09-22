@@ -23,6 +23,7 @@ read_table
 read_estimate
 read_distribution
 link_read!
+link_read_files!
 ```
 
 ## Writing data
