@@ -98,6 +98,27 @@ Test.@testset "_globregex()" begin
     @test_throws ArgumentError g("era5/t2m")
 end
 
+Test.@testset "_repositorylocation()" begin
+    loc = DataPipeline._repositorylocation
+    @test loc("https://github.com/FAIRDataPipeline/DataPipeline.jl") ==
+          (root = "https://github.com/",
+           path = "FAIRDataPipeline/DataPipeline.jl")
+    @test loc("https://github.com/FAIRDataPipeline/DataPipeline.jl.git") ==
+          (root = "https://github.com/",
+           path = "FAIRDataPipeline/DataPipeline.jl.git")
+    # Hosts with digits, hyphens and ports
+    @test loc("https://gitlab-ext.example.org/a/b") ==
+          (root = "https://gitlab-ext.example.org/", path = "a/b")
+    @test loc("http://git.host2.org:8080/a/b") ==
+          (root = "http://git.host2.org:8080/", path = "a/b")
+    @test loc("ssh://git@github.com/a/b.git") ==
+          (root = "ssh://git@github.com/", path = "a/b.git")
+    # scp-style SSH remotes are registered under the host's https root
+    @test loc("git@github.com:a/b.git") ==
+          (root = "https://github.com/", path = "a/b.git")
+    @test_throws DataPipeline.ConfigFileException loc("not a remote")
+end
+
 Test.@testset "_randomhash()" begin
     hashes = [DataPipeline._randomhash() for _ in 1:100]
     @test all(h -> length(h) == 40 && all(c -> c in "0123456789abcdef", h),

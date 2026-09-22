@@ -119,6 +119,23 @@ function _getauthorurl(registry::RegistryEndpoint)
 end
 
 """
+    _repositorylocation(remote_repo)
+
+Split a code repository's remote into the storage root it is registered under
+(scheme and host, with a trailing slash) and its path there, as
+`(root, path)`. A URL keeps its scheme; an scp-style SSH remote such as
+`git@github.com:org/repo.git` is registered under `https://<host>/`.
+"""
+function _repositorylocation(remote_repo::AbstractString)
+    url = match(r"^([A-Za-z][A-Za-z0-9+.-]*://[^/]+/)(.*)$", remote_repo)
+    isnothing(url) || return (root = String(url[1]), path = String(url[2]))
+    scp = match(r"^[^@/:]+@([^:/]+):/?(.*)$", remote_repo)
+    isnothing(scp) ||
+        return (root = "https://$(scp[1])/", path = String(scp[2]))
+    return throw(ConfigFileException("cannot find the host in remote_repo '$remote_repo'"))
+end
+
+"""
     _readmetadata(handle, data_product, component = nothing)
 
 Resolve a `read:` entry of the working config to the registry name, namespace,

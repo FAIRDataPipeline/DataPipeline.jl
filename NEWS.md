@@ -22,6 +22,8 @@
     types, `DataRegistryHandle`, `RegistryEndpoint` and the two exceptions are
     `public` too.
   - `DataRegistryHandle` prints a summary rather than its whole contents.
+  - `remote_repo` may be any URL, or an scp-style SSH remote, not only a host
+    of lower-case letters.
   - An output whose bytes are already in the data store is deleted and its
     data product pointed at the existing file, as the other APIs do; every
     data product gets an object of its own, shared by its components.

@@ -30,9 +30,8 @@ function initialise(config_file::String = FDP_PATH_CONFIG(),
     script_url = _registerobject(registry, submission_script, datastore,
                                  "Submission script")["url"]
 
-    remote_repo = run_metadata["remote_repo"]
-    repo_root = String(match(r"([a-z]*://[a-z]*.[a-z]*/).*", remote_repo)[1])
-    repo_url = _registerobject(registry, remote_repo, repo_root,
+    repo = _repositorylocation(run_metadata["remote_repo"])
+    repo_url = _registerobject(registry, repo.path, repo.root,
                                "Remote code repository.",
                                hash = run_metadata["latest_commit"],
                                local_root = false, file_type = nothing)["url"]
