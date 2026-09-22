@@ -1,6 +1,6 @@
 # NEWS
 
-- unreleased
+- v0.54.0
   - The registry is taken from `run_metadata.local_data_registry_url` in the
     working config (default `http://127.0.0.1:8000/api/`), so a registry on
     another host or port works; `run_metadata.api_version` is sent with every
@@ -13,6 +13,7 @@
     `ExistingDataProduct(...)`, or a vector of them for one issue on several
     things. Issues are queued and registered at `finalise`. The old
     `raise_issue(handle, url, description, severity)` is gone; it could not run.
+  - Don't allow last argument on read_*() to be optional (they were broken anyway).
   - Output files get a temporary `dat-<random>` name until `finalise`, in every
     write function.
   - `DataRegistryHandle` prints a summary rather than its whole contents.
