@@ -113,7 +113,9 @@ jobs:
         fair registry start
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
-        fair run --debug examples/fdp/SEIRSconfig.yaml
+        # --dirty: a pull_request checkout is a detached merge commit on no
+        # remote branch, which fair run otherwise refuses as not level with origin
+        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
         deactivate
       shell: bash
       env:
