@@ -514,7 +514,10 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     links = sort(readdir(directory))
     @test links == ["data_product_link_write_$uid.txt",
         "data_product_write_array_$uid.h5"]
-    @test [readlink(joinpath(directory, link)) for link in links] == paths
+    # readlink normalises separators, and a storage path keeps the / of the
+    # data product name, so compare normalised paths
+    @test [normpath(readlink(joinpath(directory, link))) for link in links] ==
+          normpath.(paths)
     @test read(joinpath(directory, links[1]), String) == read(paths[1], String)
     @test length(handle.inputs) == 2
 
