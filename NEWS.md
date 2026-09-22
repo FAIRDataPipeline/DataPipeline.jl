@@ -1,5 +1,21 @@
 # NEWS
 
+- unreleased
+  - The registry is taken from `run_metadata.local_data_registry_url` in the
+    working config (default `http://127.0.0.1:8000/api/`), so a registry on
+    another host or port works; `run_metadata.api_version` is sent with every
+    request.
+  - `finalise` appends the code run's uuid to `coderuns.txt` beside the working
+    config, so `fair add` and `fair push` can stage Julia code runs.
+  - `raise_issue` has a new signature: `raise_issue(handle, target, description;
+    severity = 0)`, where a target is a data product name, `WorkingConfig()`,
+    `SubmissionScript()`, `CodeRepository()`, `ConfigDataProduct(...)` or
+    `ExistingDataProduct(...)`, or a vector of them for one issue on several
+    things. Issues are queued and registered at `finalise`. The old
+    `raise_issue(handle, url, description, severity)` is gone; it could not run.
+  - Output files get a temporary `dat-<random>` name until `finalise`, in every
+    write function.
+  - `DataRegistryHandle` prints a summary rather than its whole contents.
 - v0.53.2
 - v0.53.1
 - v0.53.0

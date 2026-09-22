@@ -1,5 +1,5 @@
 # FAIR data pipeline manual
-This is the manual for the upcoming FAIR `DataPipeline` package.
+This is the manual for the FAIR `DataPipeline` package.
 
 ```@contents
 Pages = ["fdp_manual.md"]
@@ -11,6 +11,8 @@ Depth = 3
 ```@docs
 initialise
 finalise
+DataPipeline.DataRegistryHandle
+DataPipeline.RegistryEndpoint
 ```
 
 ## Reading data
@@ -20,7 +22,7 @@ read_array
 read_table
 read_estimate
 read_distribution
-link_read
+link_read!
 ```
 
 ## Writing data
@@ -30,13 +32,19 @@ write_array
 write_table
 write_estimate
 write_distribution
-link_write
+link_write!
 ```
 
 ## Raising issues
 
 ```@docs
 raise_issue
+AbstractIssueTarget
+WorkingConfig
+SubmissionScript
+CodeRepository
+ConfigDataProduct
+ExistingDataProduct
 ```
 
 ## Index
