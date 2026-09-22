@@ -196,6 +196,19 @@ function _postentry(registry::RegistryEndpoint, table::String, query::Dict)
 end
 
 """
+    _createentry(registry, table, data)
+
+Post a new entry to `table` of the registry, without looking for an existing
+one, and return it.
+"""
+function _createentry(registry::RegistryEndpoint, table::String, data::Dict)
+    url = string(registry.url, table, "/")
+    r = HTTP.request("POST", url, headers = _headers(registry),
+                     body = JSON.json(data))
+    return JSON.parse(String(r.body))
+end
+
+"""
     _convertquery(registry, query)
 
 Convert a dictionary of registry fields into a URL query string. Registry URLs

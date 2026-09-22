@@ -22,6 +22,9 @@
     types, `DataRegistryHandle`, `RegistryEndpoint` and the two exceptions are
     `public` too.
   - `DataRegistryHandle` prints a summary rather than its whole contents.
+  - An output whose bytes are already in the data store is deleted and its
+    data product pointed at the existing file, as the other APIs do; every
+    data product gets an object of its own, shared by its components.
   - Julia 1.11 or later is required.
   - `${{RUN_ID}}` in a `write:` data product name is replaced by the code run's
     uuid at `finalise`, as the pipeline documentation describes (the CLI leaves

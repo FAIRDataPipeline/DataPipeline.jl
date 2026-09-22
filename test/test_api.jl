@@ -540,6 +540,42 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     @test length(code_run["inputs"]) == 3
 end
 
+Test.@testset "an output with already-registered bytes" begin
+    first = "data_product/duplicate/$uid/first"
+    second = "data_product/duplicate/$uid/second"
+
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, first, "description", file_type = "txt",
+                           use_version = version)
+    DataPipeline._addwrite(config, second, "description", file_type = "txt",
+                           use_version = version)
+    handle = DataPipeline.initialise(config, config)
+    path1 = link_write!(handle, first)
+    path2 = link_write!(handle, second)
+    write(path1, "the same bytes $uid\n")
+    write(path2, "the same bytes $uid\n")
+    DataPipeline.finalise(handle)
+
+    # One file in the store, both data products pointing at it
+    kept = handle.outputs[(first, nothing)]["path"]
+    @test handle.outputs[(second, nothing)]["path"] == kept
+    @test isfile(kept)
+    @test !isfile(path2)
+    @test !isdir(dirname(path2))
+    @test isdir(joinpath(datastore, namespace, "data_product/duplicate/$uid"))
+    registry = handle.registry
+    objects = [DataPipeline._getentry(registry,
+                                      URIs.URI(DataPipeline._finddataproduct(registry,
+                                                                             namespace,
+                                                                             name,
+                                                                             version)["object"]))
+               for name in (first, second)]
+    @test objects[1]["url"] != objects[2]["url"]
+    @test objects[1]["storage_location"] == objects[2]["storage_location"]
+    @test length(unique(handle.outputs[key]["component_url"]
+                        for key in keys(handle.outputs))) == 2
+end
+
 Test.@testset "\${{RUN_ID}} in an output name" begin
     data_product = "data_product/run_id/$uid"
     use_name = "data_product/run_id/$uid/run-\${{ RUN_ID }}"

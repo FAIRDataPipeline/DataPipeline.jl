@@ -46,12 +46,16 @@ reusing any of the three that already exist, and return the object entry.
 - `public::Bool`: whether the storage location is public.
 - `file_type`: the extension registered as the object's file type; the
   file's own unless given, `nothing` to register none.
+- `new_object::Bool`: post a new object even if an identical one exists,
+  as every data product wants its own; the config, script and repository
+  objects are reused.
 """
 function _registerobject(registry::RegistryEndpoint, path::String,
                          root::String, description::String;
                          hash::String = _getfilehash(joinpath(root, path)),
                          local_root::Bool = true, public::Bool = true,
-                         file_type::Union{Nothing, String} = _extension(path))
+                         file_type::Union{Nothing, String} = _extension(path),
+                         new_object::Bool = false)
     root_entry = _postentry(registry, "storage_root",
                             Dict("root" => root, "local" => local_root))
     root_url = root_entry["url"]
@@ -83,7 +87,8 @@ function _registerobject(registry::RegistryEndpoint, path::String,
         end
         object_query["file_type"] = file_type_url
     end
-    return _postentry(registry, "object", object_query)
+    return new_object ? _createentry(registry, "object", object_query) :
+           _postentry(registry, "object", object_query)
 end
 
 """
@@ -232,6 +237,19 @@ function _getmetadata(handle::DataRegistryHandle, data_product::String,
     return throw(ConfigFileException(msg))
 end
 
+# Remove `directory` and its parents while they are empty, stopping at `stop`
+function _pruneempty(directory::AbstractString, stop::AbstractString)
+    stop = rstrip(normpath(stop), '/')
+    directory = rstrip(normpath(directory), '/')
+    while directory != stop && startswith(directory, stop) &&
+          isdir(directory) &&
+          isempty(readdir(directory))
+        rm(directory)
+        directory = dirname(directory)
+    end
+    return nothing
+end
+
 # The placeholder in a `write:` name that stands for the code run's uuid, which
 # the CLI leaves for the API to fill in at `finalise`
 const RUN_ID_PLACEHOLDER = r"\$\{\{\s*RUN_ID\s*\}\}"
@@ -240,10 +258,12 @@ const RUN_ID_PLACEHOLDER = r"\$\{\{\s*RUN_ID\s*\}\}"
     _registerdataproduct(handle, data_product, component)
 
 Register one output of the handle: substitute the code run's uuid for
-`\${{RUN_ID}}` in its registered name, move its file to its hash name, then
-register the object, the data product and the component (the `whole_object`
-component when `component` is `nothing`). Record the registered name and the
-component URL in the handle and return the URL.
+`\${{RUN_ID}}` in its registered name; move its file to its hash name, or, if
+the same bytes are already in the store, delete it and point at them; register
+the object and the data product, once per data product however many
+components it has; and register the component (the `whole_object` component
+when `component` is `nothing`). Record the registered name, the object URL and
+the component URL in the handle and return the component URL.
 """
 function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
                               component::Union{Nothing, String})
@@ -258,48 +278,51 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
     use_version = wmd["use_version"]
     filepath = wmd["path"]
 
-    if isfile(filepath)
-        # Name the file by its hash; another component of the same file has
-        # already moved it if the path is gone
-        hash = _getfilehash(filepath)
-        extension = _extension(filepath)
-        new_filepath = joinpath(datastore, use_namespace, use_data_product,
-                                "$hash.$extension")
-        mkpath(dirname(new_filepath))
-        mv(filepath, new_filepath, force = true)
-        # A directory named with the placeholder is left empty by the move
-        old_directory = dirname(filepath)
-        if old_directory != dirname(new_filepath) &&
-           isempty(readdir(old_directory))
-            rm(old_directory)
-        end
+    # Another component of the same data product may have registered its file
+    # and object already
+    registered = [value
+                  for (key, value) in handle.outputs
+                  if key[1] == data_product && haskey(value, "object_url")]
+    if !isempty(registered)
+        new_filepath = registered[1]["path"]
+        obj_url = registered[1]["object_url"]
     else
-        dp_entry = _finddataproduct(registry, use_namespace, use_data_product,
-                                    use_version)
-        obj_entry = _getentry(registry, URIs.URI(dp_entry["object"]))
-        location_entry = _getentry(registry,
-                                   URIs.URI(obj_entry["storage_location"]))
-        root_entry = _getentry(registry,
-                               URIs.URI(location_entry["storage_root"]))
-        root = replace(root_entry["root"], "file://" => "")
-        new_filepath = joinpath(root, location_entry["path"])
-        if !isfile(new_filepath)
+        if !isfile(filepath)
             msg = string("File not found: ", use_data_product,
                          " is present in handle but not in data store.")
             throw(ReadWriteException(msg))
         end
+        hash = _getfilehash(filepath)
+        existing = _getentry(registry, "storage_location",
+                             Dict("hash" => hash, "public" => wmd["public"],
+                                  "storage_root" =>
+                                      _extractid(handle.datastore_obj_url)))
+        if isnothing(existing)
+            # Name the file by its hash
+            new_filepath = joinpath(datastore, use_namespace, use_data_product,
+                                    "$hash.$(_extension(filepath))")
+            mkpath(dirname(new_filepath))
+            mv(filepath, new_filepath, force = true)
+        else
+            # The same bytes are already in the store: point at them and drop
+            # the duplicate
+            new_filepath = joinpath(datastore, existing["path"])
+            rm(filepath)
+        end
+        _pruneempty(dirname(filepath), datastore)
+
+        obj_url = _registerobject(registry, new_filepath, datastore,
+                                  wmd["dataproduct_description"], hash = hash,
+                                  public = wmd["public"],
+                                  new_object = true)["url"]
+        ns_url = _postentry(registry, "namespace",
+                            Dict("name" => use_namespace))["url"]
+        _postentry(registry, "data_product",
+                   Dict("namespace" => ns_url, "name" => use_data_product,
+                        "object" => obj_url, "version" => use_version))
     end
     wmd["path"] = new_filepath
-
-    obj_url = _registerobject(registry, new_filepath, datastore,
-                              wmd["dataproduct_description"],
-                              public = wmd["public"])["url"]
-
-    ns_url = _postentry(registry, "namespace",
-                        Dict("name" => use_namespace))["url"]
-    _postentry(registry, "data_product",
-               Dict("namespace" => ns_url, "name" => use_data_product,
-                    "object" => obj_url, "version" => use_version))
+    wmd["object_url"] = obj_url
 
     if isnothing(use_component)
         component_url = _wholeobjectcomponent(registry, obj_url)
