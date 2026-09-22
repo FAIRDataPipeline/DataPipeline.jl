@@ -1,7 +1,350 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>SEIRS model example · FAIRDataPipeline DataPipeline.jl docs</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="FAIRDataPipeline DataPipeline.jl docs logo"/></a><div class="docs-package-name"><span class="docs-autofit">FAIRDataPipeline DataPipeline.jl docs</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Introduction</a></li><li><a class="tocitem" href="../fdp_manual/">FAIR data pipeline manual</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>SEIRS model example</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>SEIRS model example</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/master/docs/src/SEIRS.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="SEIRS-model-example"><a class="docs-heading-anchor" href="#SEIRS-model-example">SEIRS model example</a><a id="SEIRS-model-example-1"></a><a class="docs-heading-anchor-permalink" href="#SEIRS-model-example" title="Permalink"></a></h1><p>This is the updated manual for the upcoming <code>FAIR</code> interfaced version of the Data Registry package.</p><pre><code class="language-julia">print(pwd())</code></pre><pre class="documenter-example-output">/home/runner/work/DataPipeline.jl/DataPipeline.jl/docs/build</pre><pre><code class="language-julia">show(run(`ls`))</code></pre><pre class="documenter-example-output">assets
-Process(`ls`, ProcessExited(0))</pre><pre><code class="language-julia">cd(&quot;/home/runner/work/DataPipeline.jl/DataPipeline.jl&quot;)
-print(pwd())
-show(run(`fair init --ci`))</code></pre><pre class="documenter-example-output">/home/runner/work/DataPipeline.jl/DataPipeline.jl/docs/buildInitialised empty fair repository in /home/runner/work/DataPipeline.jl/DataPipeline.jl/docs/build/.fair
-Process(`fair init --ci`, ProcessExited(0))</pre><pre><code class="language-">print(pwd())
-read(`fair pull /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/SEIRSconfig.yaml`, String)</code></pre><p>dsf</p><pre><code class="language-">show(run(`fair run /home/runner/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/SEIRSconfig.yaml`))</code></pre></article><nav class="docs-footer"><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Monday 15 April 2024 23:48">Monday 15 April 2024</span>. Using Julia version 1.10.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>SEIRS model example · FAIRDataPipeline DataPipeline.jl docs</title><meta name="title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta property="og:title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta property="twitter:title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta name="description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><meta property="og:description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><meta property="twitter:description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="FAIRDataPipeline DataPipeline.jl docs logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">FAIRDataPipeline DataPipeline.jl docs</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Introduction</a></li><li><a class="tocitem" href="../fdp_manual/">FAIR data pipeline manual</a></li><li class="is-active"><a class="tocitem" href>SEIRS model example</a><ul class="internal"><li><a class="tocitem" href="#The-user-config"><span>The user config</span></a></li><li><a class="tocitem" href="#The-model-script"><span>The model script</span></a></li><li><a class="tocitem" href="#Running-it"><span>Running it</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>SEIRS model example</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>SEIRS model example</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FAIRDataPipeline/DataPipeline.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/main/docs/src/SEIRS.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="SEIRS-model-example"><a class="docs-heading-anchor" href="#SEIRS-model-example">SEIRS model example</a><a id="SEIRS-model-example-1"></a><a class="docs-heading-anchor-permalink" href="#SEIRS-model-example" title="Permalink"></a></h1><p>The package ships a worked example in <code>examples/fdp/</code>: an SEIRS epidemic model whose one input, its parameter table, and two outputs, a results table and a figure, are tracked by the FAIR Data Pipeline. It is the example the package&#39;s own tests are built on.</p><h2 id="The-user-config"><a class="docs-heading-anchor" href="#The-user-config">The user config</a><a id="The-user-config-1"></a><a class="docs-heading-anchor-permalink" href="#The-user-config" title="Permalink"></a></h2><p><code>examples/fdp/SEIRSconfig.yaml</code> is the config handed to <code>fair</code>. Its <code>register:</code> block names the parameter table as an external object, so <code>fair pull</code> downloads and registers it; its <code>write:</code> block declares the two outputs; and <code>run_metadata.script</code> is the command <code>fair run</code> executes.</p><pre><code class="language-julia hljs">using DataPipeline
+example = joinpath(pkgdir(DataPipeline), &quot;examples&quot;, &quot;fdp&quot;)
+print(read(joinpath(example, &quot;SEIRSconfig.yaml&quot;), String))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">run_metadata:
+  default_input_namespace: testing
+  description: SEIRS Model julia
+  script: |
+    julia --project=examples/fdp -e &quot;using Pkg; Pkg.instantiate()&quot;
+    julia --project=examples/fdp examples/fdp/seirs_sim.jl
+
+register:
+- namespace: PSU
+  full_name: Pennsylvania State University
+  website: https://ror.org/04p491231
+
+- external_object: SEIRS_model/parameters
+  namespace_name: PSU
+  root: https://raw.githubusercontent.com/
+  path: FAIRDataPipeline/rSimpleModel/main/inst/extdata/static_params_SEIRS.csv
+  title: Static parameters of the model
+  description: Static parameters of the model
+  identifier: https://doi.org/10.1038/s41592-020-0856-2
+  file_type: csv
+  release_date: 2020-06-01T12:00
+  version: &quot;1.0.0&quot;
+  primary: False
+
+write:
+- data_product: model_output
+  description: SEIRS model results
+  file_type: csv
+  use:
+    data_product: SEIRS_model/results/model_output/julia
+
+- data_product: figure
+  description: SEIRS output plot
+  file_type: pdf
+  use:
+    data_product: SEIRS_model/results/figure/julia</code></pre><h2 id="The-model-script"><a class="docs-heading-anchor" href="#The-model-script">The model script</a><a id="The-model-script-1"></a><a class="docs-heading-anchor-permalink" href="#The-model-script" title="Permalink"></a></h2><p><code>examples/fdp/seirs_sim.jl</code> brackets the model with the API: <code>DataPipeline.initialise</code> opens a code run from the working config <code>fair run</code> wrote, <code>link_read!</code> gives the path of the parameter table and records it as an input, <code>link_write!</code> gives a path for each output and records it, and <code>DataPipeline.finalise</code> names the output files by their hash, registers them, and attaches everything to the code run.</p><pre><code class="language-julia hljs">print(read(joinpath(example, &quot;seirs_sim.jl&quot;), String))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"># SPDX-License-Identifier: LGPL-3.0-or-later
+
+### SEIRS model example
+using DataPipeline
+using DataPipeline.SeirsModel
+using CSV
+using DataFrames
+using Plots
+
+# Initialise code run
+handle = DataPipeline.initialise()
+
+# Read model parameters
+path = link_read!(handle, &quot;SEIRS_model/parameters&quot;)
+static_params = CSV.read(path, DataFrames.DataFrame)
+
+alpha = getparameter(static_params, &quot;alpha&quot;)
+beta = getparameter(static_params, &quot;beta&quot;)
+inv_gamma = getparameter(static_params, &quot;inv_gamma&quot;)
+inv_omega = getparameter(static_params, &quot;inv_omega&quot;)
+inv_mu = getparameter(static_params, &quot;inv_mu&quot;)
+inv_sigma = getparameter(static_params, &quot;inv_sigma&quot;)
+
+# Set initial state
+timesteps = 1000
+years = 5
+initial_state = Dict(&quot;S&quot; =&gt; 0.999, &quot;E&quot; =&gt; 0.001, &quot;I&quot; =&gt; 0, &quot;R&quot; =&gt; 0)
+
+# Run the model
+results = modelseirs(initial_state, timesteps, years, alpha, beta,
+                     inv_gamma, inv_omega, inv_mu, inv_sigma);
+
+ENV[&quot;GKSwstype&quot;]=&quot;100&quot;
+g = plotseirs(results);
+
+# Save outputs to data store
+path = link_write!(handle, &quot;model_output&quot;)
+CSV.write(path, results)
+
+path = link_write!(handle, &quot;figure&quot;)
+savefig(g, path)
+
+# Register code run in local registry
+DataPipeline.finalise(handle)</code></pre><h2 id="Running-it"><a class="docs-heading-anchor" href="#Running-it">Running it</a><a id="Running-it-1"></a><a class="docs-heading-anchor-permalink" href="#Running-it" title="Permalink"></a></h2><p>With the pipeline installed and a local registry running (see the <a href="https://www.fairdatapipeline.org/docs/">FAIR Data Pipeline documentation</a>), from the root of a clone of this repository:</p><pre><code class="language-sh hljs">fair init
+fair pull examples/fdp/SEIRSconfig.yaml
+fair run examples/fdp/SEIRSconfig.yaml</code></pre><p><code>fair run</code> ends by printing the URL of the registered code run. <code>fair add</code> with that run&#39;s uuid, then <code>fair push</code>, sends it and its data products to a remote registry.</p><p>The two blocks below do exactly that when this documentation is built with the environment variable <code>FDP_DOCS_RUN_EXAMPLE</code> set to <code>true</code> and a registry running, as the package&#39;s own documentation build does; built without it, they only say so.</p><pre><code class="language-julia hljs">run_example = get(ENV, &quot;FDP_DOCS_RUN_EXAMPLE&quot;, &quot;&quot;) == &quot;true&quot;
+run_example || println(&quot;Not run: FDP_DOCS_RUN_EXAMPLE is not set.&quot;)
+# Run a `fair` command from the root of the repository, showing its output
+function fair(args...)
+    cd(pkgdir(DataPipeline)) do
+        return run(pipeline(`fair $(collect(args))`, stderr = stdout))
+    end
+end
+run_example &amp;&amp; fair(&quot;pull&quot;, &quot;--local&quot;, &quot;examples/fdp/SEIRSconfig.yaml&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Running pull please wait
+INFO:FAIRDataPipeline.Register:Registering: SEIRS_model/parameters
+Registering: SEIRS_model/parameters
+There are no items in the [read] block to pull from registry: &#39;origin&#39;.</code></pre><pre><code class="language-julia hljs">run_example &amp;&amp; fair(&quot;run&quot;, &quot;--local&quot;, &quot;examples/fdp/SEIRSconfig.yaml&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Running run please wait
+    Updating registry at `~/.julia/registries/General.toml`
+    Updating `~/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/Project.toml`
+  [336ed68f] + CSV v1.1.0
+  [a93c6f00] + DataFrames v1.8.2
+  [9ced6f0a] + DataPipeline v0.54.0 `../..`
+  [91a5bcdd] + Plots v1.41.7
+    Updating `~/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/Manifest.toml`
+  [66dad0bd] + AliasTables v1.1.3
+  [39de3d68] + AxisArrays v0.4.8
+  [336ed68f] + CSV v1.1.0
+  [944b1d66] + CodecZlib v0.7.9
+  [35d6a980] + ColorSchemes v3.31.0
+  [3da002f7] + ColorTypes v0.12.1
+  [c3611d14] + ColorVectorSpace v0.11.0
+  [5ae59095] + Colors v0.13.1
+  [34da2185] + Compat v4.18.1
+  [187b0558] + ConstructionBase v1.6.0
+  [d38c429a] + Contour v0.6.3
+  [a8cc5b0e] + Crayons v4.2.0
+  [a10d1c49] + DBInterface v2.7.0
+  [9a962f9c] + DataAPI v1.16.0
+  [a93c6f00] + DataFrames v1.8.2
+  [9ced6f0a] + DataPipeline v0.54.0 `../..`
+  [48204bd6] + DataStrings v1.1.0
+  [864edb3b] + DataStructures v0.19.6
+  [e2d170a0] + DataValueInterfaces v1.0.0
+  [8bb1440f] + DelimitedFiles v1.9.1
+  [3c3547ce] + DiskArrays v0.4.23
+  [ffbed154] + DocStringExtensions v0.9.5
+  [41ac09f5] + Durations v1.2.0
+  [4e289a0a] + EnumX v1.0.7
+  [c87230d0] + FFMPEG v0.4.5
+  [01fcc997] + FTPClient v1.2.1
+⌅ [53c48c17] + FixedPointNumbers v0.8.6
+  [1fa38f19] + Format v1.3.7
+  [28b8d3ca] + GR v0.73.27
+  [f67ccb44] + HDF5 v0.17.4
+  [cd3eb016] + HTTP v2.7.1
+⌅ [842dd82b] + InlineStrings v1.4.6
+  [8197267c] + IntervalSets v0.7.14
+  [41ab1584] + InvertedIndices v1.3.1
+  [92d709cd] + IrrationalConstants v0.2.6
+  [c8e1da08] + IterTools v1.10.0
+  [82899510] + IteratorInterfaceExtensions v1.0.0
+  [1019f520] + JLFzf v0.1.11
+  [692b3bcd] + JLLWrappers v1.8.0
+  [682c06a0] + JSON v1.9.0
+  [8ac3fa9e] + LRUCache v1.6.2
+  [b964fa9f] + LaTeXStrings v1.4.1
+  [23fbe1c1] + Latexify v0.16.12
+  [2ab3a3ac] + LogExpFunctions v1.0.1
+  [3da0fdf6] + MPIPreferences v0.1.12
+  [1914dd2f] + MacroTools v0.5.16
+  [299715c1] + MarchingCubes v0.1.11
+  [442fdcdd] + Measures v0.3.3
+  [e1d29d7a] + Missings v1.2.0
+  [77ba4419] + NaNMath v1.1.4
+  [30363a11] + NetCDF v0.12.2
+  [6fe1bfb0] + OffsetArrays v1.17.0
+  [bac558e1] + OrderedCollections v2.0.1
+  [69de0a69] + Parsers v3.0.0
+  [ccf2f8ad] + PlotThemes v3.3.0
+  [995b91a9] + PlotUtils v1.5.0
+  [91a5bcdd] + Plots v1.41.7
+  [2dfb63ee] + PooledArrays v1.4.3
+  [aea7be01] + PrecompileTools v1.3.4
+  [21216c6a] + Preferences v1.6.0
+  [08abe8d2] + PrettyTables v3.4.8
+  [43287f4e] + PtrArrays v1.4.0
+  [b3c3ace0] + RangeArrays v0.3.2
+  [3cdcf5f2] + RecipesBase v1.3.4
+  [01d81517] + RecipesPipeline v0.6.12
+  [189a3867] + Reexport v1.2.2
+  [05181044] + RelocatableFolders v1.0.1
+  [ae029012] + Requires v1.3.1
+  [802f3686] + Reseau v1.5.0
+  [0aa819cd] + SQLite v1.8.3
+  [6c6a2e73] + Scratch v1.3.0
+  [91c51154] + SentinelArrays v1.4.10
+  [992d4aef] + Showoff v1.1.1
+  [a2af1166] + SortingAlgorithms v1.2.3
+  [90137ffa] + StaticArrays v1.9.22
+  [1e83bf80] + StaticArraysCore v1.4.4
+  [10745b16] + Statistics v1.11.5
+  [82ae8749] + StatsAPI v1.8.0
+  [2913bbd2] + StatsBase v0.34.13
+  [69024149] + StringEncodings v0.3.7
+⌅ [892a3eda] + StringManipulation v0.5.0
+  [ec057cc2] + StructUtils v2.9.2
+  [3783bdb8] + TableTraits v1.0.1
+  [bd369af6] + Tables v1.14.0
+  [62fd8b95] + TensorCore v0.1.1
+  [3bb67fe8] + TranscodingStreams v0.11.3
+  [30578b45] + URIParser v0.4.1
+  [5c2747f8] + URIs v1.7.0
+  [1cfade01] + UnicodeFun v0.4.1
+  [b8865327] + UnicodePlots v3.9.0
+  [41fe7b60] + Unzip v0.2.0
+  [ea10d353] + WeakRefStrings v2.0.0
+  [ddb6d928] + YAML v0.4.17
+  [0b7ba130] + Blosc_jll v1.21.7+0
+  [6e34b625] + Bzip2_jll v1.0.9+0
+  [83423d85] + Cairo_jll v1.18.7+0
+  [ee1fde0b] + Dbus_jll v1.16.2+0
+  [2702e6a9] + EpollShim_jll v0.0.20230411+1
+  [2e619515] + Expat_jll v2.8.4+0
+⌅ [b22a6f82] + FFMPEG_jll v8.1.2+0
+  [a3f928ae] + Fontconfig_jll v2.17.1+0
+  [d7e528f0] + FreeType2_jll v2.14.3+1
+  [559328eb] + FriBidi_jll v1.0.17+0
+  [0656b61e] + GLFW_jll v3.5.1+0
+  [d2c73de3] + GR_jll v0.73.27+0
+⌅ [b0724c58] + GettextRuntime_jll v0.22.4+0
+  [61579ee1] + Ghostscript_jll v9.55.1+0
+  [7746bdde] + Glib_jll v2.88.3+0
+  [3b182d85] + Graphite2_jll v1.3.16+0
+  [0234f1f7] + HDF5_jll v2.2.2+0
+  [2e76f6c2] + HarfBuzz_jll v100.14004.0+0
+  [e33a78d0] + Hwloc_jll v2.14.0+0
+  [aacddb02] + JpegTurbo_jll v3.2.0+1
+  [c1c5ebd0] + LAME_jll v3.100.3+0
+  [88015f11] + LERC_jll v4.2.0+0
+  [1d63c593] + LLVMOpenMP_jll v23.1.1+0
+⌅ [e9f186c6] + Libffi_jll v3.4.7+0
+  [7e76a0d4] + Libglvnd_jll v1.7.1+1
+  [94ce4f54] + Libiconv_jll v1.18.0+0
+  [4b2f31a3] + Libmount_jll v2.42.0+0
+  [89763e89] + Libtiff_jll v4.7.3+0
+  [38a345b3] + Libuuid_jll v2.42.0+0
+  [5ced341a] + Lz4_jll v1.10.1+0
+  [b5ada748] + MPIABI_jll v1.0.0+0
+  [7cb0a576] + MPICH_jll v5.0.1+0
+  [f1f71cc9] + MPItrampoline_jll v5.5.6+0
+  [9237b28f] + MicrosoftMPI_jll v10.1.4+3
+  [7243133f] + NetCDF_jll v401.1000.101+0
+  [e7412a2a] + Ogg_jll v1.3.6+0
+  [fe0851c0] + OpenMPI_jll v5.0.12+0
+  [91d4177d] + Opus_jll v1.6.1+0
+  [36c8627f] + Pango_jll v1.58.2+0
+  [30392449] + Pixman_jll v0.46.4+0
+  [c0090381] + Qt6Base_jll v6.10.2+2
+  [629bc702] + Qt6Declarative_jll v6.10.2+2
+  [ce943373] + Qt6ShaderTools_jll v6.10.2+1
+  [6de9746b] + Qt6Svg_jll v6.10.2+0
+  [e99dba38] + Qt6Wayland_jll v6.10.2+1
+  [76ed43ae] + SQLite_jll v3.53.4+0
+  [a44049a8] + Vulkan_Loader_jll v1.3.243+0
+  [a2964d1f] + Wayland_jll v1.24.0+0
+⌅ [02c8fc9c] + XML2_jll v2.13.9+0
+  [ffd25f8a] + XZ_jll v5.8.4+0
+  [f67eecfb] + Xorg_libICE_jll v1.1.2+0
+  [c834827a] + Xorg_libSM_jll v1.2.6+0
+  [4f6342f7] + Xorg_libX11_jll v1.8.13+0
+  [0c0b7dd1] + Xorg_libXau_jll v1.0.13+0
+  [935fb764] + Xorg_libXcursor_jll v1.2.4+0
+  [a3789734] + Xorg_libXdmcp_jll v1.1.6+0
+  [1082639a] + Xorg_libXext_jll v1.3.8+0
+  [d091e8ba] + Xorg_libXfixes_jll v6.0.2+0
+  [a51aa0fd] + Xorg_libXi_jll v1.8.4+0
+  [d1454406] + Xorg_libXinerama_jll v1.1.7+0
+  [ec84b674] + Xorg_libXrandr_jll v1.5.6+0
+  [ea2f1a96] + Xorg_libXrender_jll v0.9.12+0
+  [a65dc6b1] + Xorg_libpciaccess_jll v0.19.0+0
+  [c7cfdc94] + Xorg_libxcb_jll v1.17.1+0
+  [cc61e674] + Xorg_libxkbfile_jll v1.2.0+0
+  [e920d4aa] + Xorg_xcb_util_cursor_jll v0.1.6+0
+  [12413925] + Xorg_xcb_util_image_jll v0.4.1+0
+  [2def613f] + Xorg_xcb_util_jll v0.4.1+0
+  [975044d2] + Xorg_xcb_util_keysyms_jll v0.4.1+0
+  [0d47668e] + Xorg_xcb_util_renderutil_jll v0.3.10+0
+  [c22f9ab0] + Xorg_xcb_util_wm_jll v0.4.2+0
+  [35661453] + Xorg_xkbcomp_jll v1.4.7+0
+  [33bec58e] + Xorg_xkeyboard_config_jll v2.47.0+2
+  [c5fb5394] + Xorg_xtrans_jll v1.6.0+0
+⌅ [2b3700d1] + aws_c_auth_jll v0.9.6+0
+⌅ [70f11efc] + aws_c_cal_jll v0.9.13+0
+⌅ [73048d1d] + aws_c_common_jll v0.12.6+0
+⌅ [73a04cd5] + aws_c_compression_jll v0.3.2+0
+⌅ [3254fc65] + aws_c_http_jll v0.10.15+0
+⌅ [13c41daa] + aws_c_io_jll v0.26.3+0
+⌅ [bd1f34fb] + aws_c_s3_jll v0.11.5+0
+⌅ [1282aa60] + aws_c_sdkutils_jll v0.2.4+1
+⌅ [b2a88e68] + aws_checksums_jll v0.2.10+0
+  [c4b69c83] + dlfcn_win32_jll v1.4.2+0
+  [35ca27e7] + eudev_jll v3.2.14+0
+⌅ [214eeab7] + fzf_jll v0.61.1+0
+  [477f73a3] + libaec_jll v1.1.7+0
+  [a4ae2306] + libaom_jll v3.14.1+0
+  [0ac62f75] + libass_jll v0.17.5+0
+  [1183f4f0] + libdecor_jll v0.2.2+0
+  [8e53e030] + libdrm_jll v2.4.134+0
+  [2db6ffa8] + libevdev_jll v1.13.4+0
+  [f638f0a6] + libfdk_aac_jll v2.0.4+0
+  [36db933b] + libinput_jll v1.28.1+0
+  [b53b4c65] + libpng_jll v1.6.58+0
+  [9a156e7d] + libva_jll v2.23.0+0
+  [f27f6e37] + libvorbis_jll v1.3.8+0
+  [337d8026] + libzip_jll v1.11.4+0
+  [9aeb927a] + mpif_jll v1.0.0+0
+  [009596ad] + mtdev_jll v1.1.7+0
+  [cddc5d3d] + s2n_tls_jll v1.7.10+0
+⌅ [1270edf5] + x264_jll v10164.0.1+0
+  [dfaa095f] + x265_jll v4.1.0+0
+  [d8fb68d0] + xkbcommon_jll v1.13.0+0
+  [0dad84c5] + ArgTools v1.1.2
+  [56f22d72] + Artifacts v1.11.0
+  [2a0f44e3] + Base64 v1.11.0
+  [ade2ca70] + Dates v1.11.0
+  [f43a241f] + Downloads v1.7.0
+  [7b1f6079] + FileWatching v1.11.0
+  [9fa8497b] + Future v1.11.0
+  [b77e0a4c] + InteractiveUtils v1.11.0
+  [ac6e5ff7] + JuliaSyntaxHighlighting v1.12.0
+  [4af54fe1] + LazyArtifacts v1.11.0
+  [b27032c2] + LibCURL v1.0.0
+  [76f85450] + LibGit2 v1.11.0
+  [8f399da3] + Libdl v1.11.0
+  [37e2e46d] + LinearAlgebra v1.13.0
+  [56ddb016] + Logging v1.11.0
+  [d6f4376e] + Markdown v1.11.0
+  [a63ad114] + Mmap v1.11.0
+  [ca575930] + NetworkOptions v1.3.0
+  [44cfe95a] + Pkg v1.13.0
+  [de0858da] + Printf v1.11.0
+  [3fa0cd96] + REPL v1.11.0
+  [9a3f8284] + Random v1.11.0
+  [ea8e919c] + SHA v1.0.0
+  [9e88b42a] + Serialization v1.11.0
+  [6462fe0b] + Sockets v1.11.0
+  [2f01184e] + SparseArrays v1.13.0
+  [f489334b] + StyledStrings v1.11.0
+  [fa267f1f] + TOML v1.0.3
+  [a4e569a6] + Tar v1.10.0
+  [8dfed614] + Test v1.11.0
+  [cf7118a7] + UUIDs v1.11.0
+  [4ec0a83e] + Unicode v1.11.0
+  [e66e0078] + CompilerSupportLibraries_jll v1.5.5+2
+  [deac9b47] + LibCURL_jll v8.18.0+1
+  [e37daf67] + LibGit2_jll v1.9.1+0
+  [29816b5a] + LibSSH2_jll v1.11.103+0
+  [14a3606d] + MozillaCACerts_jll v2026.8.13
+  [4536629a] + OpenBLAS_jll v0.3.30+0
+  [05823500] + OpenLibm_jll v0.8.7+0
+  [458c3c95] + OpenSSL_jll v3.5.6+0
+  [efcefdf7] + PCRE2_jll v10.46.0+0
+  [bea87d4a] + SuiteSparse_jll v7.10.1+0
+  [83775a58] + Zlib_jll v1.3.1+2
+  [3161d3a3] + Zstd_jll v1.5.7+1
+  [8e850b90] + libblastrampoline_jll v5.15.0+0
+  [8e850ede] + nghttp2_jll v1.67.1+0
+  [3f19e933] + p7zip_jll v17.8.2+0
+        Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading. To see why use `status --outdated -m`
+processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-09-22_15_13_25_982340/config.yaml - pipeline initialised.
+data product found: SEIRS_model/parameters
+finished - code run locally registered as: http://127.0.0.1:8000/api/code_run/1/</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../fdp_manual/">« FAIR data pipeline manual</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 22 September 2026 15:14">Tuesday 22 September 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
