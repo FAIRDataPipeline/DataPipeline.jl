@@ -543,6 +543,69 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     @test length(code_run["inputs"]) == 3
 end
 
+Test.@testset "several file types for one extension" begin
+    # The registry is unique on (name, extension) and ships descriptively named
+    # types, and other APIs add their own names, so an extension can have
+    # several - which must not stop an output being registered
+    registry = handle.registry
+    extension = "dp13$(uid[1:8])"
+    for name in ("Julia written", "another API's name")
+        DataPipeline._postentry(registry, "file_type",
+                                Dict("name" => name, "extension" => extension))
+    end
+    listed = DataPipeline._getentry(registry,
+                                    URIs.URI(registry.url * "file_type/" *
+                                             DataPipeline._convertquery(registry,
+                                                                        Dict("extension" =>
+                                                                                 extension))))
+    @test listed["count"] == 2
+    # One of them is taken, and no third is created
+    chosen = DataPipeline._getfiletype(registry, extension)
+    @test chosen in [entry["url"] for entry in listed["results"]]
+    @test DataPipeline._getfiletype(registry, extension) == chosen
+    @test DataPipeline._getentry(registry,
+                                 URIs.URI(registry.url * "file_type/" *
+                                          DataPipeline._convertquery(registry,
+                                                                     Dict("extension" =>
+                                                                              extension))))["count"] ==
+          2
+    # An extension the registry has never seen is created, named after itself
+    fresh = "dp13new$(uid[1:8])"
+    url = DataPipeline._getfiletype(registry, fresh)
+    @test DataPipeline._getentry(registry, URIs.URI(url))["name"] == fresh
+
+    # A whole code run with that extension, as a second language's run leaves it
+    data_product = "data_product/filetype/$uid"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, data_product, "description",
+                           file_type = extension, use_version = version)
+    run_handle = DataPipeline.initialise(config, config)
+    path = link_write!(run_handle, data_product)
+    write(path, "file type $uid\n")
+    DataPipeline.finalise(run_handle)
+    @test DataPipeline._finddataproduct(registry, namespace, data_product,
+                                        version)["name"] == data_product
+end
+
+Test.@testset "a lookup matching several entries is reported" begin
+    registry = handle.registry
+    extension = "dp13amb$(uid[1:8])"
+    for name in ("one", "two")
+        DataPipeline._postentry(registry, "file_type",
+                                Dict("name" => name, "extension" => extension))
+    end
+    err = nothing
+    try
+        DataPipeline._getentry(registry, "file_type",
+                               Dict("extension" => extension))
+    catch e
+        err = e
+    end
+    @test err isa DataPipeline.ReadWriteException
+    @test occursin("2 entries in file_type", err.msg)
+    @test occursin("expected at most one", err.msg)
+end
+
 Test.@testset "an output with already-registered bytes" begin
     first = "data_product/duplicate/$uid/first"
     second = "data_product/duplicate/$uid/second"

@@ -243,11 +243,14 @@ function _getentry(registry::RegistryEndpoint, table::String, query::Dict)
 
     if r["count"] == 0
         return nothing
-    else
-        results = r["results"]
-        @assert length(results) == 1
-        return results[1]
+    elseif r["count"] > 1
+        # Every table this is used on is unique on the fields queried, so more
+        # than one match means the query is not the one the caller meant
+        throw(ReadWriteException(string(r["count"], " entries in ", table,
+                                        " match ", query,
+                                        " - expected at most one")))
     end
+    return r["results"][1]
 end
 
 """
@@ -320,6 +323,28 @@ function _wholeobjectcomponent(registry::RegistryEndpoint, object_url::String)
     return _geturl(registry, "object_component",
                    Dict("object" => _extractid(object_url),
                         "whole_object" => true))
+end
+
+"""
+    _getfiletype(registry, extension)
+
+Return the URL of a registry file type for `extension`, creating one named
+after the extension if the registry holds none.
+
+The registry is unique on (name, extension) and ships a catalogue of
+descriptively named types (`Comma-Separated Values File` for `csv`), and other
+APIs add their own names for the same extension, so several entries for one
+extension are ordinary and any of them serves.
+"""
+function _getfiletype(registry::RegistryEndpoint, extension::String)
+    url = string(registry.url, "file_type/")
+    r = _getentry(registry,
+                  URIs.URI(url * _convertquery(registry,
+                                         Dict("extension" => extension))))
+    r["count"] == 0 || return r["results"][1]["url"]
+    return _postentry(registry, "file_type",
+                      Dict("name" => extension,
+                           "extension" => extension))["url"]
 end
 
 """

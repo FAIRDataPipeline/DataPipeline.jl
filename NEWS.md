@@ -1,5 +1,10 @@
 # NEWS
 
+- unreleased
+  - An output can be registered when the registry holds more than one file type
+    for its extension, which it permits; that used to fail with an assertion.
+  - A registry lookup matching several entries reports the table, the query and
+    the count instead of asserting.
 - v0.54.0
   - The registry is taken from `run_metadata.local_data_registry_url` in the
     working config (default `http://127.0.0.1:8000/api/`), so a registry on

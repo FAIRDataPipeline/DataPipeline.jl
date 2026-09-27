@@ -76,16 +76,7 @@ function _registerobject(registry::RegistryEndpoint, path::String,
                                      "storage_location" => location_url,
                                      "authors" => [_getauthorurl(registry)])
     if !isnothing(file_type)
-        # Extensions are unique, so match on that alone: another API may have
-        # registered this one under a different name
-        file_type_url = _geturl(registry, "file_type",
-                                Dict("extension" => file_type))
-        if isnothing(file_type_url)
-            file_type_url = _postentry(registry, "file_type",
-                                       Dict("name" => file_type,
-                                            "extension" => file_type))["url"]
-        end
-        object_query["file_type"] = file_type_url
+        object_query["file_type"] = _getfiletype(registry, file_type)
     end
     return new_object ? _createentry(registry, "object", object_query) :
            _postentry(registry, "object", object_query)
