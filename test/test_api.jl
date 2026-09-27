@@ -543,6 +543,82 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     @test length(code_run["inputs"]) == 3
 end
 
+Test.@testset "identify()" begin
+    data_product = "data_product/identify/$uid"
+    registry = handle.registry
+
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, data_product, "identify description",
+                           file_type = "txt", use_version = version)
+    run_handle = DataPipeline.initialise(config, config)
+    path = link_write!(run_handle, data_product)
+    write(path, "identify $uid\n")
+    DataPipeline.finalise(run_handle)
+    stored = run_handle.outputs[(data_product, nothing)]["path"]
+
+    # What the registry knows about the file it has just registered
+    id = DataPipeline.identify(registry, stored)
+    @test id.path == stored
+    @test id.hash == DataPipeline._getfilehash(stored)
+    @test length(id.objects) == 1
+    object = only(id.objects)
+    @test object.description == "identify description"
+    @test object.local_root
+    @test endswith(object.root, "/")
+    @test isfile(joinpath(replace(object.root, "file://" => ""),
+                          object.stored_path))
+    product = only(object.data_products)
+    @test (product.namespace, product.name) == (namespace, data_product)
+    @test product.version == VersionNumber(version)
+    @test product.newest == product.version          # nothing newer yet
+    @test isnothing(product.external_object)
+    @test isempty(object.issues)
+    # A handle may be given instead of a registry
+    @test DataPipeline.identify(run_handle, stored).hash == id.hash
+
+    # A file the registry has never seen, and one that is not there at all
+    unknown = joinpath(mktempdir(), "unknown.txt")
+    write(unknown, "nothing knows about me $uid\n")
+    @test isempty(DataPipeline.identify(registry, unknown).objects)
+    @test occursin("unknown",
+                   sprint(show, DataPipeline.identify(registry,
+                                                      unknown)))
+    @test_throws DataPipeline.ReadWriteException DataPipeline.identify(registry,
+                                                                       joinpath(mktempdir(),
+                                                                                "absent"))
+
+    # A newer version of the same name makes this one superseded
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, data_product, "identify description",
+                           file_type = "txt", use_version = "0.0.2")
+    newer_handle = DataPipeline.initialise(config, config)
+    newer = link_write!(newer_handle, data_product)
+    write(newer, "identify newer $uid\n")
+    DataPipeline.finalise(newer_handle)
+    superseded = only(only(DataPipeline.identify(registry,
+                                                 stored).objects).data_products)
+    @test superseded.version == VersionNumber(version)
+    @test superseded.newest == v"0.0.2"
+    @test occursin("SUPERSEDED",
+                   sprint(show, MIME("text/plain"),
+                          DataPipeline.identify(registry, stored)))
+
+    # An issue raised against it is reported, named by component
+    DataPipeline._postentry(registry, "issue",
+                            Dict("severity" => 7,
+                                 "description" => "identify issue $uid",
+                                 "component_issues" =>
+                                     [DataPipeline._wholeobjectcomponent(registry,
+                                                                         object.url)]))
+    issues = only(DataPipeline.identify(registry, stored).objects).issues
+    @test length(issues) == 1
+    @test only(issues).severity == 7
+    @test only(issues).description == "identify issue $uid"
+    @test isnothing(only(issues).component)
+    @test occursin("1 issue",
+                   sprint(show, DataPipeline.identify(registry, stored)))
+end
+
 Test.@testset "several file types for one extension" begin
     # The registry is unique on (name, extension) and ships descriptively named
     # types, and other APIs add their own names, so an extension can have

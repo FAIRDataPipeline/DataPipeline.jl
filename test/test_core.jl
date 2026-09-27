@@ -119,6 +119,27 @@ Test.@testset "_repositorylocation()" begin
     @test_throws DataPipeline.ConfigFileException loc("not a remote")
 end
 
+Test.@testset "_getentries() follows pagination" begin
+    r = DataPipeline.RegistryEndpoint(get(ENV, "FDP_TEST_REGISTRY",
+                                          DataPipeline.DEFAULT_REGISTRY_URL))
+    # The registry pages at 100, so make more than one page of cheap rows.
+    # Its namespace filter matches a name exactly, so the check is against the
+    # whole table rather than a filtered subset
+    tag = DataPipeline._randomhash()[1:8]
+    names = Set("pagination/$tag/$i" for i in 1:101)
+    for name in names
+        DataPipeline._postentry(r, "namespace", Dict("name" => name))
+    end
+    page = DataPipeline._getentry(r,
+                                  DataPipeline.URIs.URI(r.url * "namespace/"))
+    @test page["count"] >= 101
+    @test length(page["results"]) == 100     # a page holds 100
+    @test !isnothing(page["next"])
+    all = DataPipeline._getentries(r, "namespace", Dict())
+    @test length(all) == page["count"]
+    @test names ⊆ Set(entry["name"] for entry in all)
+end
+
 Test.@testset "_randomhash()" begin
     hashes = [DataPipeline._randomhash() for _ in 1:100]
     @test all(h -> length(h) == 40 && all(c -> c in "0123456789abcdef", h),

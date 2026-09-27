@@ -272,6 +272,23 @@ function _getentry(registry::RegistryEndpoint, url::URIs.URI)
 end
 
 """
+    _getentries(registry, table, query)
+
+Return every entry of `table` matching `query`, following the registry's
+pagination rather than stopping at the first page of 100.
+"""
+function _getentries(registry::RegistryEndpoint, table::String, query::Dict)
+    url = string(registry.url, table, "/", _convertquery(registry, query))
+    entries = Vector{Any}()
+    while !isnothing(url)
+        r = _getentry(registry, URIs.URI(url))
+        append!(entries, r["results"])
+        url = r["next"]
+    end
+    return entries
+end
+
+"""
     _geturl(registry, table, query)
 
 Return the URL of the one entry of `table` matching `query`, or `nothing`.

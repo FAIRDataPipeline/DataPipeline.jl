@@ -47,6 +47,9 @@ public DataRegistryHandle, RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
+# Asking what the registry knows about a file on disk
+public identify
+public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
 
 include("fdp_i.jl")
 

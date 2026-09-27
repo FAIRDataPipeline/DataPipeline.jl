@@ -38,6 +38,16 @@ write_distribution
 link_write!
 ```
 
+## Asking what the registry knows about a file
+
+```@docs
+DataPipeline.identify
+DataPipeline.FileIdentification
+DataPipeline.RegisteredObject
+DataPipeline.DataProductRecord
+DataPipeline.IssueRecord
+```
+
 ## Raising issues
 
 ```@docs

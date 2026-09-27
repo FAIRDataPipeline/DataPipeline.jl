@@ -1,6 +1,11 @@
 # NEWS
 
 - unreleased
+  - `DataPipeline.identify(registry_or_handle, path)` asks a registry what it
+    knows about a file on disk, by the hash of its contents: what data products
+    it is registered as, where the registry expects to find it, whether a newer
+    version of any of them exists, and any issues raised against it. It returns
+    a `FileIdentification`, which prints as a report.
   - An output can be registered when the registry holds more than one file type
     for its extension, which it permits; that used to fail with an assertion.
   - A registry lookup matching several entries reports the table, the query and
