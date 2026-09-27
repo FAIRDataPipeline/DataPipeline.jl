@@ -1,5 +1,10 @@
 # NEWS
 
+- v0.54.1
+  - `link_write!`, and the component writers, accept a data product name that a
+    wildcard `write:` entry of the working config stands for, registering the
+    name given rather than the pattern. A name the patterns of several entries
+    match is an error.
 - v0.54.0
   - The registry is taken from `run_metadata.local_data_registry_url` in the
     working config (default `http://127.0.0.1:8000/api/`), so a registry on

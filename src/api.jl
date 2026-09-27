@@ -201,11 +201,18 @@ Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
 hash and registers it, replacing `\${{RUN_ID}}` in the registered name with
 the code run's uuid.
+
+`data_product` may also be a name that a wildcard `write:` entry stands for -
+one whose name holds `*`s, each matching one segment - in which case that
+entry's file type, description and `use:` block are used and the name is
+registered as given. A name matching the patterns of several entries is an
+error, since nothing distinguishes them: the file type comes from the entry
+found, not from the caller.
 """
 function link_write!(handle::DataRegistryHandle, data_product::String)
     key = (data_product, nothing)
     haskey(handle.outputs, key) && return handle.outputs[key]["path"]
-    wmd = _getmetadata(handle, data_product, "write")
+    wmd = _writemetadata(handle, data_product).entry
     metadata = _resolvewrite(handle, data_product, nothing, wmd["file_type"],
                              nothing)
     handle.outputs[key] = metadata
