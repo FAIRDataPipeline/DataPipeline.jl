@@ -15,6 +15,7 @@ using Dates
 using FTPClient
 using HTTP
 using JSON
+using LibGit2
 using Plots
 using SHA
 using YAML
@@ -47,9 +48,11 @@ public DataRegistryHandle, RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
-# Asking what the registry knows about a file on disk
+# Asking what the registry knows about a file or a git repository on disk
 public identify
 public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
+public RepositoryIdentification, RegisteredCommit, CodeRunRecord
+public AbstractCommitSelection, AncestorCommits, CheckedOutCommit, AllCommits
 
 include("fdp_i.jl")
 

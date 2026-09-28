@@ -35,6 +35,61 @@ Test.@testset "RegistryEndpoint" begin
     @test occursin("no token", sprint(show, registry))
 end
 
+Test.@testset "RegistryEndpoint() from the CLI's configuration" begin
+    # A home and a project of our own, so that nothing depends on the
+    # machine's configuration; `homedir()` reads USERPROFILE on Windows
+    home = mktempdir()
+    project = joinpath(home, "project")
+    mkpath(joinpath(project, ".fair"))
+    mkpath(joinpath(project, "sub", "dir"))
+    withenv("HOME" => home, "USERPROFILE" => home) do
+        # No global configuration: the CLI's default
+        @test DataPipeline.RegistryEndpoint().url ==
+              DataPipeline.DEFAULT_REGISTRY_URL
+
+        mkpath(joinpath(home, ".fair", "cli"))
+        DataPipeline.YAML.write_file(joinpath(home, ".fair", "cli",
+                                              "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("local" =>
+                                                       Dict("uri" => "http://127.0.0.1:8123/api/"))))
+        local_registry = DataPipeline.RegistryEndpoint()
+        @test local_registry.url == "http://127.0.0.1:8123/api/"
+        @test local_registry.api_version == DataPipeline.DEFAULT_API_VERSION
+        @test isnothing(local_registry.token)
+        @test DataPipeline.RegistryEndpoint(token = "secret").token == "secret"
+
+        # A remote is looked up in the project's configuration, found by
+        # walking up from the current directory
+        DataPipeline.YAML.write_file(joinpath(project, ".fair",
+                                              "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("origin" =>
+                                                       Dict("uri" => "https://example.org/api/"))))
+        cd(joinpath(project, "sub", "dir")) do
+            @test DataPipeline.RegistryEndpoint(remote = "origin").url ==
+                  "https://example.org/api/"
+            err = try
+                DataPipeline.RegistryEndpoint(remote = "elsewhere")
+            catch e
+                e
+            end
+            @test err isa DataPipeline.ConfigFileException
+            @test occursin("origin", err.msg)          # names what there is
+        end
+        # The walk stops at the home directory, whose `.fair` is the global
+        # configuration rather than a project's: a project-style file there
+        # is not read
+        DataPipeline.YAML.write_file(joinpath(home, ".fair", "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("local" =>
+                                                       Dict("uri" => "http://wrong/api/"))))
+        cd(home) do
+            @test_throws DataPipeline.ConfigFileException DataPipeline.RegistryEndpoint(remote = "local")
+        end
+    end
+end
+
 Test.@testset "writing needs a token" begin
     # Refused before any request is made, so no registry need be running
     @test_throws DataPipeline.ReadWriteException DataPipeline._postentry(registry,

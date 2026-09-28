@@ -6,6 +6,10 @@
     it is registered as, where the registry expects to find it, whether a newer
     version of any of them exists, and any issues raised against it. It returns
     a `FileIdentification`, which prints as a report.
+  - `identify` also takes a git repository's top-level folder: the runs made
+    from its commits, their outputs and issues (`commits =` chooses which, and
+    `dirty = true` adds runs with uncommitted changes). With only a path it asks
+    the CLI's local registry or a named `remote`, as `RegistryEndpoint()` does.
   - Reading a registry needs no token, so `identify` works outside `fair run`:
     `RegistryEndpoint(url; token)` carries its own token, sent to that registry
     only, and `DataPipeline.initialise(...; token)` takes it from

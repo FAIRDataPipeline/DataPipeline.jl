@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
-# Asking the registry what it knows about a file on disk, and tracing issues
-# through provenance.
+# Asking the registry what it knows about a file or a git repository on disk,
+# and tracing issues through provenance.
 
 """
     IssueRecord
@@ -142,7 +142,184 @@ function Base.show(io::IO, ::MIME"text/plain", id::FileIdentification)
     return nothing
 end
 
+"""
+    AbstractCommitSelection
+
+Which commits of a git repository [`identify`](@ref) reports, and whether it
+includes the runs made from them with uncommitted changes, which the registry
+records as `<sha>-dirty`: [`AncestorCommits`](@ref), [`CheckedOutCommit`](@ref)
+or [`AllCommits`](@ref). Each has a `dirty` field saying which, set by its
+constructor's `dirty` keyword.
+"""
+abstract type AbstractCommitSelection end
+
+"""
+    AncestorCommits(; dirty = false)
+
+Select the checked-out commit and every commit it descends from - the code the
+checkout grew from - and, if `dirty`, the runs made from them with uncommitted
+changes too. What [`identify`](@ref) reports for a repository unless told
+otherwise.
+"""
+struct AncestorCommits <: AbstractCommitSelection
+    dirty::Bool
+
+    AncestorCommits(; dirty::Bool = false) = new(dirty)
+end
+
+"""
+    CheckedOutCommit(; dirty = false)
+
+Select only the checked-out commit and, if `dirty`, the runs made from it with
+uncommitted changes too.
+"""
+struct CheckedOutCommit <: AbstractCommitSelection
+    dirty::Bool
+
+    CheckedOutCommit(; dirty::Bool = false) = new(dirty)
+end
+
+"""
+    AllCommits(; dirty = false)
+
+Select every commit of the repository that the registry holds runs for,
+whether or not the local clone has it, and, if `dirty`, the runs made from them
+with uncommitted changes too.
+"""
+struct AllCommits <: AbstractCommitSelection
+    dirty::Bool
+
+    AllCommits(; dirty::Bool = false) = new(dirty)
+end
+
+function Base.show(io::IO, selection::AbstractCommitSelection)
+    return print(io, nameof(typeof(selection)),
+                 selection.dirty ? "(dirty = true)" : "()")
+end
+
+"""
+    CodeRunRecord
+
+A code run the registry holds.
+
+# Fields
+- `uuid`: its uuid, by which `fair` and `coderuns.txt` refer to it
+- `run_date`: when it ran, as the registry records it
+- `description`: its description
+- `url`: its URL in the registry
+- `outputs`: the [`DataProductRecord`](@ref)s it wrote
+"""
+struct CodeRunRecord
+    uuid::String
+    run_date::DateTime
+    description::String
+    url::String
+    outputs::Vector{DataProductRecord}
+end
+
+function Base.show(io::IO, run::CodeRunRecord)
+    return print(io, "run ", first(run.uuid, 8), " (", run.run_date, "): ",
+                 run.description)
+end
+
+"""
+    RegisteredCommit
+
+A commit of a git repository that the registry holds runs for.
+
+# Fields
+- `sha`: the commit's hash
+- `dirty`: whether its runs were made from a working tree with uncommitted
+  changes, which the registry records as `<sha>-dirty`
+- `date`: its commit date, or `nothing` when the local clone does not have it
+- `objects`: the URLs of the registry objects that stand for it
+- `runs`: the [`CodeRunRecord`](@ref)s made from it, newest first
+- `issues`: the [`IssueRecord`](@ref)s raised against it
+"""
+struct RegisteredCommit
+    sha::String
+    dirty::Bool
+    date::Union{Nothing, DateTime}
+    objects::Vector{String}
+    runs::Vector{CodeRunRecord}
+    issues::Vector{IssueRecord}
+end
+
+function Base.show(io::IO, commit::RegisteredCommit)
+    print(io, first(commit.sha, 10), commit.dirty ? "-dirty" : "", ": ",
+          length(commit.runs), " run", length(commit.runs) == 1 ? "" : "s")
+    isempty(commit.issues) || print(io, ", ", length(commit.issues), " issue",
+          length(commit.issues) == 1 ? "" : "s")
+    return nothing
+end
+
+"""
+    RepositoryIdentification
+
+What a registry knows about a git repository on disk, as returned by
+[`identify`](@ref). `commits` is empty when no run was made from any of the
+commits selected.
+
+# Fields
+- `path`: the repository's top-level folder
+- `remote`: the URL of the git remote the registry knows it by
+- `head`: the checked-out commit
+- `dirty`: whether the working tree has uncommitted changes to tracked files
+- `selection`: the [`AbstractCommitSelection`](@ref) asked for
+- `commits`: the [`RegisteredCommit`](@ref)s selected, newest commit first;
+  those the local clone does not have come last, newest first by their
+  earliest run
+"""
+struct RepositoryIdentification
+    path::String
+    remote::String
+    head::String
+    dirty::Bool
+    selection::AbstractCommitSelection
+    commits::Vector{RegisteredCommit}
+end
+
+function Base.show(io::IO, id::RepositoryIdentification)
+    runs = sum(length(commit.runs) for commit in id.commits; init = 0)
+    return print(io, basename(id.path), ": ", length(id.commits), " commit",
+                 length(id.commits) == 1 ? "" : "s", " registered, ", runs,
+                 " run", runs == 1 ? "" : "s")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", id::RepositoryIdentification)
+    println(io, id.path)
+    println(io, "  remote:      ", id.remote)
+    println(io, "  checked out: ", id.head,
+            id.dirty ? " (with uncommitted changes)" : "")
+    println(io, "  selected:    ", _describe(id.selection),
+            id.selection.dirty ? ", with runs made with uncommitted changes" :
+            "")
+    isempty(id.commits) && return print(io, "  no run registered from them")
+    for commit in id.commits
+        println(io, "  commit ", commit.sha, commit.dirty ? "-dirty" : "",
+                isnothing(commit.date) ? ", not in this clone" :
+                ", committed $(commit.date)",
+                commit.sha == id.head ? " (checked out)" : "")
+        for issue in commit.issues
+            println(io, "    issue (severity ", issue.severity, "): ",
+                    issue.description)
+        end
+        for run in commit.runs
+            println(io, "    ", run)
+            for output in run.outputs
+                println(io, "      output: ", output)
+            end
+        end
+    end
+    return nothing
+end
+
 # == Functions ==
+
+# How a commit selection reads in a report
+_describe(::AncestorCommits) = "the checked-out commit and its ancestors"
+_describe(::CheckedOutCommit) = "the checked-out commit"
+_describe(::AllCommits) = "every commit of the repository"
 
 # The issues recorded against an object's components, naming the component
 # unless it stands for the whole file
@@ -176,27 +353,68 @@ function _dataproductrecord(registry::RegistryEndpoint, url::String)
 end
 
 """
-    identify(registry, path)
-    identify(handle, path)
+    identify(path; remote = nothing, commits = AncestorCommits())
+    identify(registry, path; commits = AncestorCommits())
+    identify(handle, path; commits = AncestorCommits())
 
-Ask a registry what it knows about the file at `path`, and return a
-[`FileIdentification`](@ref): the data products it is registered as, where the
-registry expects to find it, whether a newer version of any of those data
-products exists, and any issues raised against it. `isempty(result.objects)`
-means the registry has no record of a file with these contents.
+Ask a registry what it knows about a file or a git repository on disk.
 
-The file is identified by the SHA-1 of its contents, as everything in the
-pipeline is, so a copy under another name is recognised and an edited file is
-not.
+For a **file**, return a [`FileIdentification`](@ref): the data products it is
+registered as, where the registry expects to find it, whether a newer version
+of any of those data products exists, and any issues raised against it.
+`isempty(result.objects)` means the registry has no record of a file with these
+contents. The file is identified by the SHA-1 of its contents, as everything in
+the pipeline is, so a copy under another name is recognised and an edited file
+is not.
+
+For the **top-level folder of a git repository**, return a
+[`RepositoryIdentification`](@ref): the code runs made from its commits, with
+their outputs, and any issues raised against those commits. The repository is
+known to the registry by the URL of its git remote - the one named by
+`git.remote` in its `.fair/cli-config.yaml`, else `origin` - and `commits`
+chooses which of its commits to report. Runs made with uncommitted changes are
+included only when `commits` is given `dirty = true`. When the checkout itself
+has uncommitted changes, `AncestorCommits` and `CheckedOutCommit` warn and use
+its commit as committed.
 
 # Arguments
+- `path::String`: the file, or the repository's top-level folder, to ask about.
+  Any other folder is an `ArgumentError`, including one inside a repository.
 - `registry::RegistryEndpoint`: the registry to ask, which needs no token,
   e.g. `RegistryEndpoint("http://127.0.0.1:8000/api/")`; a
   `DataRegistryHandle` may be given instead, and its registry is used.
-- `path::String`: the file to ask about.
+- `remote`: with `path` alone, the registry is the CLI's local registry, or the
+  remote registry of that name in the current project's CLI configuration; see
+  [`RegistryEndpoint`](@ref).
+- `commits::AbstractCommitSelection`: for a repository,
+  [`AncestorCommits()`](@ref AncestorCommits) (the default),
+  [`CheckedOutCommit()`](@ref CheckedOutCommit) or
+  [`AllCommits()`](@ref AllCommits), each optionally with `dirty = true`; for a
+  file, an `ArgumentError`.
 """
-function identify(registry::RegistryEndpoint, path::String)
-    isfile(path) || throw(ReadWriteException("no file at $path"))
+function identify(registry::RegistryEndpoint, path::String;
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing)
+    if isfile(path)
+        isnothing(commits) ||
+            throw(ArgumentError("`commits` selects commits of a git repository, and $path is a file"))
+        return _identifyfile(registry, path)
+    end
+    isdir(path) || throw(ReadWriteException("no file or folder at $path"))
+    return _identifyrepository(registry, path,
+                               something(commits, AncestorCommits()))
+end
+function identify(handle::DataRegistryHandle, path::String;
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing)
+    return identify(handle.registry, path, commits = commits)
+end
+function identify(path::String;
+                  remote::Union{Nothing, AbstractString} = nothing,
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing)
+    return identify(RegistryEndpoint(remote = remote), path, commits = commits)
+end
+
+# What a registry knows about the file at `path`, by its hash
+function _identifyfile(registry::RegistryEndpoint, path::String)
     hash = _getfilehash(path)
     objects = RegisteredObject[]
     for location in _getentries(registry, "storage_location",
@@ -216,8 +434,201 @@ function identify(registry::RegistryEndpoint, path::String)
     end
     return FileIdentification(path, hash, objects)
 end
-function identify(handle::DataRegistryHandle, path::String)
-    return identify(handle.registry, path)
+
+# What a registry knows about the git repository whose top-level folder is
+# `path`, for the commits `selection` chooses
+function _identifyrepository(registry::RegistryEndpoint, path::String,
+                             selection::AbstractCommitSelection)
+    top = _gittoplevel(path)
+    isnothing(top) &&
+        throw(ArgumentError("$path is neither a file nor the top level of a git repository"))
+    samefile(top, path) ||
+        throw(ArgumentError("$path is inside the git repository at $top - identify that folder instead"))
+    return LibGit2.with(LibGit2.GitRepo(top)) do repo
+        LibGit2.isorphan(repo) &&
+            throw(ArgumentError("the git repository at $top has no commits"))
+        head = string(LibGit2.head_oid(repo))
+        dirty = LibGit2.isdirty(repo)
+        dirty && _warnifdirty(selection, top, head)
+        remote = _gitremoteurl(repo, top)
+        location = _repositorylocation(remote)
+        root_id = _getid(registry, "storage_root",
+                         Dict("root" => location.root))
+        locations = isnothing(root_id) ? Dict[] :
+                    _commitlocations(registry, selection, root_id,
+                                     _repositorypaths(location), head)
+        commits = RegisteredCommit[]
+        for ((sha, commit_dirty), group) in _groupbycommit(locations)
+            _selects(selection, repo, head, sha, commit_dirty) || continue
+            push!(commits,
+                  _registeredcommit(registry, repo, sha, commit_dirty,
+                                    group))
+        end
+        sort!(commits, by = _commitorder)
+        return RepositoryIdentification(top, remote, head, dirty, selection,
+                                        commits)
+    end
+end
+
+# The top-level folder of the git repository holding `dir`, or `nothing`
+function _gittoplevel(dir::AbstractString)
+    current = abspath(dir)
+    while true
+        ispath(joinpath(current, ".git")) && return current
+        parent = dirname(current)
+        parent == current && return nothing
+        current = parent
+    end
+end
+
+# Warn that the checkout's uncommitted changes are being set aside; selecting
+# every commit is not about the checkout, so says nothing
+_warnifdirty(::AllCommits, top::AbstractString, head::AbstractString) = nothing
+function _warnifdirty(::AbstractCommitSelection, top::AbstractString,
+                      head::AbstractString)
+    @warn "the working tree at $top has uncommitted changes: identifying its checked-out commit $head as committed"
+    return nothing
+end
+
+# The URL of the git remote the CLI records runs of this repository under: the
+# one named by `git.remote` in its `.fair/cli-config.yaml`, else `origin`
+function _gitremoteurl(repo::LibGit2.GitRepo, top::AbstractString)
+    config_path = joinpath(top, ".fair", "cli-config.yaml")
+    name = "origin"
+    if isfile(config_path)
+        config = something(YAML.load_file(config_path), Dict())
+        git = something(get(config, "git", nothing), Dict())
+        name = something(get(git, "remote", nothing), name)
+    end
+    url = LibGit2.getconfig(repo, "remote.$name.url", "")
+    isempty(url) &&
+        throw(ArgumentError("the git repository at $top has no remote '$name', which is what the registry would know it by"))
+    return url
+end
+
+# Every path a repository's commits may be registered under, below its host's
+# storage root: relative to the root, with and without `.git`, as this package
+# and R write it, and the whole remote URL, HTTPS or SSH, as Python does
+function _repositorypaths(location::NamedTuple)
+    bare = replace(location.path, r"\.git$" => "")
+    host = replace(match(r"^[^:]+://([^/]+)/", location.root)[1], r"^.*@" => "")
+    return unique([form * suffix
+                   for form in (bare, location.root * bare, "git@$host:$bare")
+                   for suffix in ("", ".git")])
+end
+
+# The storage locations registered for the checked-out commit alone, found by
+# its hash, and by `<hash>-dirty` if the selection includes those runs
+function _commitlocations(registry::RegistryEndpoint,
+                          selection::CheckedOutCommit, root_id::AbstractString,
+                          paths::Vector{String}, head::AbstractString)
+    hashes = selection.dirty ? [head, "$head-dirty"] : [head]
+    return [location
+            for hash in hashes
+            for location in _getentries(registry, "storage_location",
+                                        Dict("hash" => hash,
+                                             "storage_root" => root_id))
+            if location["path"] in paths]
+end
+
+# The storage locations registered for every commit of the repository, found by
+# its paths
+function _commitlocations(registry::RegistryEndpoint,
+                          ::AbstractCommitSelection, root_id::AbstractString,
+                          paths::Vector{String}, head::AbstractString)
+    return reduce(vcat,
+                  [_getentries(registry, "storage_location",
+                               Dict("path" => path, "storage_root" => root_id))
+                   for path in paths])
+end
+
+# Storage locations grouped by the commit they stand for and whether its runs
+# had uncommitted changes, which the registry records as `<sha>-dirty`
+function _groupbycommit(locations::AbstractVector)
+    groups = Dict{Tuple{String, Bool}, Vector{Any}}()
+    for location in locations
+        dirty = endswith(location["hash"], "-dirty")
+        sha = dirty ? chop(location["hash"], tail = 6) : location["hash"]
+        push!(get!(Vector{Any}, groups, (String(sha), dirty)), location)
+    end
+    return groups
+end
+
+# Whether a registered commit is one the selection asks for: runs with
+# uncommitted changes only if it includes them, and then its own rule
+function _selects(selection::AbstractCommitSelection, repo::LibGit2.GitRepo,
+                  head::AbstractString, sha::AbstractString, dirty::Bool)
+    return (!dirty || selection.dirty) &&
+           _selectscommit(selection, repo, head, sha)
+end
+
+# Whether a commit is one of those the selection reaches
+function _selectscommit(::AllCommits, repo::LibGit2.GitRepo,
+                        head::AbstractString, sha::AbstractString)
+    return true
+end
+function _selectscommit(::CheckedOutCommit, repo::LibGit2.GitRepo,
+                        head::AbstractString, sha::AbstractString)
+    return sha == head
+end
+function _selectscommit(::AncestorCommits, repo::LibGit2.GitRepo,
+                        head::AbstractString, sha::AbstractString)
+    return LibGit2.iscommit(sha, repo) &&
+           LibGit2.is_ancestor_of(sha, head, repo)
+end
+
+# One registered commit: its date if the clone has it, and the runs made from
+# and issues raised against every object standing for it
+function _registeredcommit(registry::RegistryEndpoint, repo::LibGit2.GitRepo,
+                           sha::String, dirty::Bool, locations::AbstractVector)
+    date = nothing
+    if LibGit2.iscommit(sha, repo)
+        date = LibGit2.with(LibGit2.GitCommit(repo, sha)) do commit
+            return unix2datetime(LibGit2.committer(commit).time)
+        end
+    end
+    objects = String[]
+    runs = CodeRunRecord[]
+    issues = IssueRecord[]
+    for location in locations
+        for object in _getentries(registry, "object",
+                                  Dict("storage_location" =>
+                                           _extractid(location["url"])))
+            push!(objects, object["url"])
+            append!(issues, _objectissues(registry, object))
+            for run in _getentries(registry, "code_run",
+                                   Dict("code_repo" =>
+                                            _extractid(object["url"])))
+                push!(runs, _coderunrecord(registry, run))
+            end
+        end
+    end
+    sort!(runs, by = run -> run.run_date, rev = true)
+    return RegisteredCommit(sha, dirty, date, objects, runs, issues)
+end
+
+# A code run, with the data products it wrote
+function _coderunrecord(registry::RegistryEndpoint, run::AbstractDict)
+    object_urls = unique(_getentry(registry, URIs.URI(url))["object"]
+                         for url in run["outputs"])
+    outputs = DataProductRecord[_dataproductrecord(registry, product_url)
+                                for object_url in object_urls
+                                for product_url in _getentry(registry,
+                                                             URIs.URI(object_url))["data_products"]]
+    return CodeRunRecord(run["uuid"], DateTime(first(run["run_date"], 19)),
+                         something(run["description"], ""), run["url"],
+                         outputs)
+end
+
+# Where a registered commit sorts in a report: those in the clone first, newest
+# commit first; then the rest, newest first by their earliest run; then any
+# with no run at all
+function _commitorder(commit::RegisteredCommit)
+    isnothing(commit.date) ||
+        return (0, -Dates.value(commit.date), commit.sha, commit.dirty)
+    isempty(commit.runs) && return (2, 0, commit.sha, commit.dirty)
+    earliest = minimum(run.run_date for run in commit.runs)
+    return (1, -Dates.value(earliest), commit.sha, commit.dirty)
 end
 
 # ---- provenance tracing ----

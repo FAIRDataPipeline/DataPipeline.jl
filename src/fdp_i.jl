@@ -17,7 +17,8 @@ end
 """
     ConfigFileException(msg)
 
-Thrown when the working config lacks the section or entry a call refers to.
+Thrown when a configuration file - the working config, or the CLI's own - lacks
+the section or entry a call refers to.
 """
 struct ConfigFileException <: Exception
     msg::String
