@@ -2,24 +2,28 @@
 
 """
     initialise(config_file = \$FDP_CONFIG_DIR/config.yaml,
-               submission_script = \$FDP_CONFIG_DIR/script.sh)
+               submission_script = \$FDP_CONFIG_DIR/script.sh;
+               token = \$FDP_LOCAL_TOKEN)
 
 Read the working config that `fair run` wrote, register the config, the
 submission script and the code repository with the local registry, open a new
 code run, and return the [`DataRegistryHandle`](@ref) the rest of the API
 works on. The registry is `run_metadata.local_data_registry_url` (default
 `$DEFAULT_REGISTRY_URL`) and the API version `run_metadata.api_version`
-(default `$DEFAULT_API_VERSION`).
+(default `$DEFAULT_API_VERSION`). `token` is the registry's access token, which
+registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 """
 function initialise(config_file::String = FDP_PATH_CONFIG(),
-                    submission_script::String = FDP_PATH_SUBMISSION())
+                    submission_script::String = FDP_PATH_SUBMISSION();
+                    token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
     print("processing config file: ", config_file)
     config = YAML.load_file(config_file)
     run_metadata = config["run_metadata"]
     registry = RegistryEndpoint(get(run_metadata, "local_data_registry_url",
                                     DEFAULT_REGISTRY_URL),
                                 get(run_metadata, "api_version",
-                                    DEFAULT_API_VERSION))
+                                    DEFAULT_API_VERSION),
+                                token = token)
     datastore = run_metadata["write_data_store"]
 
     datastore_url = _postentry(registry, "storage_root",

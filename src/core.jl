@@ -1,23 +1,44 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 """
-    RegistryEndpoint(url, api_version)
+    RegistryEndpoint(url, api_version = "$DEFAULT_API_VERSION"; token = nothing)
 
-The local data registry that a code run talks to: the base `url` of its REST
-API (with a trailing slash, e.g. `"http://127.0.0.1:8000/api/"`) and the
-`api_version` sent in the `Accept` header of every request. Built by
-[`initialise`](@ref) from `run_metadata.local_data_registry_url` and
-`run_metadata.api_version` in the working config.
+A data registry to talk to: the base `url` of its REST API (with a trailing
+slash, e.g. `"http://127.0.0.1:8000/api/"`), the `api_version` sent in the
+`Accept` header of every request, and the access `token` sent with them, if
+there is one. Reading needs no token; registering anything does.
+[`initialise`](@ref) builds one from `run_metadata.local_data_registry_url` and
+`run_metadata.api_version` in the working config, with the token that
+`fair run` puts in `FDP_LOCAL_TOKEN`.
+
+The token is never shown when the endpoint is printed.
 """
 struct RegistryEndpoint
     url::String
     api_version::String
+    token::Union{Nothing, String}
 
     function RegistryEndpoint(url::AbstractString,
-                              api_version::AbstractString = DEFAULT_API_VERSION)
+                              api_version::AbstractString = DEFAULT_API_VERSION;
+                              token::Union{Nothing, AbstractString} = nothing)
         return new(endswith(url, "/") ? String(url) : string(url, "/"),
-                   String(api_version))
+                   String(api_version),
+                   isnothing(token) ? nothing : String(token))
     end
+end
+
+function Base.show(io::IO, registry::RegistryEndpoint)
+    return print(io, "RegistryEndpoint(", registry.url, ", version ",
+                 registry.api_version,
+                 isnothing(registry.token) ? ", no token)" : ", with token)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", registry::RegistryEndpoint)
+    println(io, "RegistryEndpoint")
+    println(io, "  url: ", registry.url)
+    println(io, "  api_version: ", registry.api_version)
+    return print(io, "  token: ",
+                 isnothing(registry.token) ? "none" : "set (not shown)")
 end
 
 """
@@ -163,11 +184,25 @@ end
 
 # == Functions ==
 
-# The headers every registry request carries
+# The headers every registry request carries, with the endpoint's own token
+# when it has one
 function _headers(registry::RegistryEndpoint)
-    return Dict("Authorization" => _gettoken(),
-                "Content-Type" => "application/json",
-                "Accept" => "application/json; version=$(registry.api_version)")
+    headers = Dict("Content-Type" => "application/json",
+                   "Accept" => "application/json; version=$(registry.api_version)")
+    isnothing(registry.token) ||
+        (headers["Authorization"] = "token $(registry.token)")
+    return headers
+end
+
+# Throw unless `registry` has a token, which every write needs, before any
+# request is made
+function _requiretoken(registry::RegistryEndpoint)
+    isnothing(registry.token) || return nothing
+    return throw(ReadWriteException(string("no token for the registry at ",
+                                           registry.url,
+                                           " - registering anything needs one: ",
+                                           "run inside `fair run`, which sets ",
+                                           "FDP_LOCAL_TOKEN, or pass `token`")))
 end
 
 """
@@ -177,6 +212,7 @@ Get or create an entry in `table` of the registry: look it up by every field
 of `data` and post it only if nothing matches. Return the entry.
 """
 function _postentry(registry::RegistryEndpoint, table::String, query::Dict)
+    _requiretoken(registry)
     url = string(registry.url, table, "/")
     r = _getentry(registry, URIs.URI(url * _convertquery(registry, query)))
 
@@ -202,6 +238,7 @@ Post a new entry to `table` of the registry, without looking for an existing
 one, and return it.
 """
 function _createentry(registry::RegistryEndpoint, table::String, data::Dict)
+    _requiretoken(registry)
     url = string(registry.url, table, "/")
     r = HTTP.request("POST", url, headers = _headers(registry),
                      body = JSON.json(data))
@@ -373,13 +410,4 @@ function _getfilehash(filepath::String)
     return open(filepath) do file
         return bytes2hex(SHA.sha1(file))
     end
-end
-
-"""
-    _gettoken()
-
-Return the registry access token as an `Authorization` header value.
-"""
-function _gettoken()
-    return string("token ", FDP_LOCAL_TOKEN())
 end

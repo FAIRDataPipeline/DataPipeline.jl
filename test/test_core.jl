@@ -17,6 +17,38 @@ Test.@testset "RegistryEndpoint" begin
     @test other.api_version == "1.1.0"
     @test DataPipeline._headers(other)["Accept"] ==
           "application/json; version=1.1.0"
+
+    # No token unless one is given, and then no Authorization header at all
+    @test isnothing(registry.token)
+    @test !haskey(DataPipeline._headers(registry), "Authorization")
+    secret = DataPipeline._randomhash()
+    keyed = DataPipeline.RegistryEndpoint("http://127.0.0.1:8002/api/",
+                                          token = secret)
+    @test keyed.api_version == DataPipeline.DEFAULT_API_VERSION
+    @test DataPipeline._headers(keyed)["Authorization"] == "token $secret"
+
+    # Printing shows the registry but never the token
+    for text in (sprint(show, keyed), repr(MIME("text/plain"), keyed))
+        @test occursin(keyed.url, text)
+        @test !occursin(secret, text)
+    end
+    @test occursin("no token", sprint(show, registry))
+end
+
+Test.@testset "writing needs a token" begin
+    # Refused before any request is made, so no registry need be running
+    @test_throws DataPipeline.ReadWriteException DataPipeline._postentry(registry,
+                                                                         "namespace",
+                                                                         Dict("name" => "never"))
+    @test_throws DataPipeline.ReadWriteException DataPipeline._createentry(registry,
+                                                                           "namespace",
+                                                                           Dict("name" => "never"))
+    err = try
+        DataPipeline._postentry(registry, "namespace", Dict("name" => "never"))
+    catch e
+        e
+    end
+    @test occursin("FDP_LOCAL_TOKEN", err.msg)
 end
 
 Test.@testset "_convertquery()" begin
@@ -121,7 +153,8 @@ end
 
 Test.@testset "_getentries() follows pagination" begin
     r = DataPipeline.RegistryEndpoint(get(ENV, "FDP_TEST_REGISTRY",
-                                          DataPipeline.DEFAULT_REGISTRY_URL))
+                                          DataPipeline.DEFAULT_REGISTRY_URL),
+                                      token = DataPipeline.FDP_LOCAL_TOKEN())
     # The registry pages at 100, so make more than one page of cheap rows.
     # Its namespace filter matches a name exactly, so the check is against the
     # whole table rather than a filtered subset
@@ -147,10 +180,13 @@ Test.@testset "_randomhash()" begin
     @test length(unique(hashes)) == 100
 end
 
-Test.@testset "_gettoken()" begin
-    token = DataPipeline._gettoken()
-    tmp = match(r"token (.*)", token)
-    @test length(tmp[1]) == 40
+Test.@testset "FDP_LOCAL_TOKEN()" begin
+    # `fair run` sets the token; outside it there is none, and nothing stands
+    # in for it
+    @test length(DataPipeline.FDP_LOCAL_TOKEN()) == 40
+    withenv("FDP_LOCAL_TOKEN" => nothing) do
+        @test isnothing(DataPipeline.FDP_LOCAL_TOKEN())
+    end
 end
 
 end

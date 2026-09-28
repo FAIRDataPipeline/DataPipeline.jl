@@ -6,6 +6,11 @@
     it is registered as, where the registry expects to find it, whether a newer
     version of any of them exists, and any issues raised against it. It returns
     a `FileIdentification`, which prints as a report.
+  - Reading a registry needs no token, so `identify` works outside `fair run`:
+    `RegistryEndpoint(url; token)` carries its own token, sent to that registry
+    only, and `DataPipeline.initialise(...; token)` takes it from
+    `FDP_LOCAL_TOKEN` by default. The `fake_token` stand-in is gone; a write
+    without a token fails with a `ReadWriteException` saying so.
   - An output can be registered when the registry holds more than one file type
     for its extension, which it permits; that used to fail with an assertion.
   - A registry lookup matching several entries reports the table, the query and

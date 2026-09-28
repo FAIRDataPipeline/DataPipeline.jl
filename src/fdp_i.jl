@@ -8,7 +8,7 @@
 
 Thrown when the registry or the data store does not hold what a read or write
 needs: a missing data product, a version already registered, a registry that
-is not running.
+is not running, a write with no registry token.
 """
 struct ReadWriteException <: Exception
     msg::String
@@ -89,6 +89,7 @@ Attach the input and output component URLs to the code run and return its URL.
 """
 function _patchcoderun(handle::DataRegistryHandle, inputs::Vector{String},
                        outputs::Vector{String})
+    _requiretoken(handle.registry)
     body = JSON.json(Dict("inputs" => inputs, "outputs" => outputs))
     r = HTTP.request("PATCH", handle.code_run_obj,
                      headers = _headers(handle.registry), body = body)

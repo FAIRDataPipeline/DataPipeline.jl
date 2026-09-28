@@ -617,6 +617,16 @@ Test.@testset "identify()" begin
     @test isnothing(only(issues).component)
     @test occursin("1 issue",
                    sprint(show, DataPipeline.identify(registry, stored)))
+
+    # What a user outside `fair run` has: no token at all, which a read needs
+    # none of
+    tokenless = DataPipeline.RegistryEndpoint(registry.url,
+                                              registry.api_version)
+    withenv("FDP_LOCAL_TOKEN" => nothing) do
+        found = only(DataPipeline.identify(tokenless, stored).objects)
+        @test found.url == object.url
+        @test only(found.issues).description == "identify issue $uid"
+    end
 end
 
 Test.@testset "several file types for one extension" begin
@@ -784,6 +794,34 @@ Test.@testset "registry from the working config" begin
                                         local_data_registry_url = "http://127.0.0.1:1/api/")
     @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
                                                                          config)
+end
+
+Test.@testset "the registry token" begin
+    config = DataPipeline._createconfig(cpath)
+
+    # Taken from the environment that `fair run` set, unless one is given
+    @test handle.registry.token == DataPipeline.FDP_LOCAL_TOKEN()
+    # A token given is the one sent, so a wrong one is refused by the registry
+    @test_throws DataPipeline.HTTP.StatusError DataPipeline.initialise(config,
+                                                                       config,
+                                                                       token = "not-a-token")
+
+    # With none, registering fails before any request, saying why
+    @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
+                                                                         config,
+                                                                         token = nothing)
+    withenv("FDP_LOCAL_TOKEN" => nothing) do
+        @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
+                                                                             config)
+    end
+
+    # And so does the code run's update at `finalise`
+    tokenless = DataPipeline.RegistryEndpoint(handle.registry.url)
+    fields = (name == :registry ? tokenless : getfield(handle, name)
+              for name in fieldnames(DataPipeline.DataRegistryHandle))
+    @test_throws DataPipeline.ReadWriteException DataPipeline._patchcoderun(DataPipeline.DataRegistryHandle(fields...),
+                                                                            String[],
+                                                                            String[])
 end
 
 end

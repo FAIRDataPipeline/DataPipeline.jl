@@ -190,8 +190,9 @@ pipeline is, so a copy under another name is recognised and an edited file is
 not.
 
 # Arguments
-- `registry::RegistryEndpoint`: the registry to ask; a `DataRegistryHandle`
-  may be given instead, and its registry is used.
+- `registry::RegistryEndpoint`: the registry to ask, which needs no token,
+  e.g. `RegistryEndpoint("http://127.0.0.1:8000/api/")`; a
+  `DataRegistryHandle` may be given instead, and its registry is used.
 - `path::String`: the file to ask about.
 """
 function identify(registry::RegistryEndpoint, path::String)
