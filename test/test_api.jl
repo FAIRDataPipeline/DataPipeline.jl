@@ -564,7 +564,7 @@ Test.@testset "identify()" begin
     object = only(id.objects)
     @test object.description == "identify description"
     @test object.local_root
-    @test endswith(object.root, "/")
+    @test isdirpath(replace(object.root, "file://" => ""))
     @test isfile(joinpath(replace(object.root, "file://" => ""),
                           object.stored_path))
     product = only(object.data_products)
