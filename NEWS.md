@@ -1,5 +1,31 @@
 # NEWS
 
+- unreleased
+  - `DataPipeline.identify(registry_or_handle, path)` asks a registry what it
+    knows about a file on disk, by the hash of its contents: what data products
+    it is registered as, where the registry expects to find it, whether a newer
+    version of any of them exists, and any issues raised against it. It returns
+    a `FileIdentification`, which prints as a report.
+  - `identify` also takes a git repository's top-level folder: the runs made
+    from its commits, their outputs and issues (`commits =` chooses which, and
+    `dirty = true` adds runs with uncommitted changes). With only a path it asks
+    the CLI's local registry or a named `remote`, as `RegistryEndpoint()` does.
+  - A run from a repository with uncommitted changes (`fair run --dirty` records
+    `<commit>-dirty`) warns, and raises an issue against the repository.
+  - `raise_issue`'s default severity is the registry's own default, 1, not 0.
+  - An issue raised against several targets registers with `data-registry`
+    v1.3.0, which refused the lookup `finalise` made (HTTP 400); and an issue
+    is no longer attached to an identical one already raised against other
+    targets instead of its own.
+  - Reading a registry needs no token, so `identify` works outside `fair run`:
+    `RegistryEndpoint(url; token)` carries its own token, sent to that registry
+    only, and `DataPipeline.initialise(...; token)` takes it from
+    `FDP_LOCAL_TOKEN` by default. The `fake_token` stand-in is gone; a write
+    without a token fails with a `ReadWriteException` saying so.
+  - An output can be registered when the registry holds more than one file type
+    for its extension, which it permits; that used to fail with an assertion.
+  - A registry lookup matching several entries reports the table, the query and
+    the count instead of asserting.
 - v0.54.0
   - The registry is taken from `run_metadata.local_data_registry_url` in the
     working config (default `http://127.0.0.1:8000/api/`), so a registry on

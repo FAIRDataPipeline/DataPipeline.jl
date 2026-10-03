@@ -17,6 +17,93 @@ Test.@testset "RegistryEndpoint" begin
     @test other.api_version == "1.1.0"
     @test DataPipeline._headers(other)["Accept"] ==
           "application/json; version=1.1.0"
+
+    # No token unless one is given, and then no Authorization header at all
+    @test isnothing(registry.token)
+    @test !haskey(DataPipeline._headers(registry), "Authorization")
+    secret = DataPipeline._randomhash()
+    keyed = DataPipeline.RegistryEndpoint("http://127.0.0.1:8002/api/",
+                                          token = secret)
+    @test keyed.api_version == DataPipeline.DEFAULT_API_VERSION
+    @test DataPipeline._headers(keyed)["Authorization"] == "token $secret"
+
+    # Printing shows the registry but never the token
+    for text in (sprint(show, keyed), repr(MIME("text/plain"), keyed))
+        @test occursin(keyed.url, text)
+        @test !occursin(secret, text)
+    end
+    @test occursin("no token", sprint(show, registry))
+end
+
+Test.@testset "RegistryEndpoint() from the CLI's configuration" begin
+    # A home and a project of our own, so that nothing depends on the
+    # machine's configuration; `homedir()` reads USERPROFILE on Windows
+    home = mktempdir()
+    project = joinpath(home, "project")
+    mkpath(joinpath(project, ".fair"))
+    mkpath(joinpath(project, "sub", "dir"))
+    withenv("HOME" => home, "USERPROFILE" => home) do
+        # No global configuration: the CLI's default
+        @test DataPipeline.RegistryEndpoint().url ==
+              DataPipeline.DEFAULT_REGISTRY_URL
+
+        mkpath(joinpath(home, ".fair", "cli"))
+        DataPipeline.YAML.write_file(joinpath(home, ".fair", "cli",
+                                              "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("local" =>
+                                                       Dict("uri" => "http://127.0.0.1:8123/api/"))))
+        local_registry = DataPipeline.RegistryEndpoint()
+        @test local_registry.url == "http://127.0.0.1:8123/api/"
+        @test local_registry.api_version == DataPipeline.DEFAULT_API_VERSION
+        @test isnothing(local_registry.token)
+        @test DataPipeline.RegistryEndpoint(token = "secret").token == "secret"
+
+        # A remote is looked up in the project's configuration, found by
+        # walking up from the current directory
+        DataPipeline.YAML.write_file(joinpath(project, ".fair",
+                                              "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("origin" =>
+                                                       Dict("uri" => "https://example.org/api/"))))
+        cd(joinpath(project, "sub", "dir")) do
+            @test DataPipeline.RegistryEndpoint(remote = "origin").url ==
+                  "https://example.org/api/"
+            err = try
+                DataPipeline.RegistryEndpoint(remote = "elsewhere")
+            catch e
+                e
+            end
+            @test err isa DataPipeline.ConfigFileException
+            @test occursin("origin", err.msg)          # names what there is
+        end
+        # The walk stops at the home directory, whose `.fair` is the global
+        # configuration rather than a project's: a project-style file there
+        # is not read
+        DataPipeline.YAML.write_file(joinpath(home, ".fair", "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("local" =>
+                                                       Dict("uri" => "http://wrong/api/"))))
+        cd(home) do
+            @test_throws DataPipeline.ConfigFileException DataPipeline.RegistryEndpoint(remote = "local")
+        end
+    end
+end
+
+Test.@testset "writing needs a token" begin
+    # Refused before any request is made, so no registry need be running
+    @test_throws DataPipeline.ReadWriteException DataPipeline._postentry(registry,
+                                                                         "namespace",
+                                                                         Dict("name" => "never"))
+    @test_throws DataPipeline.ReadWriteException DataPipeline._createentry(registry,
+                                                                           "namespace",
+                                                                           Dict("name" => "never"))
+    err = try
+        DataPipeline._postentry(registry, "namespace", Dict("name" => "never"))
+    catch e
+        e
+    end
+    @test occursin("FDP_LOCAL_TOKEN", err.msg)
 end
 
 Test.@testset "_convertquery()" begin
@@ -119,6 +206,28 @@ Test.@testset "_repositorylocation()" begin
     @test_throws DataPipeline.ConfigFileException loc("not a remote")
 end
 
+Test.@testset "_getentries() follows pagination" begin
+    r = DataPipeline.RegistryEndpoint(get(ENV, "FDP_TEST_REGISTRY",
+                                          DataPipeline.DEFAULT_REGISTRY_URL),
+                                      token = DataPipeline.FDP_LOCAL_TOKEN())
+    # The registry pages at 100, so make more than one page of cheap rows.
+    # Its namespace filter matches a name exactly, so the check is against the
+    # whole table rather than a filtered subset
+    tag = DataPipeline._randomhash()[1:8]
+    names = Set("pagination/$tag/$i" for i in 1:101)
+    for name in names
+        DataPipeline._postentry(r, "namespace", Dict("name" => name))
+    end
+    page = DataPipeline._getentry(r,
+                                  DataPipeline.URIs.URI(r.url * "namespace/"))
+    @test page["count"] >= 101
+    @test length(page["results"]) == 100     # a page holds 100
+    @test !isnothing(page["next"])
+    all = DataPipeline._getentries(r, "namespace", Dict())
+    @test length(all) == page["count"]
+    @test names ⊆ Set(entry["name"] for entry in all)
+end
+
 Test.@testset "_randomhash()" begin
     hashes = [DataPipeline._randomhash() for _ in 1:100]
     @test all(h -> length(h) == 40 && all(c -> c in "0123456789abcdef", h),
@@ -126,10 +235,13 @@ Test.@testset "_randomhash()" begin
     @test length(unique(hashes)) == 100
 end
 
-Test.@testset "_gettoken()" begin
-    token = DataPipeline._gettoken()
-    tmp = match(r"token (.*)", token)
-    @test length(tmp[1]) == 40
+Test.@testset "FDP_LOCAL_TOKEN()" begin
+    # `fair run` sets the token; outside it there is none, and nothing stands
+    # in for it
+    @test length(DataPipeline.FDP_LOCAL_TOKEN()) == 40
+    withenv("FDP_LOCAL_TOKEN" => nothing) do
+        @test isnothing(DataPipeline.FDP_LOCAL_TOKEN())
+    end
 end
 
 end

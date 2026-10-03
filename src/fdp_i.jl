@@ -8,7 +8,7 @@
 
 Thrown when the registry or the data store does not hold what a read or write
 needs: a missing data product, a version already registered, a registry that
-is not running.
+is not running, a write with no registry token.
 """
 struct ReadWriteException <: Exception
     msg::String
@@ -17,7 +17,8 @@ end
 """
     ConfigFileException(msg)
 
-Thrown when the working config lacks the section or entry a call refers to.
+Thrown when a configuration file - the working config, or the CLI's own - lacks
+the section or entry a call refers to.
 """
 struct ConfigFileException <: Exception
     msg::String
@@ -76,16 +77,7 @@ function _registerobject(registry::RegistryEndpoint, path::String,
                                      "storage_location" => location_url,
                                      "authors" => [_getauthorurl(registry)])
     if !isnothing(file_type)
-        # Extensions are unique, so match on that alone: another API may have
-        # registered this one under a different name
-        file_type_url = _geturl(registry, "file_type",
-                                Dict("extension" => file_type))
-        if isnothing(file_type_url)
-            file_type_url = _postentry(registry, "file_type",
-                                       Dict("name" => file_type,
-                                            "extension" => file_type))["url"]
-        end
-        object_query["file_type"] = file_type_url
+        object_query["file_type"] = _getfiletype(registry, file_type)
     end
     return new_object ? _createentry(registry, "object", object_query) :
            _postentry(registry, "object", object_query)
@@ -98,6 +90,7 @@ Attach the input and output component URLs to the code run and return its URL.
 """
 function _patchcoderun(handle::DataRegistryHandle, inputs::Vector{String},
                        outputs::Vector{String})
+    _requiretoken(handle.registry)
     body = JSON.json(Dict("inputs" => inputs, "outputs" => outputs))
     r = HTTP.request("PATCH", handle.code_run_obj,
                      headers = _headers(handle.registry), body = body)
@@ -525,6 +518,51 @@ function _issuecomponents(handle::DataRegistryHandle,
                           target.component)]
 end
 
+# The issue raised against a code repository registered with uncommitted
+# changes, shared by every run from that state, as they share its object
+const DIRTY_REPOSITORY_ISSUE = "The code repository had uncommitted changes when this code ran, so the code that ran cannot be recovered from its commit."
+
+# Warn that a run is being made from a working tree with uncommitted changes,
+# and raise the issue against the repository object it is registered under
+function _flagdirtyrepository(registry::RegistryEndpoint, repo_url::String,
+                              commit::String)
+    @warn "the code repository has uncommitted changes ($commit): raising an issue against it"
+    _postissue(registry, DEFAULT_ISSUE_SEVERITY, DIRTY_REPOSITORY_ISSUE,
+               [_wholeobjectcomponent(registry, repo_url)])
+    return nothing
+end
+
+# Get or create the issue with this severity and description on exactly these
+# components, and return it
+function _postissue(registry::RegistryEndpoint, severity::Integer,
+                    description::String,
+                    components::AbstractVector{<:AbstractString})
+    existing = _findissue(registry, severity, description, components)
+    isnothing(existing) || return existing
+    return _createentry(registry, "issue",
+                        Dict("severity" => severity,
+                             "description" => description,
+                             "component_issues" => components))
+end
+
+# The issue already raised with this severity and description against exactly
+# these components, or `nothing`. It is looked up through the first component's
+# own issues, which every registry lists, because filtering issues by
+# `component_issues` cannot match a set: registries before v1.3.0 ignore the
+# filter, and v1.3.0 takes a single component and refuses a list.
+function _findissue(registry::RegistryEndpoint, severity::Integer,
+                    description::String,
+                    components::AbstractVector{<:AbstractString})
+    isempty(components) && return nothing
+    for issue_url in _getentry(registry, URIs.URI(first(components)))["issues"]
+        issue = _getentry(registry, URIs.URI(issue_url))
+        issue["severity"] == severity && issue["description"] == description &&
+            Set(issue["component_issues"]) == Set(components) &&
+            return issue
+    end
+    return nothing
+end
+
 """
     _registerissues(handle)
 
@@ -537,10 +575,8 @@ function _registerissues(handle::DataRegistryHandle)
                             (_issuecomponents(handle, target)
                              for target in issue.targets),
                             init = String[])
-        entry = _postentry(handle.registry, "issue",
-                           Dict("severity" => issue.severity,
-                                "description" => issue.description,
-                                "component_issues" => components))
+        entry = _postissue(handle.registry, issue.severity, issue.description,
+                           components)
         println("issue registered as ", entry["url"])
     end
     return nothing

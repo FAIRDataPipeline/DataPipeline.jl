@@ -15,6 +15,7 @@ using Dates
 using FTPClient
 using HTTP
 using JSON
+using LibGit2
 using Plots
 using SHA
 using YAML
@@ -23,6 +24,8 @@ using URIs
 # The registry the CLI writes into a working config when the user has not set one
 const DEFAULT_REGISTRY_URL = "http://127.0.0.1:8000/api/"
 const DEFAULT_API_VERSION = "1.0.0"
+# The severity the registry gives an issue when none is set
+const DEFAULT_ISSUE_SEVERITY = 1
 FDP_CONFIG_DIR() = get(ENV, "FDP_CONFIG_DIR", ".")
 @static if Sys.iswindows()
     const FDP_SUBMISSION_SCRIPT = "script.bat"
@@ -31,7 +34,7 @@ else
 end
 FDP_PATH_CONFIG() = joinpath(FDP_CONFIG_DIR(), "config.yaml")
 FDP_PATH_SUBMISSION() = joinpath(FDP_CONFIG_DIR(), FDP_SUBMISSION_SCRIPT)
-FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", "fake_token")
+FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", nothing)
 
 include("core.jl")
 
@@ -47,6 +50,11 @@ public DataRegistryHandle, RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
+# Asking what the registry knows about a file or a git repository on disk
+public identify
+public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
+public RepositoryIdentification, RegisteredCommit, CodeRunRecord
+public AbstractCommitSelection, AncestorCommits, CheckedOutCommit, AllCommits
 
 include("fdp_i.jl")
 
