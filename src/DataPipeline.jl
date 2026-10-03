@@ -24,6 +24,8 @@ using URIs
 # The registry the CLI writes into a working config when the user has not set one
 const DEFAULT_REGISTRY_URL = "http://127.0.0.1:8000/api/"
 const DEFAULT_API_VERSION = "1.0.0"
+# The severity the registry gives an issue when none is set
+const DEFAULT_ISSUE_SEVERITY = 1
 FDP_CONFIG_DIR() = get(ENV, "FDP_CONFIG_DIR", ".")
 @static if Sys.iswindows()
     const FDP_SUBMISSION_SCRIPT = "script.bat"

@@ -12,6 +12,10 @@ works on. The registry is `run_metadata.local_data_registry_url` (default
 `$DEFAULT_REGISTRY_URL`) and the API version `run_metadata.api_version`
 (default `$DEFAULT_API_VERSION`). `token` is the registry's access token, which
 registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
+
+A code repository with uncommitted changes, which `fair run --dirty` records as
+a `<commit>-dirty` commit, gets a warning and an issue saying that the code
+that ran cannot be recovered from its commit.
 """
 function initialise(config_file::String = FDP_PATH_CONFIG(),
                     submission_script::String = FDP_PATH_SUBMISSION();
@@ -39,6 +43,8 @@ function initialise(config_file::String = FDP_PATH_CONFIG(),
                                "Remote code repository.",
                                hash = run_metadata["latest_commit"],
                                local_root = false, file_type = nothing)["url"]
+    endswith(run_metadata["latest_commit"], "-dirty") &&
+        _flagdirtyrepository(registry, repo_url, run_metadata["latest_commit"])
 
     run_date = Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS")
     code_run = _postentry(registry, "code_run",
@@ -289,20 +295,22 @@ function write_distribution(handle::DataRegistryHandle, distribution::String,
 end
 
 """
-    raise_issue(handle, target, description; severity = 0)
-    raise_issue(handle, targets, description; severity = 0)
+    raise_issue(handle, target, description; severity = $DEFAULT_ISSUE_SEVERITY)
+    raise_issue(handle, targets, description; severity = $DEFAULT_ISSUE_SEVERITY)
 
 Raise an issue with one thing, or with several at once as one registry issue.
 A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
 [`SubmissionScript`](@ref), [`CodeRepository`](@ref),
 [`ConfigDataProduct`](@ref) or [`ExistingDataProduct`](@ref) - or a `String`,
 which names a data product of this run as [`ConfigDataProduct`](@ref) does.
-`severity` is an integer, larger for worse. Issues are queued in the handle
+`severity` is an integer, larger for worse, by default the registry's own
+default. Issues are queued in the handle
 and registered by [`finalise`](@ref), so an output can be named before it
 is written.
 """
 function raise_issue(handle::DataRegistryHandle, targets::AbstractVector,
-                     description::String; severity::Integer = 0)
+                     description::String;
+                     severity::Integer = DEFAULT_ISSUE_SEVERITY)
     resolved = AbstractIssueTarget[_astarget(target) for target in targets]
     for target in resolved
         _checktarget(handle, target)
@@ -312,7 +320,8 @@ function raise_issue(handle::DataRegistryHandle, targets::AbstractVector,
 end
 function raise_issue(handle::DataRegistryHandle,
                      target::Union{AbstractIssueTarget, AbstractString},
-                     description::String; severity::Integer = 0)
+                     description::String;
+                     severity::Integer = DEFAULT_ISSUE_SEVERITY)
     return raise_issue(handle, [target], description, severity = severity)
 end
 

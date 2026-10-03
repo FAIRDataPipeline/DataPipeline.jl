@@ -518,6 +518,40 @@ function _issuecomponents(handle::DataRegistryHandle,
                           target.component)]
 end
 
+# The issue raised against a code repository registered with uncommitted
+# changes, shared by every run from that state, as they share its object
+const DIRTY_REPOSITORY_ISSUE = "The code repository had uncommitted changes when this code ran, so the code that ran cannot be recovered from its commit."
+
+# Warn that a run is being made from a working tree with uncommitted changes,
+# and raise the issue against the repository object it is registered under
+function _flagdirtyrepository(registry::RegistryEndpoint, repo_url::String,
+                              commit::String)
+    @warn "the code repository has uncommitted changes ($commit): raising an issue against it"
+    components = [_wholeobjectcomponent(registry, repo_url)]
+    isnothing(_findissue(registry, DEFAULT_ISSUE_SEVERITY,
+                         DIRTY_REPOSITORY_ISSUE, components)) &&
+        _createentry(registry, "issue",
+                     Dict("severity" => DEFAULT_ISSUE_SEVERITY,
+                          "description" => DIRTY_REPOSITORY_ISSUE,
+                          "component_issues" => components))
+    return nothing
+end
+
+# The issue already raised with this severity and description against exactly
+# these components, or `nothing`. It is looked up through the components, since
+# the registry's issue list ignores a filter by component.
+function _findissue(registry::RegistryEndpoint, severity::Integer,
+                    description::String, components::Vector{String})
+    isempty(components) && return nothing
+    for issue_url in _getentry(registry, URIs.URI(first(components)))["issues"]
+        issue = _getentry(registry, URIs.URI(issue_url))
+        issue["severity"] == severity && issue["description"] == description &&
+            Set(issue["component_issues"]) == Set(components) &&
+            return issue
+    end
+    return nothing
+end
+
 """
     _registerissues(handle)
 

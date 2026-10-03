@@ -10,6 +10,9 @@
     from its commits, their outputs and issues (`commits =` chooses which, and
     `dirty = true` adds runs with uncommitted changes). With only a path it asks
     the CLI's local registry or a named `remote`, as `RegistryEndpoint()` does.
+  - A run from a repository with uncommitted changes (`fair run --dirty` records
+    `<commit>-dirty`) warns, and raises an issue against the repository.
+  - `raise_issue`'s default severity is the registry's own default, 1, not 0.
   - Reading a registry needs no token, so `identify` works outside `fair run`:
     `RegistryEndpoint(url; token)` carries its own token, sent to that registry
     only, and `DataPipeline.initialise(...; token)` takes it from

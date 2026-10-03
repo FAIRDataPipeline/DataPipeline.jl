@@ -448,7 +448,7 @@ Test.@testset "raise_issue()" begin
                 "existing $uid", severity = 2)
     @test length(handle.issues) == 5
     @test handle.issues[3].targets == [DataPipeline.ConfigDataProduct(written)]
-    @test handle.issues[3].severity == 0
+    @test handle.issues[3].severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
     @test isnothing(DataPipeline._getentry(registry, "issue",
                                            Dict("description" => "config $uid")))
 
@@ -484,6 +484,12 @@ Test.@testset "raise_issue()" begin
           component2
     @test issue("run $uid")["url"] in
           issues_of(registry, whole(handle.repo_obj))
+
+    # Several targets at once take the same default severity as one
+    several = DataPipeline.initialise(config, config)
+    raise_issue(several, [DataPipeline.WorkingConfig()], "default $uid")
+    @test only(several.issues).severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
+    DataPipeline.finalise(several)
 end
 
 Test.@testset "link_read!() with a pattern and link_read_files!()" begin
@@ -654,6 +660,61 @@ Test.@testset "identify()" begin
                   object.url
         end
     end
+end
+
+Test.@testset "a run from uncommitted changes" begin
+    registry = handle.registry
+    # What `fair run --dirty` records for a working tree with uncommitted
+    # changes: a warning, and an issue raised at once against the repository
+    config = DataPipeline._createconfig(cpath,
+                                        latest_commit = DataPipeline._randomhash() *
+                                                        "-dirty")
+    dirty = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(config,
+                                                                               config)
+    @test isempty(dirty.issues)          # not queued with the script's own
+    component = DataPipeline._wholeobjectcomponent(registry, dirty.repo_obj)
+    issue_urls() = DataPipeline._getentry(registry,
+                                          URIs.URI(component))["issues"]
+    issue = DataPipeline._getentry(registry, URIs.URI(only(issue_urls())))
+    @test issue["severity"] == DataPipeline.DEFAULT_ISSUE_SEVERITY
+    @test issue["description"] == DataPipeline.DIRTY_REPOSITORY_ISSUE
+    DataPipeline.finalise(dirty)
+
+    # Another run from the same state shares the one issue
+    again = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(config,
+                                                                               config)
+    @test again.repo_obj == dirty.repo_obj
+    @test length(issue_urls()) == 1
+    DataPipeline.finalise(again)
+
+    # A run from another state with uncommitted changes gets an issue of its
+    # own, although the registry already holds one with the same text
+    other_config = DataPipeline._createconfig(cpath,
+                                              latest_commit = DataPipeline._randomhash() *
+                                                              "-dirty")
+    other = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(other_config,
+                                                                               other_config)
+    other_issues = DataPipeline._getentry(registry,
+                                          URIs.URI(DataPipeline._wholeobjectcomponent(registry,
+                                                                                      other.repo_obj)))["issues"]
+    @test length(other_issues) == 1
+    @test only(other_issues) != only(issue_urls())
+    DataPipeline.finalise(other)
+
+    # Its severity is the one the registry gives an issue when none is set
+    unset = DataPipeline._postentry(registry, "issue",
+                                    Dict("description" => "no severity $uid",
+                                         "component_issues" => [component]))
+    @test unset["severity"] == DataPipeline.DEFAULT_ISSUE_SEVERITY
+
+    # A clean commit: no warning and no issue
+    config = DataPipeline._createconfig(cpath,
+                                        latest_commit = DataPipeline._randomhash())
+    clean = @test_logs DataPipeline.initialise(config, config)
+    @test isempty(DataPipeline._getentry(registry,
+                                         URIs.URI(DataPipeline._wholeobjectcomponent(registry,
+                                                                                     clean.repo_obj)))["issues"])
+    DataPipeline.finalise(clean)
 end
 
 Test.@testset "identify() a git repository" begin
