@@ -13,6 +13,10 @@
   - A run from a repository with uncommitted changes (`fair run --dirty` records
     `<commit>-dirty`) warns, and raises an issue against the repository.
   - `raise_issue`'s default severity is the registry's own default, 1, not 0.
+  - An issue raised against several targets registers with `data-registry`
+    v1.3.0, which refused the lookup `finalise` made (HTTP 400); and an issue
+    is no longer attached to an identical one already raised against other
+    targets instead of its own.
   - Reading a registry needs no token, so `identify` works outside `fair run`:
     `RegistryEndpoint(url; token)` carries its own token, sent to that registry
     only, and `DataPipeline.initialise(...; token)` takes it from

@@ -490,6 +490,26 @@ Test.@testset "raise_issue()" begin
     raise_issue(several, [DataPipeline.WorkingConfig()], "default $uid")
     @test only(several.issues).severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
     DataPipeline.finalise(several)
+
+    # Raised again on exactly the same components, an issue is the one already
+    # there; on other components, even overlapping ones, it is another
+    shared = DataPipeline.initialise(config, config)
+    raise_issue(shared,
+                [DataPipeline.WorkingConfig(), DataPipeline.SubmissionScript()],
+                "shared $uid")
+    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    DataPipeline.finalise(shared)
+    function shared_on(component_url)
+        return [entry
+                for entry in (DataPipeline._getentry(registry, URIs.URI(url))
+                              for url in issues_of(registry, component_url))
+                if entry["description"] == "shared $uid"]
+    end
+    on_config = shared_on(whole(shared.config_obj))
+    @test sort([length(entry["component_issues"]) for entry in on_config]) ==
+          [1, 2]
+    @test length(shared_on(whole(shared.script_obj))) == 1
 end
 
 Test.@testset "link_read!() with a pattern and link_read_files!()" begin

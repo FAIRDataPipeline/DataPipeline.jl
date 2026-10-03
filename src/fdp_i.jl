@@ -527,21 +527,32 @@ const DIRTY_REPOSITORY_ISSUE = "The code repository had uncommitted changes when
 function _flagdirtyrepository(registry::RegistryEndpoint, repo_url::String,
                               commit::String)
     @warn "the code repository has uncommitted changes ($commit): raising an issue against it"
-    components = [_wholeobjectcomponent(registry, repo_url)]
-    isnothing(_findissue(registry, DEFAULT_ISSUE_SEVERITY,
-                         DIRTY_REPOSITORY_ISSUE, components)) &&
-        _createentry(registry, "issue",
-                     Dict("severity" => DEFAULT_ISSUE_SEVERITY,
-                          "description" => DIRTY_REPOSITORY_ISSUE,
-                          "component_issues" => components))
+    _postissue(registry, DEFAULT_ISSUE_SEVERITY, DIRTY_REPOSITORY_ISSUE,
+               [_wholeobjectcomponent(registry, repo_url)])
     return nothing
 end
 
+# Get or create the issue with this severity and description on exactly these
+# components, and return it
+function _postissue(registry::RegistryEndpoint, severity::Integer,
+                    description::String,
+                    components::AbstractVector{<:AbstractString})
+    existing = _findissue(registry, severity, description, components)
+    isnothing(existing) || return existing
+    return _createentry(registry, "issue",
+                        Dict("severity" => severity,
+                             "description" => description,
+                             "component_issues" => components))
+end
+
 # The issue already raised with this severity and description against exactly
-# these components, or `nothing`. It is looked up through the components, since
-# the registry's issue list ignores a filter by component.
+# these components, or `nothing`. It is looked up through the first component's
+# own issues, which every registry lists, because filtering issues by
+# `component_issues` cannot match a set: registries before v1.3.0 ignore the
+# filter, and v1.3.0 takes a single component and refuses a list.
 function _findissue(registry::RegistryEndpoint, severity::Integer,
-                    description::String, components::Vector{String})
+                    description::String,
+                    components::AbstractVector{<:AbstractString})
     isempty(components) && return nothing
     for issue_url in _getentry(registry, URIs.URI(first(components)))["issues"]
         issue = _getentry(registry, URIs.URI(issue_url))
@@ -564,10 +575,8 @@ function _registerissues(handle::DataRegistryHandle)
                             (_issuecomponents(handle, target)
                              for target in issue.targets),
                             init = String[])
-        entry = _postentry(handle.registry, "issue",
-                           Dict("severity" => issue.severity,
-                                "description" => issue.description,
-                                "component_issues" => components))
+        entry = _postissue(handle.registry, issue.severity, issue.description,
+                           components)
         println("issue registered as ", entry["url"])
     end
     return nothing
