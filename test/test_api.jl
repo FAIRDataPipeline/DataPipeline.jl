@@ -19,6 +19,7 @@ namespace = handle.config["run_metadata"]["default_output_namespace"]
 launch_url = handle.registry.url
 version = "0.0.1"
 const URIs = DataPipeline.URIs
+const LibGit2 = DataPipeline.LibGit2
 
 component1 = "component/1"
 component2 = "component/2"
@@ -447,7 +448,7 @@ Test.@testset "raise_issue()" begin
                 "existing $uid", severity = 2)
     @test length(handle.issues) == 5
     @test handle.issues[3].targets == [DataPipeline.ConfigDataProduct(written)]
-    @test handle.issues[3].severity == 0
+    @test handle.issues[3].severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
     @test isnothing(DataPipeline._getentry(registry, "issue",
                                            Dict("description" => "config $uid")))
 
@@ -483,6 +484,32 @@ Test.@testset "raise_issue()" begin
           component2
     @test issue("run $uid")["url"] in
           issues_of(registry, whole(handle.repo_obj))
+
+    # Several targets at once take the same default severity as one
+    several = DataPipeline.initialise(config, config)
+    raise_issue(several, [DataPipeline.WorkingConfig()], "default $uid")
+    @test only(several.issues).severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
+    DataPipeline.finalise(several)
+
+    # Raised again on exactly the same components, an issue is the one already
+    # there; on other components, even overlapping ones, it is another
+    shared = DataPipeline.initialise(config, config)
+    raise_issue(shared,
+                [DataPipeline.WorkingConfig(), DataPipeline.SubmissionScript()],
+                "shared $uid")
+    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    DataPipeline.finalise(shared)
+    function shared_on(component_url)
+        return [entry
+                for entry in (DataPipeline._getentry(registry, URIs.URI(url))
+                              for url in issues_of(registry, component_url))
+                if entry["description"] == "shared $uid"]
+    end
+    on_config = shared_on(whole(shared.config_obj))
+    @test sort([length(entry["component_issues"]) for entry in on_config]) ==
+          [1, 2]
+    @test length(shared_on(whole(shared.script_obj))) == 1
 end
 
 Test.@testset "link_read!() with a pattern and link_read_files!()" begin
@@ -541,6 +568,422 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     code_run = DataPipeline._getentry(handle.registry,
                                       URIs.URI(handle.code_run_obj))
     @test length(code_run["inputs"]) == 3
+end
+
+Test.@testset "identify()" begin
+    data_product = "data_product/identify/$uid"
+    registry = handle.registry
+
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, data_product, "identify description",
+                           file_type = "txt", use_version = version)
+    run_handle = DataPipeline.initialise(config, config)
+    path = link_write!(run_handle, data_product)
+    write(path, "identify $uid\n")
+    DataPipeline.finalise(run_handle)
+    stored = run_handle.outputs[(data_product, nothing)]["path"]
+
+    # What the registry knows about the file it has just registered
+    id = DataPipeline.identify(registry, stored)
+    @test id.path == stored
+    @test id.hash == DataPipeline._getfilehash(stored)
+    @test length(id.objects) == 1
+    object = only(id.objects)
+    @test object.description == "identify description"
+    @test object.local_root
+    @test isdirpath(replace(object.root, "file://" => ""))
+    @test isfile(joinpath(replace(object.root, "file://" => ""),
+                          object.stored_path))
+    product = only(object.data_products)
+    @test (product.namespace, product.name) == (namespace, data_product)
+    @test product.version == VersionNumber(version)
+    @test product.newest == product.version          # nothing newer yet
+    @test isnothing(product.external_object)
+    @test isempty(object.issues)
+    # A handle may be given instead of a registry
+    @test DataPipeline.identify(run_handle, stored).hash == id.hash
+
+    # A file the registry has never seen, and one that is not there at all
+    unknown = joinpath(mktempdir(), "unknown.txt")
+    write(unknown, "nothing knows about me $uid\n")
+    @test isempty(DataPipeline.identify(registry, unknown).objects)
+    @test occursin("unknown",
+                   sprint(show, DataPipeline.identify(registry,
+                                                      unknown)))
+    @test_throws DataPipeline.ReadWriteException DataPipeline.identify(registry,
+                                                                       joinpath(mktempdir(),
+                                                                                "absent"))
+
+    # A newer version of the same name makes this one superseded
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, data_product, "identify description",
+                           file_type = "txt", use_version = "0.0.2")
+    newer_handle = DataPipeline.initialise(config, config)
+    newer = link_write!(newer_handle, data_product)
+    write(newer, "identify newer $uid\n")
+    DataPipeline.finalise(newer_handle)
+    superseded = only(only(DataPipeline.identify(registry,
+                                                 stored).objects).data_products)
+    @test superseded.version == VersionNumber(version)
+    @test superseded.newest == v"0.0.2"
+    @test occursin("SUPERSEDED",
+                   sprint(show, MIME("text/plain"),
+                          DataPipeline.identify(registry, stored)))
+
+    # An issue raised against it is reported, named by component
+    DataPipeline._postentry(registry, "issue",
+                            Dict("severity" => 7,
+                                 "description" => "identify issue $uid",
+                                 "component_issues" =>
+                                     [DataPipeline._wholeobjectcomponent(registry,
+                                                                         object.url)]))
+    issues = only(DataPipeline.identify(registry, stored).objects).issues
+    @test length(issues) == 1
+    @test only(issues).severity == 7
+    @test only(issues).description == "identify issue $uid"
+    @test isnothing(only(issues).component)
+    @test occursin("1 issue",
+                   sprint(show, DataPipeline.identify(registry, stored)))
+
+    # What a user outside `fair run` has: no token at all, which a read needs
+    # none of
+    tokenless = DataPipeline.RegistryEndpoint(registry.url,
+                                              registry.api_version)
+    withenv("FDP_LOCAL_TOKEN" => nothing) do
+        found = only(DataPipeline.identify(tokenless, stored).objects)
+        @test found.url == object.url
+        @test only(found.issues).description == "identify issue $uid"
+    end
+
+    # With a path alone, the registry is the CLI's: its local registry, or a
+    # remote named in the current project's configuration. A home and a
+    # project of our own, so that nothing depends on the machine's
+    home = mktempdir()
+    mkpath(joinpath(home, ".fair", "cli"))
+    DataPipeline.YAML.write_file(joinpath(home, ".fair", "cli",
+                                          "cli-config.yaml"),
+                                 Dict("registries" =>
+                                          Dict("local" =>
+                                                   Dict("uri" => registry.url))))
+    project = joinpath(home, "project")
+    mkpath(joinpath(project, ".fair"))
+    DataPipeline.YAML.write_file(joinpath(project, ".fair", "cli-config.yaml"),
+                                 Dict("registries" =>
+                                          Dict("origin" =>
+                                                   Dict("uri" => registry.url))))
+    withenv("HOME" => home, "USERPROFILE" => home,
+            "FDP_LOCAL_TOKEN" => nothing) do
+        @test only(DataPipeline.identify(stored).objects).url == object.url
+        cd(project) do
+            @test only(DataPipeline.identify(stored,
+                                             remote = "origin").objects).url ==
+                  object.url
+        end
+    end
+end
+
+Test.@testset "a run from uncommitted changes" begin
+    registry = handle.registry
+    # What `fair run --dirty` records for a working tree with uncommitted
+    # changes: a warning, and an issue raised at once against the repository
+    config = DataPipeline._createconfig(cpath,
+                                        latest_commit = DataPipeline._randomhash() *
+                                                        "-dirty")
+    dirty = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(config,
+                                                                               config)
+    @test isempty(dirty.issues)          # not queued with the script's own
+    component = DataPipeline._wholeobjectcomponent(registry, dirty.repo_obj)
+    issue_urls() = DataPipeline._getentry(registry,
+                                          URIs.URI(component))["issues"]
+    issue = DataPipeline._getentry(registry, URIs.URI(only(issue_urls())))
+    @test issue["severity"] == DataPipeline.DEFAULT_ISSUE_SEVERITY
+    @test issue["description"] == DataPipeline.DIRTY_REPOSITORY_ISSUE
+    DataPipeline.finalise(dirty)
+
+    # Another run from the same state shares the one issue
+    again = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(config,
+                                                                               config)
+    @test again.repo_obj == dirty.repo_obj
+    @test length(issue_urls()) == 1
+    DataPipeline.finalise(again)
+
+    # A run from another state with uncommitted changes gets an issue of its
+    # own, although the registry already holds one with the same text
+    other_config = DataPipeline._createconfig(cpath,
+                                              latest_commit = DataPipeline._randomhash() *
+                                                              "-dirty")
+    other = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(other_config,
+                                                                               other_config)
+    other_issues = DataPipeline._getentry(registry,
+                                          URIs.URI(DataPipeline._wholeobjectcomponent(registry,
+                                                                                      other.repo_obj)))["issues"]
+    @test length(other_issues) == 1
+    @test only(other_issues) != only(issue_urls())
+    DataPipeline.finalise(other)
+
+    # Its severity is the one the registry gives an issue when none is set
+    unset = DataPipeline._postentry(registry, "issue",
+                                    Dict("description" => "no severity $uid",
+                                         "component_issues" => [component]))
+    @test unset["severity"] == DataPipeline.DEFAULT_ISSUE_SEVERITY
+
+    # A clean commit: no warning and no issue
+    config = DataPipeline._createconfig(cpath,
+                                        latest_commit = DataPipeline._randomhash())
+    clean = @test_logs DataPipeline.initialise(config, config)
+    @test isempty(DataPipeline._getentry(registry,
+                                         URIs.URI(DataPipeline._wholeobjectcomponent(registry,
+                                                                                     clean.repo_obj)))["issues"])
+    DataPipeline.finalise(clean)
+end
+
+Test.@testset "identify() a git repository" begin
+    registry = handle.registry
+
+    # A repository of our own: two commits on its branch, one on another, and
+    # a remote the registry will know it by
+    dir = mktempdir()
+    repo = LibGit2.init(dir)
+    remote = "https://github.com/FAIRDataPipeline/identify-fixture-$uid.git"
+    close(LibGit2.GitRemote(repo, "origin", remote))
+    # Committed long ago, so that every run is newer whatever time zone its
+    # date was recorded in
+    t0 = 1_000_000_000
+    signature(t) = LibGit2.Signature("Test", "test@example.com", t, 0)
+    # Each run's commits are new to the registry, although their dates are
+    # fixed, because what they commit names the run
+    committed(content) = "$content $uid\n"
+    function commit!(content; t, refname = "HEAD", parents = String[])
+        write(joinpath(dir, "a.txt"), committed(content))
+        LibGit2.add!(repo, "a.txt")
+        return string(LibGit2.commit(repo, content, refname = refname,
+                                     author = signature(t),
+                                     committer = signature(t),
+                                     parent_ids = LibGit2.GitHash.(parents)))
+    end
+    parent_sha = commit!("first", t = t0)
+    side_sha = commit!("side", t = t0 + 5, refname = "refs/heads/side",
+                       parents = [parent_sha])
+    head_sha = commit!("second", t = t0 + 10, parents = [parent_sha])
+    # Two commits this clone lacks, the later-run one with the later hash, so
+    # that only their run dates can order them newest first
+    absent_sha, later_absent_sha = sort([DataPipeline._randomhash(),
+                                            DataPipeline._randomhash()])
+
+    # A run from a commit, writing one output
+    function run_from!(commit, name; issue = nothing)
+        config = DataPipeline._createconfig(cpath, latest_commit = commit,
+                                            remote_repo = remote)
+        data_product = "data_product/identify-repository/$uid/$name"
+        DataPipeline._addwrite(config, data_product, "repository fixture",
+                               file_type = "txt", use_version = version)
+        run_handle = DataPipeline.initialise(config, config)
+        write(link_write!(run_handle, data_product), "$name $uid\n")
+        isnothing(issue) ||
+            raise_issue(run_handle, DataPipeline.CodeRepository(), issue,
+                        severity = 4)
+        DataPipeline.finalise(run_handle)
+        return data_product
+    end
+    second_output = run_from!(head_sha, "second", issue = "commit issue $uid")
+    run_from!(side_sha, "side")
+    run_from!("$head_sha-dirty", "dirty")
+    run_from!(absent_sha, "absent")
+    sleep(1)                               # run dates have whole seconds
+    run_from!(later_absent_sha, "later absent")
+    # The parent commit as Python registers a repository: the whole remote URL
+    # as the path
+    root_url = DataPipeline._postentry(registry, "storage_root",
+                                       Dict("root" => "https://github.com/",
+                                            "local" => false))["url"]
+    location_url = DataPipeline._postentry(registry, "storage_location",
+                                           Dict("path" => remote,
+                                                "hash" => parent_sha,
+                                                "public" => true,
+                                                "storage_root" => root_url))["url"]
+    object_url = DataPipeline._postentry(registry, "object",
+                                         Dict("description" => "Remote code repository.",
+                                              "storage_location" =>
+                                                  location_url,
+                                              "authors" =>
+                                                  [DataPipeline._getauthorurl(registry)]))["url"]
+    DataPipeline._postentry(registry, "code_run",
+                            Dict("run_date" => Dates.format(now(),
+                                              "yyyy-mm-dd HH:MM:SS"),
+                                 "description" => "python-style run $uid",
+                                 "code_repo" => object_url,
+                                 "model_config" => handle.config_obj,
+                                 "submission_script" => handle.script_obj))
+
+    # By default the checked-out commit and its ancestors, newest first,
+    # whichever way their paths were registered
+    found = DataPipeline.identify(registry, dir)
+    @test found isa DataPipeline.RepositoryIdentification
+    @test samefile(found.path, dir)
+    @test found.remote == remote
+    @test found.head == head_sha
+    @test !found.dirty
+    @test found.selection == DataPipeline.AncestorCommits()
+    @test [commit.sha for commit in found.commits] == [head_sha, parent_sha]
+    @test !any(commit.dirty for commit in found.commits)
+    @test found.commits[1].date == unix2datetime(t0 + 10)
+    newest = only(found.commits[1].runs)
+    @test only(newest.outputs).name == second_output
+    @test only(found.commits[1].issues).description == "commit issue $uid"
+    @test only(found.commits[2].runs).description == "python-style run $uid"
+    text = sprint(show, MIME("text/plain"), found)
+    @test occursin(remote, text)
+    @test occursin("commit issue $uid", text)
+    @test occursin(second_output, text)
+    # A handle may be given instead of a registry
+    @test [commit.sha
+           for commit in DataPipeline.identify(handle, dir).commits] ==
+          [head_sha, parent_sha]
+
+    # Only the checked-out commit
+    only_head = DataPipeline.identify(registry, dir,
+                                      commits = DataPipeline.CheckedOutCommit())
+    @test [commit.sha for commit in only_head.commits] == [head_sha]
+
+    # Every commit: those in the clone by commit date, then those the clone
+    # lacks, newest first by their earliest run
+    every = DataPipeline.identify(registry, dir,
+                                  commits = DataPipeline.AllCommits()).commits
+    @test [(commit.sha, commit.dirty) for commit in every] ==
+          [(head_sha, false), (side_sha, false), (parent_sha, false),
+        (later_absent_sha, false), (absent_sha, false)]
+    @test isnothing(every[end].date)
+
+    # Runs with uncommitted changes only when asked for, each beside its commit,
+    # whichever commits are selected
+    shas(selection) = [(commit.sha, commit.dirty)
+                       for commit in DataPipeline.identify(registry, dir,
+                                                           commits = selection).commits]
+    @test shas(DataPipeline.AncestorCommits(dirty = true)) ==
+          [(head_sha, false), (head_sha, true), (parent_sha, false)]
+    @test shas(DataPipeline.CheckedOutCommit(dirty = true)) ==
+          [(head_sha, false), (head_sha, true)]
+    @test shas(DataPipeline.AllCommits(dirty = true)) ==
+          [(head_sha, false), (head_sha, true), (side_sha, false),
+        (parent_sha, false), (later_absent_sha, false), (absent_sha, false)]
+    @test occursin("with runs made with uncommitted changes",
+                   sprint(show, MIME("text/plain"),
+                          DataPipeline.identify(registry, dir,
+                                                commits = DataPipeline.AllCommits(dirty = true))))
+
+    # A selection is made with the keyword, and prints as it is written
+    @test sprint(show, DataPipeline.AncestorCommits()) == "AncestorCommits()"
+    @test sprint(show, DataPipeline.CheckedOutCommit(dirty = true)) ==
+          "CheckedOutCommit(dirty = true)"
+    @test DataPipeline.AllCommits(dirty = false) == DataPipeline.AllCommits()
+    @test_throws MethodError DataPipeline.AllCommits(true)
+
+    # Uncommitted changes in the checkout: a warning, and its commit taken as
+    # committed
+    write(joinpath(dir, "a.txt"), "edited")
+    edited = @test_logs (:warn, r"uncommitted changes") DataPipeline.identify(registry,
+                                                                              dir)
+    @test edited.dirty
+    @test [commit.sha for commit in edited.commits] == [head_sha, parent_sha]
+    write(joinpath(dir, "a.txt"), committed("second"))
+    @test !DataPipeline.identify(registry, dir).dirty
+
+    # A commit nothing was run from
+    commit!("third", t = t0 + 20)
+    unrun = DataPipeline.identify(registry, dir,
+                                  commits = DataPipeline.CheckedOutCommit())
+    @test isempty(unrun.commits)
+    @test occursin("no run registered", sprint(show, MIME("text/plain"), unrun))
+    @test [commit.sha
+           for commit in DataPipeline.identify(registry, dir).commits] ==
+          [head_sha, parent_sha]
+
+    # The repository is known by the remote its CLI configuration names, as
+    # `fair run` records it, and by `origin` only when there is none
+    LibGit2.set_remote_url(repo, "origin", "https://github.com/elsewhere/$uid")
+    close(LibGit2.GitRemote(repo, "upstream", remote))
+    @test isempty(DataPipeline.identify(registry, dir).commits)
+    mkpath(joinpath(dir, ".fair"))
+    DataPipeline.YAML.write_file(joinpath(dir, ".fair", "cli-config.yaml"),
+                                 Dict("git" => Dict("remote" => "upstream")))
+    by_upstream = DataPipeline.identify(registry, dir)
+    @test by_upstream.remote == remote
+    @test [commit.sha for commit in by_upstream.commits] ==
+          [head_sha, parent_sha]
+
+    # A folder inside the repository, a folder that is no repository, and
+    # `commits` for a file are all mistakes
+    mkdir(joinpath(dir, "sub"))
+    @test_throws ArgumentError DataPipeline.identify(registry,
+                                                     joinpath(dir, "sub"))
+    @test_throws ArgumentError DataPipeline.identify(registry, mktempdir())
+    @test_throws ArgumentError DataPipeline.identify(registry,
+                                                     joinpath(dir, "a.txt"),
+                                                     commits = DataPipeline.AllCommits())
+    close(repo)
+end
+
+Test.@testset "several file types for one extension" begin
+    # The registry is unique on (name, extension) and ships descriptively named
+    # types, and other APIs add their own names, so an extension can have
+    # several - which must not stop an output being registered
+    registry = handle.registry
+    extension = "dp13$(uid[1:8])"
+    for name in ("Julia written", "another API's name")
+        DataPipeline._postentry(registry, "file_type",
+                                Dict("name" => name, "extension" => extension))
+    end
+    listed = DataPipeline._getentry(registry,
+                                    URIs.URI(registry.url * "file_type/" *
+                                             DataPipeline._convertquery(registry,
+                                                                        Dict("extension" =>
+                                                                                 extension))))
+    @test listed["count"] == 2
+    # One of them is taken, and no third is created
+    chosen = DataPipeline._getfiletype(registry, extension)
+    @test chosen in [entry["url"] for entry in listed["results"]]
+    @test DataPipeline._getfiletype(registry, extension) == chosen
+    @test DataPipeline._getentry(registry,
+                                 URIs.URI(registry.url * "file_type/" *
+                                          DataPipeline._convertquery(registry,
+                                                                     Dict("extension" =>
+                                                                              extension))))["count"] ==
+          2
+    # An extension the registry has never seen is created, named after itself
+    fresh = "dp13new$(uid[1:8])"
+    url = DataPipeline._getfiletype(registry, fresh)
+    @test DataPipeline._getentry(registry, URIs.URI(url))["name"] == fresh
+
+    # A whole code run with that extension, as a second language's run leaves it
+    data_product = "data_product/filetype/$uid"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, data_product, "description",
+                           file_type = extension, use_version = version)
+    run_handle = DataPipeline.initialise(config, config)
+    path = link_write!(run_handle, data_product)
+    write(path, "file type $uid\n")
+    DataPipeline.finalise(run_handle)
+    @test DataPipeline._finddataproduct(registry, namespace, data_product,
+                                        version)["name"] == data_product
+end
+
+Test.@testset "a lookup matching several entries is reported" begin
+    registry = handle.registry
+    extension = "dp13amb$(uid[1:8])"
+    for name in ("one", "two")
+        DataPipeline._postentry(registry, "file_type",
+                                Dict("name" => name, "extension" => extension))
+    end
+    err = nothing
+    try
+        DataPipeline._getentry(registry, "file_type",
+                               Dict("extension" => extension))
+    catch e
+        err = e
+    end
+    @test err isa DataPipeline.ReadWriteException
+    @test occursin("2 entries in file_type", err.msg)
+    @test occursin("expected at most one", err.msg)
 end
 
 Test.@testset "link_write!() with a wildcard entry" begin
@@ -749,6 +1192,34 @@ Test.@testset "registry from the working config" begin
                                         local_data_registry_url = "http://127.0.0.1:1/api/")
     @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
                                                                          config)
+end
+
+Test.@testset "the registry token" begin
+    config = DataPipeline._createconfig(cpath)
+
+    # Taken from the environment that `fair run` set, unless one is given
+    @test handle.registry.token == DataPipeline.FDP_LOCAL_TOKEN()
+    # A token given is the one sent, so a wrong one is refused by the registry
+    @test_throws DataPipeline.HTTP.StatusError DataPipeline.initialise(config,
+                                                                       config,
+                                                                       token = "not-a-token")
+
+    # With none, registering fails before any request, saying why
+    @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
+                                                                         config,
+                                                                         token = nothing)
+    withenv("FDP_LOCAL_TOKEN" => nothing) do
+        @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
+                                                                             config)
+    end
+
+    # And so does the code run's update at `finalise`
+    tokenless = DataPipeline.RegistryEndpoint(handle.registry.url)
+    fields = (name == :registry ? tokenless : getfield(handle, name)
+              for name in fieldnames(DataPipeline.DataRegistryHandle))
+    @test_throws DataPipeline.ReadWriteException DataPipeline._patchcoderun(DataPipeline.DataRegistryHandle(fields...),
+                                                                            String[],
+                                                                            String[])
 end
 
 end
