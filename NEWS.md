@@ -1,6 +1,10 @@
 # NEWS
 
-- unreleased
+- v0.54.1
+  - `link_write!`, and the component writers, accept a data product name that a
+    wildcard `write:` entry of the working config stands for, registering the
+    name given rather than the pattern. A name the patterns of several entries
+    match is an error.
   - `DataPipeline.identify(registry_or_handle, path)` asks a registry what it
     knows about a file on disk, by the hash of its contents: what data products
     it is registered as, where the registry expects to find it, whether a newer

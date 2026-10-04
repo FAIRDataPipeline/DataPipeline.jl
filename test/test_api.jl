@@ -986,6 +986,110 @@ Test.@testset "a lookup matching several entries is reported" begin
     @test occursin("expected at most one", err.msg)
 end
 
+Test.@testset "link_write!() with a wildcard entry" begin
+    pattern = "data_product/wild/$uid/*"
+    covered = "data_product/wild/$uid/covered"
+    exact = "data_product/wild/$uid/exact"
+    aliased = "data_product/wild/$uid/aliased"
+
+    config = DataPipeline._createconfig(cpath)
+    # The CLI leaves a pattern entry whose use.data_product is the pattern
+    # itself, and an exact entry for every name that already exists
+    DataPipeline._addwrite(config, pattern, "wildcard description",
+                           file_type = "txt", use_version = version,
+                           use_data_product = pattern)
+    DataPipeline._addwrite(config, exact, "exact description",
+                           file_type = "csv", use_version = version,
+                           use_data_product = aliased)
+    handle = DataPipeline.initialise(config, config)
+
+    # A name the pattern covers is written under its own name, with the
+    # pattern entry's file type and description
+    path = link_write!(handle, covered)
+    @test dirname(path) == joinpath(datastore, namespace, covered)
+    @test endswith(basename(path), ".txt")
+    wmd = handle.outputs[(covered, nothing)]
+    @test wmd["use_dp"] == covered
+    @test wmd["dataproduct_description"] == "wildcard description"
+    @test link_write!(handle, covered) == path
+
+    # An entry naming it exactly wins, and keeps its own use: block
+    path2 = link_write!(handle, exact)
+    @test endswith(basename(path2), ".csv")
+    @test handle.outputs[(exact, nothing)]["use_dp"] == aliased
+    @test dirname(path2) == joinpath(datastore, namespace, aliased)
+
+    # A component write reaches the same lookup
+    estimates = "data_product/wild/$uid/estimates"
+    write_estimate(handle, estimate1, estimates, component1, "description1")
+    @test handle.outputs[(estimates, component1)]["use_dp"] == estimates
+    @test endswith(handle.outputs[(estimates, component1)]["path"], ".toml")
+
+    write(path, "covered $uid\n")
+    write(path2, "exact $uid\n")
+    DataPipeline.finalise(handle)
+
+    # The concrete names are registered, the pattern is not
+    for name in (covered, aliased, estimates)
+        @test DataPipeline._finddataproduct(handle.registry, namespace, name,
+                                            version)["name"] == name
+    end
+    # The registry filters names with fnmatch, so querying the pattern lists
+    # its matches - and shows that the pattern itself is not one of them
+    matches = DataPipeline._getentry(handle.registry,
+                                     URIs.URI(handle.registry.url *
+                                              "data_product/" *
+                                              DataPipeline._convertquery(handle.registry,
+                                                                         Dict("name" =>
+                                                                                  pattern))))
+    @test Set(entry["name"] for entry in matches["results"]) ==
+          Set([covered, estimates, aliased])
+    @test !isdir(joinpath(datastore, namespace, pattern))
+
+    # A name no entry covers, and one covered by two patterns, are refused
+    @test_throws DataPipeline.ConfigFileException link_write!(handle,
+                                                              "data_product/elsewhere/$uid")
+    # A * matches one segment, so a deeper name is not covered
+    @test_throws DataPipeline.ConfigFileException link_write!(handle,
+                                                              "data_product/wild/$uid/a/b")
+
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, "data_product/two/$uid/*", "first",
+                           file_type = "txt", use_version = version)
+    DataPipeline._addwrite(config, "data_product/*/$uid/both", "second",
+                           file_type = "csv", use_version = version)
+    handle = DataPipeline.initialise(config, config)
+    err = nothing
+    try
+        link_write!(handle, "data_product/two/$uid/both")
+    catch e
+        err = e
+    end
+    @test err isa DataPipeline.ConfigFileException
+    @test occursin("data_product/two/$uid/*", err.msg) &&
+          occursin("data_product/*/$uid/both", err.msg)
+end
+
+Test.@testset "\${{RUN_ID}} in a wildcard-covered name" begin
+    pattern = "data_product/wildrun/$uid/*"
+    name = "data_product/wildrun/$uid/run-\${{RUN_ID}}"
+
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, pattern, "description", file_type = "txt",
+                           use_version = version, use_data_product = pattern)
+    handle = DataPipeline.initialise(config, config)
+    path = link_write!(handle, name)
+    # Bytes no other test writes: two outputs with the same bytes are
+    # deduplicated, which would point this one at the other test's file
+    write(path, "wildcard run id $uid\n")
+    DataPipeline.finalise(handle)
+
+    registered = replace(name, "\${{RUN_ID}}" => handle.code_run_uuid)
+    @test handle.outputs[(name, nothing)]["use_dp"] == registered
+    @test DataPipeline._finddataproduct(handle.registry, namespace, registered,
+                                        version)["name"] == registered
+end
+
 Test.@testset "an output with already-registered bytes" begin
     first = "data_product/duplicate/$uid/first"
     second = "data_product/duplicate/$uid/second"

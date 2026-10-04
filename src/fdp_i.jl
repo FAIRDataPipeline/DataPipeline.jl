@@ -231,7 +231,9 @@ end
     _getmetadata(handle, data_product, section)
 
 Return the entry for `data_product` in the `read` or `write` `section` of the
-working config, or throw a [`ConfigFileException`](@ref).
+working config, or throw a [`ConfigFileException`](@ref). Matches the name
+exactly, so the write side goes through [`_writemetadata`](@ref) instead, which
+also covers a name a wildcard entry stands for.
 """
 function _getmetadata(handle::DataRegistryHandle, data_product::String,
                       section::String)
@@ -244,6 +246,49 @@ function _getmetadata(handle::DataRegistryHandle, data_product::String,
     else
         msg = string("no '", section, "' section found - check config file.")
     end
+    return throw(ConfigFileException(msg))
+end
+
+"""
+    _writemetadata(handle, data_product)
+
+Return the `write:` entry of the working config that covers `data_product`, and
+the name the data product is to be registered under, as `(entry, name)`.
+
+An entry naming it exactly is used as it stands, under the name its `use:`
+block gives. Otherwise the one wildcard entry whose pattern matches is used,
+and the name is `data_product` itself: a pattern entry's `use.data_product` is
+the pattern, which is a template rather than a name. Throw a
+[`ConfigFileException`](@ref) if no entry covers the name, or if the patterns of
+several do - a name a caller passes can never itself contain `*`, so the
+ambiguity is the config's to resolve.
+"""
+function _writemetadata(handle::DataRegistryHandle, data_product::String)
+    if !haskey(handle.config, "write")
+        throw(ConfigFileException("no 'write' section found - check config file."))
+    end
+    entries = handle.config["write"]
+
+    for entry in entries
+        if entry["data_product"] == data_product
+            use = get(entry, "use", Dict())
+            return (entry = entry,
+                    name = get(use, "data_product", data_product))
+        end
+    end
+
+    patterns = [entry
+                for entry in entries
+                if occursin('*', entry["data_product"]) &&
+        occursin(_globregex(entry["data_product"]), data_product)]
+    if length(patterns) == 1
+        return (entry = only(patterns), name = data_product)
+    elseif isempty(patterns)
+        throw(ConfigFileException("'$data_product' not found in 'write' - check config file."))
+    end
+    matched = join(("'$(entry["data_product"])'" for entry in patterns), ", ")
+    msg = string("'", data_product, "' matches more than one wildcard in ",
+                 "'write' (", matched, ") - check config file.")
     return throw(ConfigFileException(msg))
 end
 
@@ -349,19 +394,19 @@ end
     _resolvewrite(handle, data_product, component, file_type, description)
 
 Return the metadata for writing `component` (`nothing` for a whole file) of a
-`write:` data product of the working config: where its file goes (a new
-temporary file, or the file another component of the same data product
-already started in this code run) and the names it will be registered under.
+`write:` data product of the working config, or of one a wildcard entry covers:
+where its file goes (a new temporary file, or the file another component of the
+same data product already started in this code run) and the names it will be
+registered under.
 """
 function _resolvewrite(handle::DataRegistryHandle, data_product::String,
                        component::Union{Nothing, String},
                        file_type::String, description::Union{Nothing, String})
-    wmd = _getmetadata(handle, data_product, "write")
+    wmd, use_data_product = _writemetadata(handle, data_product)
     use = get(wmd, "use", Dict())
     data_store = handle.config["run_metadata"]["write_data_store"]
     default_namespace = handle.config["run_metadata"]["default_output_namespace"]
     use_namespace = get(use, "namespace", default_namespace)
-    use_data_product = get(use, "data_product", data_product)
     use_component = get(use, "component", component)
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])
