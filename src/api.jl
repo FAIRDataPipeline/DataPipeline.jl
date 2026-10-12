@@ -88,11 +88,25 @@ function finalise(handle::DataRegistryHandle)
 end
 
 """
-    link_read!(handle, data_product)
+    link_read!(handle, data_product; path = nothing, force = false)
     link_read!(handle, pattern)
 
 Return the path of the file behind a `read:` data product of the working
 config, recording it as an input of the code run.
+
+The file is in the data store, named by its hash. For code that needs its
+input under a name or in a place of its own, `path` asks for the file there,
+and is what is then returned:
+- with nothing at `path`, the file is put there, any missing directories
+  being made: as a hard link to the data store's file where one can be made,
+  so that no bytes are copied, else as a copy;
+- a file already there with the same contents is left exactly as it is,
+  whether it is the data store's file under a second name or a copy of it;
+- a file there with other contents is an error, and nothing is overwritten,
+  unless `force` is `true`, when it is replaced by the registered file. A
+  directory there is always an error.
+A file that is a hard link is the data store's own, so it must not be written
+to. `force` does nothing without `path`.
 
 Given a pattern instead - a name with one or more `*`, each matching one
 segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
@@ -102,15 +116,56 @@ an input (the directory itself is not). A link is named after its data
 product with `/` replaced by `_`, plus the file's extension; the directory is
 named by the SHA-1 of the sorted list of link names and file hashes, so the
 same set of files gives the same name. The directory is removed when Julia
-exits.
+exits. A pattern takes no `path`.
+
+See also: [`canread`](@ref)
 """
-function link_read!(handle::DataRegistryHandle, data_product::String)
+function link_read!(handle::DataRegistryHandle, data_product::String;
+                    path::Union{Nothing, AbstractString} = nothing,
+                    force::Bool = false)
+    return _linkread!(handle, data_product, path, force)
+end
+
+# The file in the data store, or for a pattern a directory of links to them
+function _linkread!(handle::DataRegistryHandle, data_product::String,
+                    ::Nothing, ::Bool)
     occursin('*', data_product) && return _link_read_directory!(handle,
                                  data_product)
     key = (data_product, nothing)
     haskey(handle.inputs, key) && return handle.inputs[key]["path"]
     path = _readdataproduct(handle, data_product, nothing)
     println("data product found: ", handle.inputs[key]["use_dp"])
+    return path
+end
+
+# The file made available at `path`, where the caller wants it
+function _linkread!(handle::DataRegistryHandle, data_product::String,
+                    path::AbstractString, force::Bool)
+    occursin('*', data_product) &&
+        throw(ArgumentError("a path cannot be given with a pattern: $data_product"))
+    path = String(path)
+    stored = _linkread!(handle, data_product, nothing, force)
+    input = handle.inputs[(data_product, nothing)]
+    isfile(stored) ||
+        throw(ReadWriteException("the file of '$data_product' is not in the data store: $stored"))
+    if isdir(path)
+        throw(ReadWriteException("cannot put '$data_product' at $path, which is a directory"))
+    elseif ispath(path) || islink(path)
+        isfile(path) &&
+            (samefile(path, stored) || _getfilehash(path) == input["hash"]) &&
+            return path
+        if !force
+            msg = string(path, " exists and is not ", input["use_dp"],
+                         " (namespace ", input["use_namespace"], ", version ",
+                         input["use_version"], "): remove it, or pass ",
+                         "force = true to replace it")
+            throw(ReadWriteException(msg))
+        end
+        rm(path)
+    else
+        mkpath(dirname(path))
+    end
+    _placefile(stored, path)
     return path
 end
 
@@ -146,6 +201,26 @@ function _link_read_directory!(handle::DataRegistryHandle, pattern::String)
         end
     end
     return directory
+end
+
+"""
+    canread(handle, data_product)
+    canread(handle, pattern)
+
+Return whether the working config has a `read:` entry for `data_product`, or
+one that matches `pattern`: whether [`link_read!`](@ref) would find something
+to read under that name. Only the working config is consulted, and nothing is
+recorded, so a script can check every name it will read before it does any
+work.
+
+See also: [`canwrite`](@ref)
+"""
+function canread(handle::DataRegistryHandle, data_product::String)
+    return _covered() do
+        return occursin('*', data_product) ?
+               _matchingreads(handle, data_product) :
+               _getmetadata(handle, data_product, "read")
+    end
 end
 
 # The path of a `read:` data product's file, read on first use and recorded as
@@ -205,12 +280,22 @@ function read_distribution(handle::DataRegistryHandle, data_product::String,
 end
 
 """
-    link_write!(handle, data_product)
+    link_write!(handle, data_product; path = nothing)
 
 Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
 hash and registers it, replacing `\${{RUN_ID}}` in the registered name with
 the code run's uuid.
+
+`path` names a file that exists already, to be registered as the data product
+in place of one the caller writes. It is put in the data store - as a hard
+link where one can be made, so that no bytes are copied, else as a copy - and
+its path there is returned; the file at `path` is left as it was. Its
+extension must be the entry's file type. A hard link is the same file under a
+second name, so the file must not be written to afterwards. A file whose
+bytes are those of the highest version of the data product already
+registered is not registered again: no version is made, it is not an output
+of the code run, and the path returned is that of the registered file.
 
 `data_product` may also be a name that a wildcard `write:` entry stands for -
 one whose name holds `*`s, each matching one segment - in which case that
@@ -218,8 +303,17 @@ entry's file type, description and `use:` block are used and the name is
 registered as given. A name matching the patterns of several entries is an
 error, since nothing distinguishes them: the file type comes from the entry
 found, not from the caller.
+
+See also: [`canwrite`](@ref)
 """
-function link_write!(handle::DataRegistryHandle, data_product::String)
+function link_write!(handle::DataRegistryHandle, data_product::String;
+                     path::Union{Nothing, AbstractString} = nothing)
+    return _linkwrite!(handle, data_product, path)
+end
+
+# A new file in the data store, for the caller to write
+function _linkwrite!(handle::DataRegistryHandle, data_product::String,
+                     ::Nothing)
     key = (data_product, nothing)
     haskey(handle.outputs, key) && return handle.outputs[key]["path"]
     wmd = _writemetadata(handle, data_product).entry
@@ -227,6 +321,63 @@ function link_write!(handle::DataRegistryHandle, data_product::String)
                              nothing)
     handle.outputs[key] = metadata
     return metadata["path"]
+end
+
+# A file that exists already, linked or copied into the data store
+function _linkwrite!(handle::DataRegistryHandle, data_product::String,
+                     path::AbstractString)
+    path = String(path)
+    isfile(path) || throw(ReadWriteException("no file to register at $path"))
+    wmd, name = _writemetadata(handle, data_product)
+    if _extension(path) != wmd["file_type"]
+        msg = string("'", data_product, "' is written as a ", wmd["file_type"],
+                     " file in 'write', which ", path,
+                     " is not - check config file.")
+        throw(ConfigFileException(msg))
+    end
+    hash = _getfilehash(path)
+
+    # A data product has one file in a code run, so a second call must bring
+    # the same bytes
+    started = unique(value["path"]
+                     for (key, value) in handle.outputs
+                     if key[1] == data_product)
+    if !isempty(started)
+        file = only(started)
+        isfile(file) && _getfilehash(file) == hash && return file
+        throw(ReadWriteException("'$data_product' is already being written by this code run, from another file"))
+    end
+
+    unchanged = _unchangedfile(handle.registry, _writenamespace(handle, wmd),
+                               name, hash)
+    if !isnothing(unchanged)
+        println("data product unchanged: ", name, " (", unchanged.version, ")")
+        return unchanged.path
+    end
+
+    metadata = _resolvewrite(handle, data_product, nothing, wmd["file_type"],
+                             nothing)
+    _placefile(path, metadata["path"])
+    handle.outputs[(data_product, nothing)] = metadata
+    return metadata["path"]
+end
+
+"""
+    canwrite(handle, data_product)
+
+Return whether the working config has a `write:` entry that covers
+`data_product` - one naming it exactly, or one wildcard entry whose pattern
+it matches: whether [`link_write!`](@ref) would find an entry to write it
+under. A name that the patterns of several entries match is not covered. Only
+the working config is consulted, and nothing is recorded, so a script can
+check every name it will write before it does any work.
+
+See also: [`canread`](@ref)
+"""
+function canwrite(handle::DataRegistryHandle, data_product::String)
+    return _covered() do
+        return _writemetadata(handle, data_product)
+    end
 end
 
 """

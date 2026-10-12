@@ -26,6 +26,7 @@ read_estimate
 read_distribution
 link_read!
 link_read_files!
+DataPipeline.canread
 ```
 
 ## Writing data
@@ -36,6 +37,7 @@ write_table
 write_estimate
 write_distribution
 link_write!
+DataPipeline.canwrite
 ```
 
 ## Asking what the registry knows about a file or a repository

@@ -292,6 +292,79 @@ function _writemetadata(handle::DataRegistryHandle, data_product::String)
     return throw(ConfigFileException(msg))
 end
 
+# The namespace a `write:` entry registers under: its own, else the run's
+# default for outputs
+function _writenamespace(handle::DataRegistryHandle, entry::AbstractDict)
+    use = get(entry, "use", Dict())
+    return get(use, "namespace",
+               handle.config["run_metadata"]["default_output_namespace"])
+end
+
+# Whether a lookup in the working config finds its entry, where not finding
+# one is a `ConfigFileException`
+function _covered(lookup::Function)
+    try
+        lookup()
+        return true
+    catch e
+        e isa ConfigFileException || rethrow()
+        return false
+    end
+end
+
+"""
+    _latestdataproduct(registry, namespace, data_product)
+
+Return the registry entry of the highest version of a data product in a
+namespace, or `nothing` if the name is not registered there.
+"""
+function _latestdataproduct(registry::RegistryEndpoint, namespace::String,
+                            data_product::String)
+    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
+    isnothing(namespace_id) && return nothing
+    # The registry matches names as globs, so keep the exact name only
+    entries = [entry
+               for entry in _getentries(registry, "data_product",
+                                        Dict("name" => data_product,
+                                             "namespace" => namespace_id))
+               if entry["name"] == data_product]
+    isempty(entries) && return nothing
+    return argmax(entry -> VersionNumber(entry["version"]), entries)
+end
+
+"""
+    _unchangedfile(registry, namespace, data_product, hash)
+
+Return the path and version of the file registered as the highest version of
+a data product, as `(path, version)`, if its bytes have the given `hash`;
+`nothing` if they differ, if that version has no file, or if the name is not
+registered.
+"""
+function _unchangedfile(registry::RegistryEndpoint, namespace::String,
+                        data_product::String, hash::String)
+    latest = _latestdataproduct(registry, namespace, data_product)
+    isnothing(latest) && return nothing
+    object = _getentry(registry, URIs.URI(latest["object"]))
+    isnothing(object["storage_location"]) && return nothing
+    location = _getstoragelocation(registry, latest["object"])
+    location.hash == hash || return nothing
+    return (path = location.path, version = String(latest["version"]))
+end
+
+# Make the file at `source` available at `destination`, which must not exist:
+# a hard link where one can be made, so that no bytes are copied, else a copy.
+# A symbolic link is resolved first, so that it is the file that arrives.
+function _placefile(source::AbstractString, destination::AbstractString)
+    source = realpath(source)
+    try
+        hardlink(source, destination)
+    catch e
+        isa(e, Base.IOError) || rethrow()
+        cp(source, destination)
+    end
+    return destination
+end
+
 # Remove `directory` and its parents while they are empty, stopping at `stop`
 function _pruneempty(directory::AbstractString, stop::AbstractString)
     stop = rstrip(normpath(stop), '/')
@@ -405,8 +478,7 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     wmd, use_data_product = _writemetadata(handle, data_product)
     use = get(wmd, "use", Dict())
     data_store = handle.config["run_metadata"]["write_data_store"]
-    default_namespace = handle.config["run_metadata"]["default_output_namespace"]
-    use_namespace = get(use, "namespace", default_namespace)
+    use_namespace = _writenamespace(handle, wmd)
     use_component = get(use, "component", component)
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])

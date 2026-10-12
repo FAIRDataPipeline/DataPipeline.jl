@@ -50,6 +50,8 @@ public DataRegistryHandle, RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
+# Asking what the working config lets a run read and write
+public canread, canwrite
 # Asking what the registry knows about a file or a git repository on disk
 public identify
 public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
