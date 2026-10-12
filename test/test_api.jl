@@ -1160,6 +1160,98 @@ Test.@testset "\${{RUN_ID}} in an output name" begin
           [wmd["component_url"]]
 end
 
+Test.@testset "several versions of one data product in one config" begin
+    name = "data_product/versions/$uid"
+    label_older = "versions/older/$uid"
+    label_newer = "versions/newer/$uid"
+    older, newer, newest = "1.0.0", "2.0.0", "2.0.1"
+    labelled = ((label_older, older), (label_newer, newer))
+    # The versions of the data product that the registry holds
+    function registered_versions(registry)
+        return sort([entry["version"]
+                     for entry in DataPipeline._getentries(registry,
+                                                           "data_product",
+                                                           Dict("name" =>
+                                                                    name))])
+    end
+    # The code run of a handle, as the registry holds it
+    function code_run_of(handle)
+        return DataPipeline._getentry(handle.registry,
+                                      URIs.URI(handle.code_run_obj))
+    end
+
+    # Two versions written by one run: a label each, both naming the data
+    # product in their use: block
+    config = DataPipeline._createconfig(cpath)
+    for (label, use_version) in labelled
+        DataPipeline._addwrite(config, label, "description", file_type = "txt",
+                               use_data_product = name,
+                               use_version = use_version)
+    end
+    handle = DataPipeline.initialise(config, config)
+    path_older = link_write!(handle, label_older)
+    path_newer = link_write!(handle, label_newer)
+    @test dirname(path_older) == joinpath(datastore, namespace, name)
+    @test dirname(path_newer) == dirname(path_older)
+    @test path_newer != path_older
+    write(path_older, "older version $uid\n")
+    write(path_newer, "newer version $uid\n")
+    DataPipeline.finalise(handle)
+
+    outputs = [handle.outputs[(label, nothing)] for (label, _) in labelled]
+    @test registered_versions(handle.registry) == [older, newer]
+    @test [DataPipeline._finddataproduct(handle.registry, namespace, name,
+                                         use_version)["object"]
+           for (_, use_version) in labelled] ==
+          [wmd["object_url"] for wmd in outputs]
+    @test outputs[1]["object_url"] != outputs[2]["object_url"]
+    @test read(outputs[1]["path"], String) == "older version $uid\n"
+    @test read(outputs[2]["path"], String) == "newer version $uid\n"
+    written = [wmd["component_url"] for wmd in outputs]
+    @test sort(code_run_of(handle)["outputs"]) == sort(written)
+
+    # Both read by one run, under the same two labels
+    config = DataPipeline._createconfig(cpath)
+    for (label, use_version) in labelled
+        DataPipeline._addread(config, label, use_data_product = name,
+                              use_version = use_version)
+    end
+    handle = DataPipeline.initialise(config, config)
+    @test read(link_read!(handle, label_older), String) ==
+          "older version $uid\n"
+    @test read(link_read!(handle, label_newer), String) ==
+          "newer version $uid\n"
+    @test [handle.inputs[(label, nothing)]["use_version"]
+           for (label, _) in labelled] == [older, newer]
+    DataPipeline.finalise(handle)
+    @test sort(code_run_of(handle)["inputs"]) == sort(written)
+
+    # One label in both blocks: read at the version that exists and written at
+    # a new one, so the run's input and its output are different files
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addread(config, name, use_version = newer)
+    DataPipeline._addwrite(config, name, "description", file_type = "txt",
+                           use_version = newest)
+    handle = DataPipeline.initialise(config, config)
+    path_read = link_read!(handle, name)
+    path_write = link_write!(handle, name)
+    @test path_read == outputs[2]["path"]
+    @test path_write != path_read
+    @test link_read!(handle, name) == path_read
+    write(path_write, "newest version $uid\n")
+    DataPipeline.finalise(handle)
+
+    code_run = code_run_of(handle)
+    @test code_run["inputs"] == [written[2]]
+    @test code_run["outputs"] ==
+          [handle.outputs[(name, nothing)]["component_url"]]
+    @test isdisjoint(code_run["inputs"], code_run["outputs"])
+    @test registered_versions(handle.registry) == [older, newer, newest]
+    @test read(path_read, String) == "newer version $uid\n"
+    @test read(handle.outputs[(name, nothing)]["path"], String) ==
+          "newest version $uid\n"
+end
+
 Test.@testset "registry from the working config" begin
     data_product = "data_product/link_write/$uid"
     launched = DataPipeline.RegistryEndpoint(launch_url)
