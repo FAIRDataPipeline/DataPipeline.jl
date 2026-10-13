@@ -40,6 +40,12 @@ link_write!
 DataPipeline.canwrite
 ```
 
+## Citing where data came from
+
+```@docs
+register_citations!
+```
+
 ## Asking what the registry knows about a file or a repository
 
 `DataPipeline.identify` takes a file or the top-level folder of a git

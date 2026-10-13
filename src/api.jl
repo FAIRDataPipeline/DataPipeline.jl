@@ -58,7 +58,9 @@ function initialise(config_file::String = FDP_PATH_CONFIG(),
     return DataRegistryHandle(config, dirname(abspath(config_file)), registry,
                               config_url, script_url, repo_url, datastore_url,
                               code_run["url"], code_run["uuid"],
-                              Dict(), Dict(), PendingIssue[])
+                              Dict(), Dict(), PendingIssue[],
+                              Dict{String, SourceCitation}(),
+                              Dict{String, SourceCitation}())
 end
 
 """

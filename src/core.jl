@@ -139,6 +139,34 @@ struct PendingIssue
 end
 
 """
+    SourceCitation
+
+What a citation says of the source it describes, as far as it goes: what the
+registry's record of a file's source is drawn from.
+
+# Fields
+- `key`: the key of the BibTeX entry it was read from
+- `identifier`: the source's DOI as a URL, in lower case, else its URL, else
+  `nothing`
+- `title`: its title, or `nothing`
+- `authors`: its authors in order, a person as given names then family name,
+  an organisation as it is written
+- `release_date`: when it was released, a missing month or day being the
+  first, or `nothing`
+- `release_version`: its version as the citation writes it, or `nothing`
+- `description`: the citation's note, or `nothing`
+"""
+struct SourceCitation
+    key::String
+    identifier::Union{Nothing, String}
+    title::Union{Nothing, String}
+    authors::Vector{String}
+    release_date::Union{Nothing, DateTime}
+    release_version::Union{Nothing, String}
+    description::Union{Nothing, String}
+end
+
+"""
     DataRegistryHandle
 
 The state of one code run, created by [`initialise`](@ref) and completed by
@@ -159,6 +187,8 @@ The state of one code run, created by [`initialise`](@ref) and completed by
   keyed by `(data_product, component)`, with `component` `nothing` for a whole
   file
 - `issues`: issues raised so far, registered at `finalise`
+- `citations`: the citations read by [`register_citations!`](@ref), by key
+- `doi_lookups`: the citations looked up from a DOI so far, by the DOI's URL
 """
 struct DataRegistryHandle
     config::Dict
@@ -173,6 +203,8 @@ struct DataRegistryHandle
     inputs::Dict
     outputs::Dict
     issues::Vector{PendingIssue}
+    citations::Dict{String, SourceCitation}
+    doi_lookups::Dict{String, SourceCitation}
 end
 
 function Base.show(io::IO, handle::DataRegistryHandle)
@@ -195,7 +227,8 @@ function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
                     isnothing(component) ? "" : " / " * component)
         end
     end
-    return print(io, "  issues: ", length(handle.issues))
+    println(io, "  issues: ", length(handle.issues))
+    return print(io, "  citations: ", length(handle.citations))
 end
 
 # == Functions ==
