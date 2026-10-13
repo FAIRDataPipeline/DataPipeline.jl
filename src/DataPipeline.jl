@@ -45,7 +45,7 @@ export link_read!, link_read_files!, link_write!
 export read_array, read_table, read_distribution, read_estimate
 export write_array, write_table, write_distribution, write_estimate
 export raise_issue
-export register_citations!
+export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
 public initialise, finalise
@@ -63,6 +63,7 @@ public AbstractCommitSelection, AncestorCommits, CheckedOutCommit, AllCommits
 
 include("fdp_i.jl")
 include("citations.jl")
+include("authors.jl")
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits

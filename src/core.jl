@@ -189,6 +189,8 @@ The state of one code run, created by [`initialise`](@ref) and completed by
 - `issues`: issues raised so far, registered at `finalise`
 - `citations`: the citations read by [`register_citations!`](@ref), by key
 - `doi_lookups`: the citations looked up from a DOI so far, by the DOI's URL
+- `authors`: the identifiers that [`register_authors!`](@ref) has been given
+  for each author's name
 """
 struct DataRegistryHandle
     config::Dict
@@ -205,6 +207,7 @@ struct DataRegistryHandle
     issues::Vector{PendingIssue}
     citations::Dict{String, SourceCitation}
     doi_lookups::Dict{String, SourceCitation}
+    authors::Dict{String, Vector{String}}
 end
 
 function Base.show(io::IO, handle::DataRegistryHandle)
@@ -228,7 +231,8 @@ function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
         end
     end
     println(io, "  issues: ", length(handle.issues))
-    return print(io, "  citations: ", length(handle.citations))
+    println(io, "  citations: ", length(handle.citations))
+    return print(io, "  authors: ", length(handle.authors))
 end
 
 # == Functions ==

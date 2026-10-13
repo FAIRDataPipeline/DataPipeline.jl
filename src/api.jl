@@ -60,7 +60,8 @@ function initialise(config_file::String = FDP_PATH_CONFIG(),
                               code_run["url"], code_run["uuid"],
                               Dict(), Dict(), PendingIssue[],
                               Dict{String, SourceCitation}(),
-                              Dict{String, SourceCitation}())
+                              Dict{String, SourceCitation}(),
+                              Dict{String, Vector{String}}())
 end
 
 """

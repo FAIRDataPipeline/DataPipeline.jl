@@ -44,6 +44,7 @@ DataPipeline.canwrite
 
 ```@docs
 register_citations!
+register_authors!
 ```
 
 ## Asking what the registry knows about a file or a repository
