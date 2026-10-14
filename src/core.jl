@@ -167,6 +167,40 @@ struct SourceCitation
 end
 
 """
+    SourceRecord
+
+What the registry is to record of the source that a registered file comes
+from, as a link call's citation and keywords give it.
+
+# Fields
+- `identifier`, `title`, `version`: what makes it one source in the registry -
+  its DOI as a URL, or other URL; the file's own title; and the source's
+  release version, in full
+- `release_date`: when the source was released
+- `description`: more about it, or `nothing`
+- `primary`: whether the file is the identified item or one of its files, as
+  against something requested or derived from it
+- `authors`: registry URLs of its authors, who are the registered file's
+- `original_store`: where the file was fetched from, as the storage root and
+  the path under it that the registry records, or `nothing` where that is
+  nowhere other people can reach
+- `licence`: the licence's name - its identifier in the SPDX licence list,
+  or its URL where it has none - and the URL that identifies it, or `nothing`
+  with no licence
+"""
+struct SourceRecord
+    identifier::String
+    title::String
+    version::String
+    release_date::DateTime
+    description::Union{Nothing, String}
+    primary::Bool
+    authors::Vector{String}
+    original_store::Union{Nothing, @NamedTuple{root::String, path::String}}
+    licence::Union{Nothing, @NamedTuple{info::String, identifier::String}}
+end
+
+"""
     DataRegistryHandle
 
 The state of one code run, created by [`initialise`](@ref) and completed by
@@ -186,6 +220,9 @@ The state of one code run, created by [`initialise`](@ref) and completed by
 - `inputs`, `outputs`: metadata of what has been read and written so far,
   keyed by `(data_product, component)`, with `component` `nothing` for a whole
   file
+- `unchanged`: what was written and found to be registered already, so that
+  no version was made of it and it is no output of the code run; keyed as
+  `outputs` is
 - `issues`: issues raised so far, registered at `finalise`
 - `citations`: the citations read by [`register_citations!`](@ref), by key
 - `doi_lookups`: the citations looked up from a DOI so far, by the DOI's URL
@@ -204,6 +241,7 @@ struct DataRegistryHandle
     code_run_uuid::String
     inputs::Dict
     outputs::Dict
+    unchanged::Dict
     issues::Vector{PendingIssue}
     citations::Dict{String, SourceCitation}
     doi_lookups::Dict{String, SourceCitation}
@@ -222,7 +260,7 @@ function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
     println(io, "  registry: ", handle.registry.url)
     println(io, "  code run: ", handle.code_run_obj)
     for (label, table) in (("inputs", handle.inputs),
-        ("outputs", handle.outputs))
+        ("outputs", handle.outputs), ("unchanged", handle.unchanged))
         println(io, "  ", label, ": ", length(table))
         for (dp, component) in sort(collect(keys(table)),
                                     by = key -> string(key))

@@ -64,6 +64,8 @@ public AbstractCommitSelection, AncestorCommits, CheckedOutCommit, AllCommits
 include("fdp_i.jl")
 include("citations.jl")
 include("authors.jl")
+include("licences.jl")
+include("sources.jl")
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits

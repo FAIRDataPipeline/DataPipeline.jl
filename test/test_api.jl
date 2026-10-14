@@ -1394,6 +1394,102 @@ Test.@testset "link_write!() with a path" begin
     @test registered_versions(handle.registry, covered) == ["0.0.1"]
 end
 
+Test.@testset "an output that is registered already" begin
+    name = "data_product/unchanged/$uid"
+    tabled = "data_product/unchanged/tabled/$uid"
+    # A config that offers both names at a version, one as text, one as TOML
+    function offering(use_version)
+        config = DataPipeline._createconfig(cpath)
+        for (written, file_type) in ((name, "txt"), (tabled, "toml"))
+            DataPipeline._addwrite(config, written, "description",
+                                   file_type = file_type,
+                                   use_version = use_version)
+        end
+        return DataPipeline.initialise(config, config)
+    end
+
+    handle = offering("0.0.1")
+    registry = handle.registry
+    # The descriptions of the issues raised with a registered component
+    function raised(component_url)
+        return [DataPipeline._getentry(registry, URIs.URI(url))["description"]
+                for url in issues_of(registry, component_url)]
+    end
+    write(link_write!(handle, name), "written $uid\n")
+    DataPipeline.finalise(handle)
+    registered = handle.outputs[(name, nothing)]["path"]
+    component = handle.outputs[(name, nothing)]["component_url"]
+    @test isempty(handle.unchanged)
+
+    # The same bytes written again are not registered again: the file that
+    # was written is removed, no version is made, and it is no output of the
+    # code run. An issue raised with it is one with what is registered
+    handle = offering("0.0.2")
+    written = link_write!(handle, name)
+    write(written, "written $uid\n")
+    raise_issue(handle, name, "written twice $uid")
+    DataPipeline.finalise(handle)
+    @test !isfile(written)
+    @test readdir(dirname(registered)) == [basename(registered)]
+    @test registered_versions(registry, name) == ["0.0.1"]
+    @test isempty(handle.outputs)
+    @test handle.unchanged[(name, nothing)]["path"] == registered
+    @test handle.unchanged[(name, nothing)]["component_url"] == component
+    @test isempty(code_run_of(handle)["outputs"])
+    @test raised(component) == ["written twice $uid"]
+    @test occursin("unchanged: 1", sprint(show, MIME("text/plain"), handle))
+
+    # Other bytes are the next version
+    handle = offering("0.0.2")
+    write(link_write!(handle, name), "written again $uid\n")
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test isempty(handle.unchanged) && length(handle.outputs) == 1
+    newer = handle.outputs[(name, nothing)]["component_url"]
+
+    # A file given by its path is found unchanged as the call is made, and an
+    # issue may be raised with it too
+    handle = offering("0.0.3")
+    given = joinpath(mktempdir(), "given.txt")
+    write(given, "written again $uid\n")
+    stored = link_write!(handle, name, path = given)
+    @test isempty(handle.outputs)
+    @test handle.unchanged[(name, nothing)]["path"] == stored
+    raise_issue(handle, name, "given again $uid")
+    DataPipeline.finalise(handle)
+    @test raised(newer) == ["given again $uid"]
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+
+    # A data product written by its components is one file, and all of them
+    # are found unchanged with it
+    estimates = ("a/b" => 1.5, "c/d" => 2.5)
+    handle = offering("0.0.1")
+    for (part, value) in estimates
+        write_estimate(handle, value, tabled, part, "an estimate")
+    end
+    DataPipeline.finalise(handle)
+    @test length(code_run_of(handle)["outputs"]) == 2
+    parts = Dict(key => metadata["component_url"]
+                 for (key, metadata) in handle.outputs)
+    handle = offering("0.0.2")
+    for (part, value) in estimates
+        write_estimate(handle, value, tabled, part, "an estimate")
+    end
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, tabled) == ["0.0.1"]
+    @test isempty(handle.outputs)
+    @test Dict(key => metadata["component_url"]
+               for (key, metadata) in handle.unchanged) == parts
+    @test isempty(code_run_of(handle)["outputs"])
+    # ... and with one of them changed it is the next version
+    handle = offering("0.0.2")
+    write_estimate(handle, 1.5, tabled, "a/b", "an estimate")
+    write_estimate(handle, 3.5, tabled, "c/d", "an estimate")
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2"]
+    @test length(code_run_of(handle)["outputs"]) == 2
+end
+
 Test.@testset "link_read!() with a path" begin
     name = "data_product/path_write/$uid"
     outside = mktempdir()
