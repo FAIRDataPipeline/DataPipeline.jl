@@ -1160,6 +1160,469 @@ Test.@testset "\${{RUN_ID}} in an output name" begin
           [wmd["component_url"]]
 end
 
+# The versions of a data product that the registry holds, in order
+function registered_versions(registry, name)
+    return sort([entry["version"]
+                 for entry in DataPipeline._getentries(registry, "data_product",
+                                                       Dict("name" => name))])
+end
+
+# The code run of a handle, as the registry holds it
+function code_run_of(handle)
+    return DataPipeline._getentry(handle.registry,
+                                  URIs.URI(handle.code_run_obj))
+end
+
+Test.@testset "several versions of one data product in one config" begin
+    name = "data_product/versions/$uid"
+    label_older = "versions/older/$uid"
+    label_newer = "versions/newer/$uid"
+    older, newer, newest = "1.0.0", "2.0.0", "2.0.1"
+    labelled = ((label_older, older), (label_newer, newer))
+
+    # Two versions written by one run: a label each, both naming the data
+    # product in their use: block
+    config = DataPipeline._createconfig(cpath)
+    for (label, use_version) in labelled
+        DataPipeline._addwrite(config, label, "description", file_type = "txt",
+                               use_data_product = name,
+                               use_version = use_version)
+    end
+    handle = DataPipeline.initialise(config, config)
+    path_older = link_write!(handle, label_older)
+    path_newer = link_write!(handle, label_newer)
+    @test dirname(path_older) == joinpath(datastore, namespace, name)
+    @test dirname(path_newer) == dirname(path_older)
+    @test path_newer != path_older
+    write(path_older, "older version $uid\n")
+    write(path_newer, "newer version $uid\n")
+    DataPipeline.finalise(handle)
+
+    outputs = [handle.outputs[(label, nothing)] for (label, _) in labelled]
+    @test registered_versions(handle.registry, name) == [older, newer]
+    @test [DataPipeline._finddataproduct(handle.registry, namespace, name,
+                                         use_version)["object"]
+           for (_, use_version) in labelled] ==
+          [wmd["object_url"] for wmd in outputs]
+    @test outputs[1]["object_url"] != outputs[2]["object_url"]
+    @test read(outputs[1]["path"], String) == "older version $uid\n"
+    @test read(outputs[2]["path"], String) == "newer version $uid\n"
+    written = [wmd["component_url"] for wmd in outputs]
+    @test sort(code_run_of(handle)["outputs"]) == sort(written)
+
+    # Both read by one run, under the same two labels
+    config = DataPipeline._createconfig(cpath)
+    for (label, use_version) in labelled
+        DataPipeline._addread(config, label, use_data_product = name,
+                              use_version = use_version)
+    end
+    handle = DataPipeline.initialise(config, config)
+    @test read(link_read!(handle, label_older), String) ==
+          "older version $uid\n"
+    @test read(link_read!(handle, label_newer), String) ==
+          "newer version $uid\n"
+    @test [handle.inputs[(label, nothing)]["use_version"]
+           for (label, _) in labelled] == [older, newer]
+    DataPipeline.finalise(handle)
+    @test sort(code_run_of(handle)["inputs"]) == sort(written)
+
+    # One label in both blocks: read at the version that exists and written at
+    # a new one, so the run's input and its output are different files
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addread(config, name, use_version = newer)
+    DataPipeline._addwrite(config, name, "description", file_type = "txt",
+                           use_version = newest)
+    handle = DataPipeline.initialise(config, config)
+    path_read = link_read!(handle, name)
+    path_write = link_write!(handle, name)
+    @test path_read == outputs[2]["path"]
+    @test path_write != path_read
+    @test link_read!(handle, name) == path_read
+    write(path_write, "newest version $uid\n")
+    DataPipeline.finalise(handle)
+
+    code_run = code_run_of(handle)
+    @test code_run["inputs"] == [written[2]]
+    @test code_run["outputs"] ==
+          [handle.outputs[(name, nothing)]["component_url"]]
+    @test isdisjoint(code_run["inputs"], code_run["outputs"])
+    @test registered_versions(handle.registry, name) == [older, newer, newest]
+    @test read(path_read, String) == "newer version $uid\n"
+    @test read(handle.outputs[(name, nothing)]["path"], String) ==
+          "newest version $uid\n"
+end
+
+# Whether a file in one directory can be hard-linked into another: not across
+# file systems, nor on one without hard links
+function can_hardlink(from, to)
+    source = joinpath(from, "probe-$(DataPipeline._randomhash())")
+    link = joinpath(to, basename(source))
+    write(source, "")
+    try
+        hardlink(source, link)
+        return true
+    catch e
+        e isa Base.IOError || rethrow()
+        return false
+    finally
+        rm(source, force = true)
+        rm(link, force = true)
+    end
+end
+
+Test.@testset "link_write!() with a path" begin
+    name = "data_product/path_write/$uid"
+    outside = mktempdir()
+    file = joinpath(outside, "fetched.txt")
+    write(file, "fetched $uid\n")
+    linkable = can_hardlink(outside, datastore)
+    # A config with one write entry for the name, at the version offered
+    function offering(use_version)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, name, "description", file_type = "txt",
+                               use_version = use_version)
+        return DataPipeline.initialise(config, config)
+    end
+
+    # The file is put in the data store under a temporary name, as a hard
+    # link where one can be made, and stays where it was
+    handle = offering("0.0.1")
+    stored = link_write!(handle, name, path = file)
+    @test dirname(stored) == joinpath(datastore, namespace, name)
+    @test startswith(basename(stored), "dat-") && endswith(stored, ".txt")
+    @test read(stored, String) == "fetched $uid\n"
+    @test samefile(stored, file) == linkable
+    @test length(handle.outputs) == 1
+    # The same file again is the same output; another file is refused
+    @test link_write!(handle, name, path = file) == stored
+    @test link_write!(handle, name) == stored
+    other = joinpath(outside, "other.txt")
+    write(other, "other $uid\n")
+    @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
+                                                             path = other)
+    @test length(handle.outputs) == 1
+    DataPipeline.finalise(handle)
+
+    registered = handle.outputs[(name, nothing)]["path"]
+    @test basename(registered) == DataPipeline._getfilehash(file) * ".txt"
+    @test isfile(registered) && !isfile(stored)
+    @test read(file, String) == "fetched $uid\n"
+    @test samefile(registered, file) == linkable
+    @test registered_versions(handle.registry, name) == ["0.0.1"]
+    @test code_run_of(handle)["outputs"] ==
+          [handle.outputs[(name, nothing)]["component_url"]]
+
+    # The same bytes are not registered again, whether the config offers
+    # the next version or the one that exists: the registered file is
+    # returned and the run has no output
+    again = joinpath(outside, "again.txt")
+    cp(file, again)
+    for offered in ("0.0.2", "0.0.1")
+        handle = offering(offered)
+        @test link_write!(handle, name, path = again) == registered
+        @test isempty(handle.outputs)
+        DataPipeline.finalise(handle)
+        @test isempty(code_run_of(handle)["outputs"])
+    end
+    @test registered_versions(handle.registry, name) == ["0.0.1"]
+
+    # Other bytes are a new version, at the version the config offers
+    changed = joinpath(outside, "changed.txt")
+    write(changed, "fetched again $uid\n")
+    handle = offering("0.0.2")
+    link_write!(handle, name, path = changed)
+    DataPipeline.finalise(handle)
+    @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
+    @test read(registered, String) == "fetched $uid\n"
+
+    # A version that exists is refused, as for any write
+    handle = offering("0.0.2")
+    @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
+                                                             path = other)
+    @test isempty(handle.outputs)
+
+    # It is the highest version that a file is compared with, so the first
+    # version's bytes are now a third version. They are in the store already,
+    # so the link made for them is removed, which leaves the original alone
+    handle = offering("0.0.3")
+    link_write!(handle, name, path = file)
+    @test length(handle.outputs) == 1
+    DataPipeline.finalise(handle)
+    @test registered_versions(handle.registry, name) ==
+          ["0.0.1", "0.0.2", "0.0.3"]
+    @test handle.outputs[(name, nothing)]["path"] == registered
+    @test read(file, String) == "fetched $uid\n"
+    @test readdir(dirname(registered)) ==
+          sort([DataPipeline._getfilehash(path) * ".txt"
+                for path in (file, changed)])
+
+    # What cannot be registered: no file, a directory, a name no entry
+    # covers, and a file that is not of the entry's file type
+    handle = offering("0.0.4")
+    wrong_type = joinpath(outside, "fetched.csv")
+    write(wrong_type, "a,b\n")
+    @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
+                                                             path = joinpath(outside,
+                                                                             "absent.txt"))
+    @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
+                                                             path = outside)
+    @test_throws DataPipeline.ConfigFileException link_write!(handle,
+                                                              "data_product/elsewhere/$uid",
+                                                              path = file)
+    @test_throws DataPipeline.ConfigFileException link_write!(handle, name,
+                                                              path = wrong_type)
+    @test isempty(handle.outputs)
+
+    # A name a wildcard entry covers, from a symbolic link: it is the file
+    # that arrives in the store, not the link. On macOS a hard link to a
+    # symbolic link is one to its target anyway, so there this check tells
+    # only when the file had to be copied
+    pattern = "$name/*"
+    covered = "$name/covered"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, pattern, "description", file_type = "txt",
+                           use_version = "0.0.1", use_data_product = pattern)
+    handle = DataPipeline.initialise(config, config)
+    target = joinpath(outside, "target.txt")
+    write(target, "through a link $uid\n")
+    symlink(target, joinpath(outside, "link.txt"))
+    stored = link_write!(handle, covered, path = joinpath(outside, "link.txt"))
+    @test dirname(stored) == joinpath(datastore, namespace, covered)
+    @test !islink(stored)
+    @test read(stored, String) == "through a link $uid\n"
+    DataPipeline.finalise(handle)
+    @test registered_versions(handle.registry, covered) == ["0.0.1"]
+end
+
+Test.@testset "an output that is registered already" begin
+    name = "data_product/unchanged/$uid"
+    tabled = "data_product/unchanged/tabled/$uid"
+    # A config that offers both names at a version, one as text, one as TOML
+    function offering(use_version)
+        config = DataPipeline._createconfig(cpath)
+        for (written, file_type) in ((name, "txt"), (tabled, "toml"))
+            DataPipeline._addwrite(config, written, "description",
+                                   file_type = file_type,
+                                   use_version = use_version)
+        end
+        return DataPipeline.initialise(config, config)
+    end
+
+    handle = offering("0.0.1")
+    registry = handle.registry
+    # The descriptions of the issues raised with a registered component
+    function raised(component_url)
+        return [DataPipeline._getentry(registry, URIs.URI(url))["description"]
+                for url in issues_of(registry, component_url)]
+    end
+    write(link_write!(handle, name), "written $uid\n")
+    DataPipeline.finalise(handle)
+    registered = handle.outputs[(name, nothing)]["path"]
+    component = handle.outputs[(name, nothing)]["component_url"]
+    @test isempty(handle.unchanged)
+
+    # The same bytes written again are not registered again: the file that
+    # was written is removed, no version is made, and it is no output of the
+    # code run. An issue raised with it is one with what is registered
+    handle = offering("0.0.2")
+    written = link_write!(handle, name)
+    write(written, "written $uid\n")
+    raise_issue(handle, name, "written twice $uid")
+    DataPipeline.finalise(handle)
+    @test !isfile(written)
+    @test readdir(dirname(registered)) == [basename(registered)]
+    @test registered_versions(registry, name) == ["0.0.1"]
+    @test isempty(handle.outputs)
+    @test handle.unchanged[(name, nothing)]["path"] == registered
+    @test handle.unchanged[(name, nothing)]["component_url"] == component
+    @test isempty(code_run_of(handle)["outputs"])
+    @test raised(component) == ["written twice $uid"]
+    @test occursin("unchanged: 1", sprint(show, MIME("text/plain"), handle))
+
+    # Other bytes are the next version
+    handle = offering("0.0.2")
+    write(link_write!(handle, name), "written again $uid\n")
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test isempty(handle.unchanged) && length(handle.outputs) == 1
+    newer = handle.outputs[(name, nothing)]["component_url"]
+
+    # A file given by its path is found unchanged as the call is made, and an
+    # issue may be raised with it too
+    handle = offering("0.0.3")
+    given = joinpath(mktempdir(), "given.txt")
+    write(given, "written again $uid\n")
+    stored = link_write!(handle, name, path = given)
+    @test isempty(handle.outputs)
+    @test handle.unchanged[(name, nothing)]["path"] == stored
+    raise_issue(handle, name, "given again $uid")
+    DataPipeline.finalise(handle)
+    @test raised(newer) == ["given again $uid"]
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+
+    # A data product written by its components is one file, and all of them
+    # are found unchanged with it
+    estimates = ("a/b" => 1.5, "c/d" => 2.5)
+    handle = offering("0.0.1")
+    for (part, value) in estimates
+        write_estimate(handle, value, tabled, part, "an estimate")
+    end
+    DataPipeline.finalise(handle)
+    @test length(code_run_of(handle)["outputs"]) == 2
+    parts = Dict(key => metadata["component_url"]
+                 for (key, metadata) in handle.outputs)
+    handle = offering("0.0.2")
+    for (part, value) in estimates
+        write_estimate(handle, value, tabled, part, "an estimate")
+    end
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, tabled) == ["0.0.1"]
+    @test isempty(handle.outputs)
+    @test Dict(key => metadata["component_url"]
+               for (key, metadata) in handle.unchanged) == parts
+    @test isempty(code_run_of(handle)["outputs"])
+    # ... and with one of them changed it is the next version
+    handle = offering("0.0.2")
+    write_estimate(handle, 1.5, tabled, "a/b", "an estimate")
+    write_estimate(handle, 3.5, tabled, "c/d", "an estimate")
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2"]
+    @test length(code_run_of(handle)["outputs"]) == 2
+
+    # Arrays are found unchanged too: an HDF5 file records no times, which
+    # would make the same arrays other bytes a second later. Two components,
+    # one in a group within a group, the second added to the file once made
+    arrayed = "data_product/unchanged/arrayed/$uid"
+    arrays = ("first/array" => [1.0 2.0; 3.0 4.0],
+              "second/deeper/array" => collect(1:6))
+    for (offered, versions) in (("0.0.1", ["0.0.1"]), ("0.0.2", ["0.0.1"]))
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, arrayed, "description",
+                               file_type = "h5", use_version = offered)
+        handle = DataPipeline.initialise(config, config)
+        # Times are kept to the second: the second run writes in another
+        offered == "0.0.2" && sleep(1.5)
+        for (part, array) in arrays
+            write_array(handle, array, arrayed, part, "an array")
+        end
+        DataPipeline.finalise(handle)
+        @test registered_versions(registry, arrayed) == versions
+    end
+    @test isempty(handle.outputs) && length(handle.unchanged) == 2
+    stored = only(unique(metadata["path"]
+                         for metadata in values(handle.unchanged)))
+    @test all(HDF5.h5open(stored) do file
+                  return [read(file, part) == array for (part, array) in arrays]
+              end)
+end
+
+Test.@testset "link_read!() with a path" begin
+    name = "data_product/path_write/$uid"
+    outside = mktempdir()
+    linkable = can_hardlink(datastore, outside)
+
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addread(config, name, use_version = "0.0.1")
+    handle = DataPipeline.initialise(config, config)
+
+    # Nothing there: the file arrives, with the directories it needs, as a
+    # hard link where one can be made, and the input is recorded
+    wanted = joinpath(outside, "inputs", "deep", "fetched.txt")
+    @test link_read!(handle, name, path = wanted) == wanted
+    stored = link_read!(handle, name)
+    @test handle.inputs[(name, nothing)]["path"] == stored
+    @test length(handle.inputs) == 1
+    @test read(wanted, String) == "fetched $uid\n"
+    @test samefile(wanted, stored) == linkable
+
+    # The same contents there already are left as they are: the file itself,
+    # and a separate copy, which stays a copy
+    @test link_read!(handle, name, path = wanted) == wanted
+    @test samefile(wanted, stored) == linkable
+    copy = joinpath(outside, "copy.txt")
+    cp(stored, copy)
+    @test link_read!(handle, name, path = copy) == copy
+    @test link_read!(handle, name, path = copy, force = true) == copy
+    @test !samefile(copy, stored)
+
+    # Other contents are refused, naming what was asked for, and are kept
+    different = joinpath(outside, "different.txt")
+    write(different, "something else $uid\n")
+    err = nothing
+    try
+        link_read!(handle, name, path = different)
+    catch e
+        err = e
+    end
+    @test err isa DataPipeline.ReadWriteException
+    @test occursin(name, err.msg) && occursin("version 0.0.1", err.msg)
+    @test read(different, String) == "something else $uid\n"
+    # ... unless forced, when the registered file replaces them
+    @test link_read!(handle, name, path = different, force = true) == different
+    @test read(different, String) == "fetched $uid\n"
+    @test samefile(different, stored) == linkable
+
+    # A directory is never replaced, and a pattern takes no path
+    @test_throws DataPipeline.ReadWriteException link_read!(handle, name,
+                                                            path = outside,
+                                                            force = true)
+    @test isdir(outside)
+    @test_throws ArgumentError link_read!(handle, "data_product/*/$uid",
+                                          path = joinpath(outside, "all"))
+    @test !ispath(joinpath(outside, "all"))
+
+    # The data store's file is as it was, and the run has the one input
+    @test DataPipeline._getfilehash(stored) ==
+          handle.inputs[(name, nothing)]["hash"]
+    DataPipeline.finalise(handle)
+    @test length(code_run_of(handle)["inputs"]) == 1
+end
+
+Test.@testset "canread() and canwrite()" begin
+    root = "data_product/can/$uid"
+    pattern = "$root/wild/*"
+
+    # A config with neither block lets nothing be read or written
+    config = DataPipeline._createconfig(cpath)
+    handle = DataPipeline.initialise(config, config)
+    @test !DataPipeline.canread(handle, "$root/read")
+    @test !DataPipeline.canread(handle, "$root/*")
+    @test !DataPipeline.canwrite(handle, "$root/exact")
+
+    DataPipeline._addread(config, "$root/read", use_version = version)
+    DataPipeline._addwrite(config, "$root/exact", "description",
+                           file_type = "txt", use_version = version)
+    DataPipeline._addwrite(config, pattern, "description", file_type = "txt",
+                           use_version = version, use_data_product = pattern)
+    handle = DataPipeline.initialise(config, config)
+
+    # A read entry is found by its name, or by a pattern that matches it
+    @test DataPipeline.canread(handle, "$root/read")
+    @test !DataPipeline.canread(handle, "$root/exact")
+    @test DataPipeline.canread(handle, "$root/*")
+    @test !DataPipeline.canread(handle, "data_product/can/*")
+
+    # A write entry covers the name it gives, or one its pattern matches
+    @test DataPipeline.canwrite(handle, "$root/exact")
+    @test !DataPipeline.canwrite(handle, "$root/read")
+    @test DataPipeline.canwrite(handle, "$root/wild/covered")
+    @test !DataPipeline.canwrite(handle, "$root/wild/a/b")
+    @test !DataPipeline.canwrite(handle, "$root/wild")
+
+    # Asking records nothing and makes nothing in the data store
+    @test isempty(handle.inputs) && isempty(handle.outputs)
+    @test !isdir(joinpath(datastore, namespace, root))
+
+    # A name two patterns match is not covered, as link_write! refuses it
+    DataPipeline._addwrite(config, "$root/*/covered", "description",
+                           file_type = "txt", use_version = version)
+    handle = DataPipeline.initialise(config, config)
+    @test !DataPipeline.canwrite(handle, "$root/wild/covered")
+    @test DataPipeline.canwrite(handle, "$root/wild/other")
+    @test_throws DataPipeline.ConfigFileException link_write!(handle,
+                                                              "$root/wild/covered")
+end
+
 Test.@testset "registry from the working config" begin
     data_product = "data_product/link_write/$uid"
     launched = DataPipeline.RegistryEndpoint(launch_url)

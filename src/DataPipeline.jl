@@ -9,6 +9,8 @@ language-agnostic RESTful API that is used to interact with the Data Registry.
 
 module DataPipeline
 
+import BibInternal
+import BibParser
 using CSV
 using DataFrames
 using Dates
@@ -39,10 +41,11 @@ FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", nothing)
 include("core.jl")
 
 include("api.jl")
-export link_read!, link_read_files!, link_write!
+export link_read!, link_read_files!, link_write!, link_register!
 export read_array, read_table, read_distribution, read_estimate
 export write_array, write_table, write_distribution, write_estimate
 export raise_issue
+export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
 public initialise, finalise
@@ -50,6 +53,8 @@ public DataRegistryHandle, RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
+# Asking what the working config lets a run read and write
+public canread, canwrite
 # Asking what the registry knows about a file or a git repository on disk
 public identify
 public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
@@ -57,6 +62,10 @@ public RepositoryIdentification, RegisteredCommit, CodeRunRecord
 public AbstractCommitSelection, AncestorCommits, CheckedOutCommit, AllCommits
 
 include("fdp_i.jl")
+include("citations.jl")
+include("authors.jl")
+include("licences.jl")
+include("sources.jl")
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits

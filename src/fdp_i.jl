@@ -31,7 +31,7 @@ _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
 """
     _registerobject(registry, path, root, description;
-                    hash, local_root, public, file_type)
+                    hash, local_root, public, file_type, new_object, authors)
 
 Register a storage root, a storage location and an object in the registry,
 reusing any of the three that already exist, and return the object entry.
@@ -50,13 +50,16 @@ reusing any of the three that already exist, and return the object entry.
 - `new_object::Bool`: post a new object even if an identical one exists,
   as every data product wants its own; the config, script and repository
   objects are reused.
+- `authors::Vector{String}`: registry URLs of the object's authors; the
+  author that `fair init` attached to the user unless given.
 """
 function _registerobject(registry::RegistryEndpoint, path::String,
                          root::String, description::String;
                          hash::String = _getfilehash(joinpath(root, path)),
                          local_root::Bool = true, public::Bool = true,
                          file_type::Union{Nothing, String} = _extension(path),
-                         new_object::Bool = false)
+                         new_object::Bool = false,
+                         authors::Vector{String} = [_getauthorurl(registry)])
     root_entry = _postentry(registry, "storage_root",
                             Dict("root" => root, "local" => local_root))
     root_url = root_entry["url"]
@@ -75,7 +78,7 @@ function _registerobject(registry::RegistryEndpoint, path::String,
 
     object_query = Dict{String, Any}("description" => description,
                                      "storage_location" => location_url,
-                                     "authors" => [_getauthorurl(registry)])
+                                     "authors" => authors)
     if !isnothing(file_type)
         object_query["file_type"] = _getfiletype(registry, file_type)
     end
@@ -292,6 +295,84 @@ function _writemetadata(handle::DataRegistryHandle, data_product::String)
     return throw(ConfigFileException(msg))
 end
 
+# The namespace a `write:` entry registers under: its own, else the run's
+# default for outputs
+function _writenamespace(handle::DataRegistryHandle, entry::AbstractDict)
+    use = get(entry, "use", Dict())
+    return get(use, "namespace",
+               handle.config["run_metadata"]["default_output_namespace"])
+end
+
+# Whether a lookup in the working config finds its entry, where not finding
+# one is a `ConfigFileException`
+function _covered(lookup::Function)
+    try
+        lookup()
+        return true
+    catch e
+        e isa ConfigFileException || rethrow()
+        return false
+    end
+end
+
+"""
+    _latestdataproduct(registry, namespace, data_product)
+
+Return the registry entry of the highest version of a data product in a
+namespace, or `nothing` if the name is not registered there.
+"""
+function _latestdataproduct(registry::RegistryEndpoint, namespace::String,
+                            data_product::String)
+    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
+    isnothing(namespace_id) && return nothing
+    # The registry matches names as globs, so keep the exact name only
+    entries = [entry
+               for entry in _getentries(registry, "data_product",
+                                        Dict("name" => data_product,
+                                             "namespace" => namespace_id))
+               if entry["name"] == data_product]
+    isempty(entries) && return nothing
+    return argmax(entry -> VersionNumber(entry["version"]), entries)
+end
+
+"""
+    _unchangedfile(registry, namespace, data_product, hash, source)
+
+Return the path, the version and the object's URL of the file registered as
+the highest version of a data product, as `(path, version, object)`, if its
+bytes have the given `hash` and what `source` says of it is what is
+registered with it: the same source, authors and licence, a `source` of
+`nothing` being a file compared by its bytes alone. Return `nothing` if either
+differs, if that version has no file, or if the name is not registered.
+"""
+function _unchangedfile(registry::RegistryEndpoint, namespace::String,
+                        data_product::String, hash::String,
+                        source::Union{Nothing, SourceRecord})
+    latest = _latestdataproduct(registry, namespace, data_product)
+    isnothing(latest) && return nothing
+    object = _getentry(registry, URIs.URI(latest["object"]))
+    isnothing(object["storage_location"]) && return nothing
+    location = _getstoragelocation(registry, latest["object"])
+    location.hash == hash || return nothing
+    _recordssource(registry, latest, object, source) || return nothing
+    return (path = location.path, version = String(latest["version"]),
+            object = String(latest["object"]))
+end
+
+# Make the file at `source` available at `destination`, which must not exist:
+# a hard link where one can be made, so that no bytes are copied, else a copy.
+# A symbolic link is resolved first, so that it is the file that arrives.
+function _placefile(source::AbstractString, destination::AbstractString)
+    source = realpath(source)
+    try
+        hardlink(source, destination)
+    catch e
+        isa(e, Base.IOError) || rethrow()
+        cp(source, destination)
+    end
+    return destination
+end
+
 # Remove `directory` and its parents while they are empty, stopping at `stop`
 function _pruneempty(directory::AbstractString, stop::AbstractString)
     stop = rstrip(normpath(stop), '/')
@@ -313,12 +394,13 @@ const RUN_ID_PLACEHOLDER = r"\$\{\{\s*RUN_ID\s*\}\}"
     _registerdataproduct(handle, data_product, component)
 
 Register one output of the handle: substitute the code run's uuid for
-`\${{RUN_ID}}` in its registered name; move its file to its hash name, or, if
-the same bytes are already in the store, delete it and point at them; register
-the object and the data product, once per data product however many
-components it has; and register the component (the `whole_object` component
-when `component` is `nothing`). Record the registered name, the object URL and
-the component URL in the handle and return the component URL.
+`\${{RUN_ID}}` in its registered name; register its file, object and data
+product, once per data product however many components it has, unless the
+file is that of the highest version registered already, when no version is
+made and the file written is removed; and register the component (the
+`whole_object` component when `component` is `nothing`). Record the
+registered name, the file's path, the object URL, the component URL and
+whether it was unchanged in the handle, and return the component URL.
 """
 function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
                               component::Union{Nothing, String})
@@ -329,55 +411,47 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
                                RUN_ID_PLACEHOLDER => handle.code_run_uuid)
     wmd["use_dp"] = use_data_product
     use_component = wmd["use_component"]
-    use_namespace = wmd["use_namespace"]
-    use_version = wmd["use_version"]
     filepath = wmd["path"]
 
     # Another component of the same data product may have registered its file
-    # and object already
+    # and object already, or found them registered
     registered = [value
                   for (key, value) in handle.outputs
                   if key[1] == data_product && haskey(value, "object_url")]
     if !isempty(registered)
         new_filepath = registered[1]["path"]
         obj_url = registered[1]["object_url"]
+        unchanged = registered[1]["unchanged"]
     else
         if !isfile(filepath)
             msg = string("File not found: ", use_data_product,
                          " is present in handle but not in data store.")
             throw(ReadWriteException(msg))
         end
-        hash = _getfilehash(filepath)
-        existing = _getentry(registry, "storage_location",
-                             Dict("hash" => hash, "public" => wmd["public"],
-                                  "storage_root" =>
-                                      _extractid(handle.datastore_obj_url)))
-        if isnothing(existing)
-            # Name the file by its hash
-            new_filepath = joinpath(datastore, use_namespace, use_data_product,
-                                    "$hash.$(_extension(filepath))")
-            mkpath(dirname(new_filepath))
-            mv(filepath, new_filepath, force = true)
-        else
-            # The same bytes are already in the store: point at them and drop
-            # the duplicate
-            new_filepath = joinpath(datastore, existing["path"])
+        # A file with a source was hashed when its source was checked
+        hash = get(wmd, "hash") do
+            return _getfilehash(filepath)
+        end
+        source = _outputsource(handle, data_product)
+        held = _unchangedfile(registry, wmd["use_namespace"], use_data_product,
+                              hash, source)
+        unchanged = !isnothing(held)
+        if unchanged
+            println("data product unchanged: ", use_data_product, " (",
+                    held.version, ")")
             rm(filepath)
+            new_filepath = held.path
+            obj_url = held.object
+        else
+            stored = _registerfile(handle, wmd, hash, source)
+            new_filepath = stored.path
+            obj_url = stored.object
         end
         _pruneempty(dirname(filepath), datastore)
-
-        obj_url = _registerobject(registry, new_filepath, datastore,
-                                  wmd["dataproduct_description"], hash = hash,
-                                  public = wmd["public"],
-                                  new_object = true)["url"]
-        ns_url = _postentry(registry, "namespace",
-                            Dict("name" => use_namespace))["url"]
-        _postentry(registry, "data_product",
-                   Dict("namespace" => ns_url, "name" => use_data_product,
-                        "object" => obj_url, "version" => use_version))
     end
     wmd["path"] = new_filepath
     wmd["object_url"] = obj_url
+    wmd["unchanged"] = unchanged
 
     if isnothing(use_component)
         component_url = _wholeobjectcomponent(registry, obj_url)
@@ -388,6 +462,48 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
     end
     wmd["component_url"] = component_url
     return component_url
+end
+
+# Put the file of an output in the data store under its hash, or, if the same
+# bytes are already in the store, delete it and point at them; and register
+# its object, its data product and its source. Return the file's path and
+# the object's URL, as `(path, object)`.
+function _registerfile(handle::DataRegistryHandle, wmd::AbstractDict,
+                       hash::String, source::Union{Nothing, SourceRecord})
+    registry = handle.registry
+    datastore = handle.config["run_metadata"]["write_data_store"]
+    filepath = wmd["path"]
+    existing = _getentry(registry, "storage_location",
+                         Dict("hash" => hash, "public" => wmd["public"],
+                              "storage_root" =>
+                                  _extractid(handle.datastore_obj_url)))
+    if isnothing(existing)
+        # Name the file by its hash
+        path = joinpath(datastore, wmd["use_namespace"], wmd["use_dp"],
+                        "$hash.$(_extension(filepath))")
+        mkpath(dirname(path))
+        mv(filepath, path, force = true)
+    else
+        # The same bytes are already in the store: point at them and drop
+        # the duplicate
+        path = joinpath(datastore, existing["path"])
+        rm(filepath)
+    end
+
+    obj_url = _registerobject(registry, path, datastore,
+                              wmd["dataproduct_description"], hash = hash,
+                              public = wmd["public"], new_object = true,
+                              authors = _fileauthors(registry, source))["url"]
+    ns_url = _postentry(registry, "namespace",
+                        Dict("name" => wmd["use_namespace"]))["url"]
+    registered_url = _postentry(registry, "data_product",
+                                Dict("namespace" => ns_url,
+                                     "name" => wmd["use_dp"],
+                                     "object" => obj_url,
+                                     "version" => wmd["use_version"]))["url"]
+    _registersource(registry, source, registered_url, obj_url, hash,
+                    wmd["public"])
+    return (path = path, object = obj_url)
 end
 
 """
@@ -405,8 +521,7 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     wmd, use_data_product = _writemetadata(handle, data_product)
     use = get(wmd, "use", Dict())
     data_store = handle.config["run_metadata"]["write_data_store"]
-    default_namespace = handle.config["run_metadata"]["default_output_namespace"]
-    use_namespace = get(use, "namespace", default_namespace)
+    use_namespace = _writenamespace(handle, wmd)
     use_component = get(use, "component", component)
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])
@@ -541,7 +656,7 @@ end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ConfigDataProduct)
     key = (target.data_product, target.component)
-    for table in (handle.inputs, handle.outputs)
+    for table in (handle.inputs, handle.outputs, handle.unchanged)
         haskey(table, key) && return [table[key]["component_url"]]
     end
     # Not read or written in this run: a read entry can still be resolved

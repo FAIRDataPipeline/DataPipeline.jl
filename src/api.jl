@@ -58,7 +58,10 @@ function initialise(config_file::String = FDP_PATH_CONFIG(),
     return DataRegistryHandle(config, dirname(abspath(config_file)), registry,
                               config_url, script_url, repo_url, datastore_url,
                               code_run["url"], code_run["uuid"],
-                              Dict(), Dict(), PendingIssue[])
+                              Dict(), Dict(), Dict(), PendingIssue[],
+                              Dict{String, SourceCitation}(),
+                              Dict{String, SourceCitation}(),
+                              Dict{String, Vector{String}}())
 end
 
 """
@@ -68,13 +71,29 @@ Complete the code run: name every output file by its hash and register it,
 register the issues raised, attach the inputs and outputs to the code run,
 and append the code run's uuid to `coderuns.txt` beside the working config,
 where the CLI's `fair add` and `fair push` find it.
+
+A file whose bytes are those of the highest version of its data product
+already registered is not registered again: no version is made, the file
+written is removed, and it is not an output of the code run. Where a link
+call named its source, the source, authors and licence registered with that
+version must be the same as well.
 """
 function finalise(handle::DataRegistryHandle)
+    _checksources(handle)
     # In name order, so which of two identical outputs keeps its file, and the
     # order of the code run's inputs and outputs, are the same on every machine
-    outputs = String[_registerdataproduct(handle, data_product, component)
-                     for (data_product, component) in sort(collect(keys(handle.outputs)),
-                                                           by = string)]
+    for (data_product, component) in sort(collect(keys(handle.outputs)),
+                                          by = string)
+        _registerdataproduct(handle, data_product, component)
+    end
+    # What was registered already is no output of this code run
+    for (key, metadata) in collect(handle.outputs)
+        metadata["unchanged"] || continue
+        handle.unchanged[key] = pop!(handle.outputs, key)
+    end
+    outputs = String[handle.outputs[key]["component_url"]
+                     for key in sort(collect(keys(handle.outputs)),
+                                     by = string)]
     inputs = String[handle.inputs[key]["component_url"]
                     for key in sort(collect(keys(handle.inputs)), by = string)]
     _registerissues(handle)
@@ -88,11 +107,25 @@ function finalise(handle::DataRegistryHandle)
 end
 
 """
-    link_read!(handle, data_product)
+    link_read!(handle, data_product; path = nothing, force = false)
     link_read!(handle, pattern)
 
 Return the path of the file behind a `read:` data product of the working
 config, recording it as an input of the code run.
+
+The file is in the data store, named by its hash. For code that needs its
+input under a name or in a place of its own, `path` asks for the file there,
+and is what is then returned:
+- with nothing at `path`, the file is put there, any missing directories
+  being made: as a hard link to the data store's file where one can be made,
+  so that no bytes are copied, else as a copy;
+- a file already there with the same contents is left exactly as it is,
+  whether it is the data store's file under a second name or a copy of it;
+- a file there with other contents is an error, and nothing is overwritten,
+  unless `force` is `true`, when it is replaced by the registered file. A
+  directory there is always an error.
+A file that is a hard link is the data store's own, so it must not be written
+to. `force` does nothing without `path`.
 
 Given a pattern instead - a name with one or more `*`, each matching one
 segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
@@ -102,15 +135,56 @@ an input (the directory itself is not). A link is named after its data
 product with `/` replaced by `_`, plus the file's extension; the directory is
 named by the SHA-1 of the sorted list of link names and file hashes, so the
 same set of files gives the same name. The directory is removed when Julia
-exits.
+exits. A pattern takes no `path`.
+
+See also: [`canread`](@ref)
 """
-function link_read!(handle::DataRegistryHandle, data_product::String)
+function link_read!(handle::DataRegistryHandle, data_product::String;
+                    path::Union{Nothing, AbstractString} = nothing,
+                    force::Bool = false)
+    return _linkread!(handle, data_product, path, force)
+end
+
+# The file in the data store, or for a pattern a directory of links to them
+function _linkread!(handle::DataRegistryHandle, data_product::String,
+                    ::Nothing, ::Bool)
     occursin('*', data_product) && return _link_read_directory!(handle,
                                  data_product)
     key = (data_product, nothing)
     haskey(handle.inputs, key) && return handle.inputs[key]["path"]
     path = _readdataproduct(handle, data_product, nothing)
     println("data product found: ", handle.inputs[key]["use_dp"])
+    return path
+end
+
+# The file made available at `path`, where the caller wants it
+function _linkread!(handle::DataRegistryHandle, data_product::String,
+                    path::AbstractString, force::Bool)
+    occursin('*', data_product) &&
+        throw(ArgumentError("a path cannot be given with a pattern: $data_product"))
+    path = String(path)
+    stored = _linkread!(handle, data_product, nothing, force)
+    input = handle.inputs[(data_product, nothing)]
+    isfile(stored) ||
+        throw(ReadWriteException("the file of '$data_product' is not in the data store: $stored"))
+    if isdir(path)
+        throw(ReadWriteException("cannot put '$data_product' at $path, which is a directory"))
+    elseif ispath(path) || islink(path)
+        isfile(path) &&
+            (samefile(path, stored) || _getfilehash(path) == input["hash"]) &&
+            return path
+        if !force
+            msg = string(path, " exists and is not ", input["use_dp"],
+                         " (namespace ", input["use_namespace"], ", version ",
+                         input["use_version"], "): remove it, or pass ",
+                         "force = true to replace it")
+            throw(ReadWriteException(msg))
+        end
+        rm(path)
+    else
+        mkpath(dirname(path))
+    end
+    _placefile(stored, path)
     return path
 end
 
@@ -146,6 +220,26 @@ function _link_read_directory!(handle::DataRegistryHandle, pattern::String)
         end
     end
     return directory
+end
+
+"""
+    canread(handle, data_product)
+    canread(handle, pattern)
+
+Return whether the working config has a `read:` entry for `data_product`, or
+one that matches `pattern`: whether [`link_read!`](@ref) would find something
+to read under that name. Only the working config is consulted, and nothing is
+recorded, so a script can check every name it will read before it does any
+work.
+
+See also: [`canwrite`](@ref)
+"""
+function canread(handle::DataRegistryHandle, data_product::String)
+    return _covered() do
+        return occursin('*', data_product) ?
+               _matchingreads(handle, data_product) :
+               _getmetadata(handle, data_product, "read")
+    end
 end
 
 # The path of a `read:` data product's file, read on first use and recorded as
@@ -205,12 +299,68 @@ function read_distribution(handle::DataRegistryHandle, data_product::String,
 end
 
 """
-    link_write!(handle, data_product)
+    link_write!(handle, data_product; path = nothing, doi = nothing,
+                bibtex = nothing, title = nothing, primary = nothing,
+                description = nothing, original_store = nothing,
+                licence = nothing, license = nothing, release_date = nothing,
+                release_version = nothing)
 
 Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
 hash and registers it, replacing `\${{RUN_ID}}` in the registered name with
 the code run's uuid.
+
+`path` names a file that exists already, to be registered as the data product
+in place of one the caller writes. It is put in the data store - as a hard
+link where one can be made, so that no bytes are copied, else as a copy - and
+its path there is returned; the file at `path` is left as it was. Its
+extension must be the entry's file type. A hard link is the same file under a
+second name, so the file must not be written to afterwards.
+
+A file whose bytes are those of the highest version of the data product
+already registered is not registered again: no version is made and it is not
+an output of the code run. Where the call names a source, the source, authors
+and licence registered with that version must be the same as well. With a
+`path` this is found as the call is made, and the path returned is that of
+the registered file; a file that is written afterwards is found so by
+`finalise`.
+
+A file that comes from somewhere else is registered with its source. The
+source is named by its `doi`, or by `bibtex`, the key of a citation that
+[`register_citations!`](@ref) has read - one or the other. A DOI with no
+citation registered for it is looked up: its formal metadata, DataCite's
+record of it or else its CSL record, gives what it has of the title, the
+description, the licence, the release date and version, and the authors with
+their ORCIDs or ROR ids. Each keyword below takes the place of what the
+citation says, and the title and the release date must come from one or the
+other. The authors of the registered file are the citation's, found when the
+call is made - by the identifier the citation gives one, which is registered
+and comes before any that [`register_authors!`](@ref) was given, else as
+[`register_authors!`](@ref) describes - and not the user. Of a source:
+
+- `primary` must be given: `true` if the file is the cited item or one of its
+  files, so that the same bytes can be fetched again; `false` if it was
+  requested or derived from it, as an extract is.
+- `title` is the file's own, where the citation's is that of a whole deposit:
+  the files of one deposit are told apart by their titles.
+- `description` says more of it; for an extract, the request that made it.
+- `original_store` is the URL that the file was fetched from. It is recorded
+  when it is one that other people can reach, and not for a file on this
+  machine.
+- `licence`, which may be written `license`, is the licence's identifier in
+  the SPDX licence list, https://spdx.org/licenses/, as `CC-BY-4.0`; or the
+  URL of a licence that is not in the list. An identifier is looked for in
+  the copy of the list that the package keeps.
+- `release_date` and `release_version` are the source's own, in place of
+  what the citation says or lacks: a `Date`, a `DateTime` or text in ISO form
+  as far as it goes; and a version, which is written in full, `2.1` as
+  `2.1.0`, and is `1.0.0` when there is none.
+
+A source is one file: its identifier, title and release version may be held
+by any number of data products, all of the same bytes, and another file under
+the same three is an error, raised by this call when it has a `path` and
+otherwise by `finalise` before it registers anything. Such a file needs a
+`title` of its own, or the `release_version` it was taken from.
 
 `data_product` may also be a name that a wildcard `write:` entry stands for -
 one whose name holds `*`s, each matching one segment - in which case that
@@ -218,15 +368,177 @@ entry's file type, description and `use:` block are used and the name is
 registered as given. A name matching the patterns of several entries is an
 error, since nothing distinguishes them: the file type comes from the entry
 found, not from the caller.
+
+See also: [`canwrite`](@ref)
 """
-function link_write!(handle::DataRegistryHandle, data_product::String)
+function link_write!(handle::DataRegistryHandle, data_product::String;
+                     path::Union{Nothing, AbstractString} = nothing,
+                     doi::Union{Nothing, AbstractString} = nothing,
+                     bibtex::Union{Nothing, AbstractString} = nothing,
+                     title::Union{Nothing, AbstractString} = nothing,
+                     primary::Union{Nothing, Bool} = nothing,
+                     description::Union{Nothing, AbstractString} = nothing,
+                     original_store::Union{Nothing, AbstractString} = nothing,
+                     licence::Union{Nothing, AbstractString} = nothing,
+                     license::Union{Nothing, AbstractString} = nothing,
+                     release_date::Union{Nothing, Date, DateTime,
+                                         AbstractString} = nothing,
+                     release_version::Union{Nothing, VersionNumber,
+                                            AbstractString} = nothing)
+    source = _source(handle; doi, bibtex, title, primary, description,
+                     original_store, licence, license, release_date,
+                     release_version)
+    return _linkwrite!(handle, data_product, path, source)
+end
+
+# A new file in the data store, for the caller to write
+function _linkwrite!(handle::DataRegistryHandle, data_product::String,
+                     ::Nothing, source::Union{Nothing, SourceRecord})
     key = (data_product, nothing)
-    haskey(handle.outputs, key) && return handle.outputs[key]["path"]
+    if haskey(handle.outputs, key)
+        _checksamesource(handle, data_product, source)
+        return handle.outputs[key]["path"]
+    end
     wmd = _writemetadata(handle, data_product).entry
     metadata = _resolvewrite(handle, data_product, nothing, wmd["file_type"],
                              nothing)
+    isnothing(source) || (metadata["source"] = source)
     handle.outputs[key] = metadata
     return metadata["path"]
+end
+
+# A file that exists already, linked or copied into the data store
+function _linkwrite!(handle::DataRegistryHandle, data_product::String,
+                     path::AbstractString,
+                     source::Union{Nothing, SourceRecord})
+    path = String(path)
+    isfile(path) || throw(ReadWriteException("no file to register at $path"))
+    wmd, name = _writemetadata(handle, data_product)
+    if _extension(path) != wmd["file_type"]
+        msg = string("'", data_product, "' is written as a ", wmd["file_type"],
+                     " file in 'write', which ", path,
+                     " is not - check config file.")
+        throw(ConfigFileException(msg))
+    end
+    hash = _getfilehash(path)
+
+    # A data product has one file in a code run, so a second call must bring
+    # the same bytes
+    started = unique(value["path"]
+                     for (key, value) in handle.outputs
+                     if key[1] == data_product)
+    if !isempty(started)
+        file = only(started)
+        (isfile(file) && _getfilehash(file) == hash) ||
+            throw(ReadWriteException("'$data_product' is already being written by this code run, from another file"))
+        _checksamesource(handle, data_product, source)
+        return file
+    end
+
+    _checkonefile(handle, source, hash, data_product)
+    unchanged = _unchangedfile(handle.registry, _writenamespace(handle, wmd),
+                               name, hash, source)
+    if !isnothing(unchanged)
+        println("data product unchanged: ", name, " (", unchanged.version, ")")
+        whole = _wholeobjectcomponent(handle.registry, unchanged.object)
+        found = Dict("path" => unchanged.path,
+                     "object_url" => unchanged.object,
+                     "component_url" => whole)
+        handle.unchanged[(data_product, nothing)] = found
+        return unchanged.path
+    end
+
+    metadata = _resolvewrite(handle, data_product, nothing, wmd["file_type"],
+                             nothing)
+    _placefile(path, metadata["path"])
+    isnothing(source) || (metadata["source"] = source)
+    handle.outputs[(data_product, nothing)] = metadata
+    return metadata["path"]
+end
+
+"""
+    canwrite(handle, data_product)
+
+Return whether the working config has a `write:` entry that covers
+`data_product` - one naming it exactly, or one wildcard entry whose pattern
+it matches: whether [`link_write!`](@ref) would find an entry to write it
+under. A name that the patterns of several entries match is not covered. Only
+the working config is consulted, and nothing is recorded, so a script can
+check every name it will write before it does any work.
+
+See also: [`canread`](@ref)
+"""
+function canwrite(handle::DataRegistryHandle, data_product::String)
+    return _covered() do
+        return _writemetadata(handle, data_product)
+    end
+end
+
+"""
+    link_register!(handle, data_product; namespace, version = nothing,
+                   path = nothing, doi = nothing, bibtex = nothing,
+                   title = nothing, primary = nothing, description = nothing,
+                   original_store = nothing, licence = nothing,
+                   license = nothing, release_date = nothing,
+                   release_version = nothing)
+
+Register something that comes from outside the pipeline, with its source, as
+the data product `data_product`, which the working config does not name, and
+record it as an input of the code run. No run made it: it is this run's
+input and no run's output.
+
+With no `path` it is a data product with no file - the deposit that a
+source's files belong to, which a run that fetches them reads, so that each
+file it registers as an output is derived from it - and nothing is returned.
+With a `path` it is that file, put in the data store as [`link_write!`](@ref)
+puts one, as a hard link where one can be made and else a copy, and its path
+there is returned.
+
+`namespace` is the data product's, by default the run's default input
+namespace. `version` is its version in the pipeline, as `"1.0.0"` or
+`v"1.0.0"` - the source's own is `release_version`. With none given, a name
+not yet registered is version 0.0.1; a name whose highest version is
+registered with the same file, or with none, and the same source, authors and
+licence is that version, and nothing new is registered; any other is the
+highest version's next patch. A `version` given that is registered already
+must be registered so too, or it is an error.
+
+The source is named by `doi` or `bibtex`, and must be: `title`, `primary`,
+`description`, `original_store`, `licence` or `license`, `release_date` and
+`release_version` say of it what they say for [`link_write!`](@ref), and
+`primary` must be given here too. `original_store`, where a file was fetched
+from, needs a `path`. A source is one file, as there.
+"""
+function link_register!(handle::DataRegistryHandle, data_product::String;
+                        namespace::AbstractString = handle.config["run_metadata"]["default_input_namespace"],
+                        version::Union{Nothing, VersionNumber, AbstractString} = nothing,
+                        path::Union{Nothing, AbstractString} = nothing,
+                        doi::Union{Nothing, AbstractString} = nothing,
+                        bibtex::Union{Nothing, AbstractString} = nothing,
+                        title::Union{Nothing, AbstractString} = nothing,
+                        primary::Union{Nothing, Bool} = nothing,
+                        description::Union{Nothing, AbstractString} = nothing,
+                        original_store::Union{Nothing, AbstractString} = nothing,
+                        licence::Union{Nothing, AbstractString} = nothing,
+                        license::Union{Nothing, AbstractString} = nothing,
+                        release_date::Union{Nothing, Date, DateTime,
+                                            AbstractString} = nothing,
+                        release_version::Union{Nothing, VersionNumber,
+                                               AbstractString} = nothing)
+    occursin('*', data_product) &&
+        throw(ArgumentError("'$data_product' is a pattern: a data product registered has a name of its own"))
+    isnothing(path) && !isnothing(original_store) &&
+        throw(ArgumentError("`original_store` is where a file was fetched from, and a data product with no `path` has no file"))
+    wanted = isnothing(version) ? nothing :
+             _releaseversion(version, keyword = "version")
+    file = _externalfile(path)
+    isnothing(doi) && isnothing(bibtex) &&
+        throw(ArgumentError("'$data_product' is registered as coming from elsewhere: name its source, by its `doi` or its `bibtex` key"))
+    source = _source(handle; doi, bibtex, title, primary, description,
+                     original_store, licence, license, release_date,
+                     release_version)
+    return _linkregister!(handle, data_product, String(namespace), wanted,
+                          file, source)
 end
 
 """
@@ -234,6 +546,8 @@ end
 
 Write `data` as `component` of an HDF5 `write:` data product of the working
 config, recording it as an output, and return `(data_product, component)`.
+The file records no times, so that the same arrays give the same bytes and
+are found to be registered already.
 
 See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
@@ -245,8 +559,15 @@ function write_array(handle::DataRegistryHandle, data::Array,
     metadata = _resolvewrite(handle, data_product, component, "h5",
                              description)
     path = metadata["path"]
-    HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
-        return write(file, metadata["use_component"], data)
+    if isfile(path)
+        HDF5.h5open(path, "r+") do file
+            return _writeuntimed(file, metadata["use_component"], data)
+        end
+    else
+        # The root group of a new file records no times either
+        HDF5.h5open(path, "w", obj_track_times = false) do file
+            return _writeuntimed(file, metadata["use_component"], data)
+        end
     end
     handle.outputs[key] = metadata
     return key
