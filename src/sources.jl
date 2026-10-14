@@ -213,13 +213,14 @@ registry keeps once and links to each data product registered from it; and
 the licence on the file's object. With no source nothing is registered.
 """
 function _registersource(::RegistryEndpoint, ::Nothing, ::AbstractString,
-                         ::AbstractString, ::AbstractString, ::Bool)
+                         ::AbstractString, ::Union{Nothing, AbstractString},
+                         ::Bool)
     return nothing
 end
 function _registersource(registry::RegistryEndpoint, source::SourceRecord,
                          data_product_url::AbstractString,
-                         object_url::AbstractString, hash::AbstractString,
-                         public::Bool)
+                         object_url::AbstractString,
+                         hash::Union{Nothing, AbstractString}, public::Bool)
     released = Dates.format(source.release_date, "yyyy-mm-ddTHH:MM:SS") * "Z"
     data = Dict{String, Any}("data_product" => data_product_url,
                              "identifier" => source.identifier,
@@ -244,8 +245,8 @@ end
 # The URL of the registry's storage location for where a file was fetched
 # from, or `nothing` where that is not recorded. The registry holds a file
 # once under a root, whatever its path there, so one already held is the one.
-function _originallocation(::RegistryEndpoint, ::Nothing, ::AbstractString,
-                           ::Bool)
+function _originallocation(::RegistryEndpoint, ::Nothing,
+                           ::Union{Nothing, AbstractString}, ::Bool)
     return nothing
 end
 function _originallocation(registry::RegistryEndpoint, store::NamedTuple,
@@ -264,4 +265,158 @@ function _originallocation(registry::RegistryEndpoint, store::NamedTuple,
     held["path"] == store.path ||
         @warn "the file fetched from $(store.root)$(store.path) is already recorded at $(store.root)$(held["path"]), which is kept as where it came from"
     return held["url"]
+end
+
+# A file to be registered as coming from elsewhere, as its path and its hash,
+# or `nothing` where there is no file
+_externalfile(::Nothing) = nothing
+function _externalfile(path::AbstractString)
+    isfile(path) || throw(ReadWriteException("no file to register at $path"))
+    return (path = String(path), hash = _getfilehash(path))
+end
+
+"""
+    _linkregister!(handle, data_product, namespace, version, file, source)
+
+Register what `link_register!` describes - `file`, or `nothing` for a data
+product with no file, and its source - as a version of `data_product` in
+`namespace`, unless the version it comes to is registered so already; record
+it as an input of the code run; and return the path of its file in the data
+store, or `nothing`. `version` is the one asked for, or `nothing`.
+"""
+function _linkregister!(handle::DataRegistryHandle, data_product::String,
+                        namespace::String, version::Union{Nothing, String},
+                        file::Union{Nothing, NamedTuple}, source::SourceRecord)
+    registry = handle.registry
+    hash = isnothing(file) ? nothing : file.hash
+    isnothing(file) || _checkonefile(handle, source, hash, data_product)
+    target = _registrationversion(registry, namespace, data_product, version,
+                                  hash, source)
+    key = (data_product, nothing)
+    if haskey(handle.inputs, key) &&
+       handle.inputs[key]["use_version"] != target.version
+        throw(ReadWriteException("'$data_product' is already an input of this code run, as version $(handle.inputs[key]["use_version"])"))
+    end
+    product = target.held
+    if isnothing(product)
+        product = _registerexternal(handle, data_product, namespace,
+                                    target.version, file, source)
+    else
+        println("data product unchanged: ", data_product, " (",
+                target.version, ")")
+    end
+
+    object = _getentry(registry, URIs.URI(product["object"]))
+    stored = isnothing(object["storage_location"]) ? nothing :
+             _getstoragelocation(registry, product["object"]).path
+    handle.inputs[key] = Dict("use_dp" => data_product,
+                              "use_namespace" => namespace,
+                              "use_version" => target.version,
+                              "use_component" => nothing,
+                              "component_url" =>
+                                  _wholeobjectcomponent(registry,
+                                                        product["object"]),
+                              "path" => stored, "hash" => hash)
+    return stored
+end
+
+# The version that a registration comes to, as `(version, held)`, `held` being
+# the data product registered at it already when that is the one described,
+# else `nothing`. With no version asked for: the highest version, if that is
+# the one; else its next patch; and 0.0.1 for a name not yet registered.
+function _registrationversion(registry::RegistryEndpoint, namespace::String,
+                              data_product::String, ::Nothing,
+                              hash::Union{Nothing, String},
+                              source::SourceRecord)
+    latest = _latestdataproduct(registry, namespace, data_product)
+    isnothing(latest) && return (version = "0.0.1", held = nothing)
+    _isregistration(registry, latest, hash, source) &&
+        return (version = String(latest["version"]), held = latest)
+    highest = VersionNumber(latest["version"])
+    next = VersionNumber(highest.major, highest.minor, highest.patch + 1)
+    return (version = string(next), held = nothing)
+end
+# ... and a version asked for, which if it is registered must be the one
+function _registrationversion(registry::RegistryEndpoint, namespace::String,
+                              data_product::String, version::String,
+                              hash::Union{Nothing, String},
+                              source::SourceRecord)
+    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
+    held = isnothing(namespace_id) ? nothing :
+           _getentry(registry, "data_product",
+                     Dict("name" => data_product, "version" => version,
+                          "namespace" => namespace_id))
+    isnothing(held) && return (version = version, held = nothing)
+    _isregistration(registry, held, hash, source) &&
+        return (version = version, held = held)
+    return throw(ReadWriteException("version $version of $namespace:$data_product is registered already, with another file or another source, authors or licence: give another `version`, or none"))
+end
+
+# Whether a registered data product is the one a registration describes: with
+# the file of this hash, or with none, and with the same source, authors and
+# licence
+function _isregistration(registry::RegistryEndpoint, product::AbstractDict,
+                         hash::Union{Nothing, String}, source::SourceRecord)
+    object = _getentry(registry, URIs.URI(product["object"]))
+    location = object["storage_location"]
+    if isnothing(hash)
+        isnothing(location) || return false
+    else
+        isnothing(location) && return false
+        _getentry(registry, URIs.URI(location))["hash"] == hash || return false
+    end
+    return _recordssource(registry, product, object, source)
+end
+
+# Register a version of a data product that comes from elsewhere: its object -
+# its file put in the data store by its hash, or none - the data product, and
+# its source. Return the data product's entry.
+function _registerexternal(handle::DataRegistryHandle, data_product::String,
+                           namespace::String, version::String,
+                           file::Union{Nothing, NamedTuple},
+                           source::SourceRecord)
+    registry = handle.registry
+    public = handle.config["run_metadata"]["public"]
+    object_url = _externalobject(handle, namespace, data_product, file, source,
+                                 public)
+    namespace_url = _postentry(registry, "namespace",
+                               Dict("name" => namespace))["url"]
+    product = _createentry(registry, "data_product",
+                           Dict("namespace" => namespace_url,
+                                "name" => data_product, "object" => object_url,
+                                "version" => version))
+    _registersource(registry, source, product["url"], object_url,
+                    isnothing(file) ? nothing : file.hash, public)
+    return product
+end
+
+# The object of a data product that comes from elsewhere, described by its
+# source's title and with its source's authors: with no file ...
+function _externalobject(handle::DataRegistryHandle, ::String, ::String,
+                         ::Nothing, source::SourceRecord, ::Bool)
+    return _createentry(handle.registry, "object",
+                        Dict("description" => source.title,
+                             "authors" => source.authors))["url"]
+end
+# ... or with its file, under its hash, or where the store holds those bytes
+function _externalobject(handle::DataRegistryHandle, namespace::String,
+                         data_product::String, file::NamedTuple,
+                         source::SourceRecord, public::Bool)
+    registry = handle.registry
+    datastore = handle.config["run_metadata"]["write_data_store"]
+    held = _getentry(registry, "storage_location",
+                     Dict("hash" => file.hash, "public" => public,
+                          "storage_root" =>
+                              _extractid(handle.datastore_obj_url)))
+    if isnothing(held)
+        stored = joinpath(datastore, namespace, data_product,
+                          "$(file.hash).$(_extension(file.path))")
+        mkpath(dirname(stored))
+        _placefile(file.path, stored)
+    else
+        stored = joinpath(datastore, held["path"])
+    end
+    return _registerobject(registry, stored, datastore, source.title,
+                           hash = file.hash, public = public, new_object = true,
+                           authors = source.authors)["url"]
 end

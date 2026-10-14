@@ -605,16 +605,21 @@ end
 # A release version as the registry takes one: major, minor and patch in full.
 # A version is completed and never altered: with a missing minor or patch
 # added it must read back as it was written, which one with a leading zero in
-# a number does not. That one is refused, with what is not a version at all.
-_releaseversion(version::VersionNumber) = string(version)
-function _releaseversion(version::AbstractString)
+# a number does not. That one is refused, with what is not a version at all,
+# the error naming the keyword to give it by.
+function _releaseversion(version::VersionNumber;
+                         keyword::AbstractString = "release_version")
+    return string(version)
+end
+function _releaseversion(version::AbstractString;
+                         keyword::AbstractString = "release_version")
     written = lstrip(strip(version), ['v', 'V'])
     parsed = tryparse(VersionNumber, written)
     numbers, rest = match(r"^([^-+]*)(.*)$", written)
     if isnothing(parsed) ||
        !any(string(parsed) == numbers * added * rest
             for added in ("", ".0", ".0.0"))
-        throw(ArgumentError("not a version the registry can take as it stands: '$version' - give `release_version` in full, as major.minor.patch"))
+        throw(ArgumentError("not a version the registry can take as it stands: '$version' - give `$keyword` in full, as major.minor.patch"))
     end
     return string(parsed)
 end

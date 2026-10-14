@@ -661,4 +661,211 @@ Test.@testset "one source for a data product in a code run" begin
     @test length(entry(handle.code_run_obj)["outputs"]) == 2
 end
 
+# The whole-object component of a registered data product, which is what a
+# code run lists among its inputs and outputs
+whole(product) = DataPipeline._wholeobjectcomponent(registry, product["object"])
+inputs_namespace = launch.config["run_metadata"]["default_input_namespace"]
+
+Test.@testset "link_register!() with no file" begin
+    deposit = "sources/register/deposit/$uid"
+    of(; keywords...) = (; bibtex = "deposit", primary = true, keywords...)
+
+    # A data product with no file, its source the deposit's, registered in
+    # the run's input namespace and read by the run, which made nothing
+    handle = offering()
+    @test isnothing(link_register!(handle, deposit; of()...))
+    @test handle.inputs[(deposit, nothing)]["use_version"] == "0.0.1"
+    DataPipeline.finalise(handle)
+    product = registered(deposit, "0.0.1")
+    @test isnothing(object_of(product)["storage_location"])
+    @test entry(product["namespace"])["name"] == inputs_namespace
+    source = source_of(product)
+    @test source["identifier"] == "https://doi.org/$doi"
+    @test source["title"] == "A deposit of several files $uid"
+    @test sort(object_of(product)["authors"]) ==
+          sort([author(orcid), author_named(organisation)])
+    run = entry(handle.code_run_obj)
+    @test run["inputs"] == [whole(product)] && isempty(run["outputs"])
+
+    # The same again is that version, nothing new being registered, however
+    # often a run asks
+    handle = offering()
+    for _ in 1:2
+        @test isnothing(link_register!(handle, deposit; of()...))
+    end
+    DataPipeline.finalise(handle)
+    @test registered_versions(deposit) == ["0.0.1"]
+    @test entry(handle.code_run_obj)["inputs"] == [whole(product)]
+
+    # Other terms are the next patch version
+    handle = offering()
+    link_register!(handle, deposit; of(licence = "CC0-1.0")...)
+    DataPipeline.finalise(handle)
+    @test registered_versions(deposit) == ["0.0.1", "0.0.2"]
+    @test licences_of(object_of(registered(deposit, "0.0.2"))) ==
+          [("CC0-1.0", spdx * "CC0-1.0")]
+
+    # A version asked for: registered so already, it is that one; registered
+    # otherwise, an error; not registered, it is registered
+    handle = offering()
+    link_register!(handle, deposit; of(version = "0.0.1")...)
+    @test handle.inputs[(deposit, nothing)]["use_version"] == "0.0.1"
+    msg = message_of(ReadWriteException) do
+        return link_register!(offering(), deposit; of(version = "0.0.2")...)
+    end
+    @test occursin("version 0.0.2 of $inputs_namespace:$deposit", msg)
+    link_register!(offering(), deposit; of(version = v"1.0")...)
+    @test registered_versions(deposit) == ["0.0.1", "0.0.2", "1.0.0"]
+    # ... and one run reads one version of a name
+    msg = message_of(ReadWriteException) do
+        return link_register!(handle, deposit; of(version = "1.0.0")...)
+    end
+    @test occursin("already an input of this code run, as version 0.0.1", msg)
+
+    # In a namespace of its own
+    elsewhere = "elsewhere-$(uid[1:8])"
+    link_register!(offering(), deposit; of(namespace = elsewhere)...)
+    space = DataPipeline._getid(registry, "namespace",
+                                Dict("name" => elsewhere))
+    @test !isnothing(DataPipeline._getentry(registry, "data_product",
+                                            Dict("name" => deposit,
+                                                 "namespace" => space,
+                                                 "version" => "0.0.1")))
+end
+
+Test.@testset "link_register!() with a file" begin
+    fetched = "sources/register/file/$uid"
+    file = file_of("registered file $uid\n")
+    changed = file_of("registered file again $uid\n")
+    host = "https://fetched-$uid.org"
+    function of(; keywords...)
+        return (; bibtex = "deposit", primary = true,
+                title = "Registered file $uid", keywords...)
+    end
+
+    # The file is put in the data store by its hash, its path there returned,
+    # and it is the run's input, with its source
+    handle = offering()
+    stored = link_register!(handle, fetched;
+                            of(path = file,
+                               original_store = "$host/files/f.txt")...)
+    @test stored ==
+          joinpath(datastore, inputs_namespace, fetched,
+                   DataPipeline._getfilehash(file) * ".txt")
+    @test read(stored, String) == "registered file $uid\n"
+    @test handle.inputs[(fetched, nothing)]["path"] == stored
+    DataPipeline.finalise(handle)
+    product = registered(fetched, "0.0.1")
+    location = entry(object_of(product)["storage_location"])
+    @test location["hash"] == DataPipeline._getfilehash(file)
+    @test entry(source_of(product)["original_store"])["path"] == "files/f.txt"
+    run = entry(handle.code_run_obj)
+    @test run["inputs"] == [whole(product)] && isempty(run["outputs"])
+    @test sort(object_of(product)["authors"]) ==
+          sort([author(orcid), author_named(organisation)])
+
+    # Bytes that the store holds already are pointed at, not put there again
+    again = "$fetched/again"
+    @test link_register!(offering(), again;
+                         of(path = file_of("registered file $uid\n"),
+                            title = "The same bytes $uid")...) == stored
+    @test !isdir(joinpath(datastore, inputs_namespace, again))
+
+    # The same file again is the registered one; another file of the same
+    # source is refused; of another release of it, the next version
+    handle = offering()
+    @test link_register!(handle, fetched;
+                         of(path = file_of("registered file $uid\n"))...) ==
+          stored
+    @test_throws ReadWriteException link_register!(offering(), fetched;
+                                                   of(path = changed)...)
+    @test registered_versions(fetched) == ["0.0.1"]
+    link_register!(offering(), fetched;
+                   of(path = changed, release_version = "2.2")...)
+    @test registered_versions(fetched) == ["0.0.1", "0.0.2"]
+
+    # A version with a file and one with none are never the same: each in
+    # turn is the next version
+    link_register!(offering(), fetched; of(release_version = "2.2")...)
+    @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3"]
+    @test isnothing(object_of(registered(fetched, "0.0.3"))["storage_location"])
+    link_register!(offering(), fetched;
+                   of(path = changed, release_version = "2.2")...)
+    @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
+end
+
+Test.@testset "what link_register!() refuses" begin
+    handle = offering()
+    name = "sources/register/refused/$uid"
+    refused(type; keywords...) = message_of(type) do
+        return link_register!(handle, name; keywords...)
+    end
+    # No source, a pattern, where a file came from with no file, a version
+    # that is not one, no file at the path, and nothing said of the source's
+    # relation to the file
+    @test occursin("name its source", refused(ArgumentError, primary = true))
+    @test occursin("is a pattern",
+                   message_of(ArgumentError) do
+                       return link_register!(handle, "$name/*",
+                                             bibtex = "deposit",
+                                             primary = true)
+                   end)
+    @test occursin("with no `path` has no file",
+                   refused(ArgumentError, bibtex = "deposit", primary = true,
+                           original_store = "https://example.org/f.txt"))
+    @test occursin("`version`",
+                   refused(ArgumentError, bibtex = "deposit", primary = true,
+                           version = "061"))
+    @test occursin("no file to register",
+                   refused(ReadWriteException, bibtex = "deposit",
+                           primary = true,
+                           path = joinpath(mktempdir(), "absent.txt")))
+    @test occursin("`primary = true`",
+                   refused(ArgumentError, bibtex = "deposit"))
+    @test isempty(handle.inputs) && isempty(registered_versions(name))
+end
+
+Test.@testset "a fetch run, and a run that reads what it fetched" begin
+    deposit = "sources/chain/deposit/$uid"
+    fetched = "sources/chain/file/$uid"
+    result = "sources/chain/result/$uid"
+
+    # The fetch run registers the deposit and reads it, and writes a file of
+    # the deposit as its output, with a source of the file's own
+    fetching = offering(fetched => "0.0.1")
+    link_register!(fetching, deposit, bibtex = "deposit", primary = true)
+    link_write!(fetching, fetched, path = file_of("chain $uid\n"),
+                bibtex = "deposit", primary = true, title = "Chain file $uid")
+    DataPipeline.finalise(fetching)
+
+    # The model run reads the file and writes a result
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addread(config, fetched, use_version = "0.0.1")
+    DataPipeline._addwrite(config, result, "a result", file_type = "txt",
+                           use_version = "0.0.1")
+    modelling = DataPipeline.initialise(config, config)
+    input = link_read!(modelling, fetched)
+    @test read(input, String) == "chain $uid\n"
+    write(link_write!(modelling, result), "made from " * read(input, String))
+    DataPipeline.finalise(modelling)
+
+    # The result was made by the model run from the file, which the fetch
+    # run made from the deposit; the file and the deposit have the one DOI
+    # and a title each, and the deposit has no file
+    entry_of, file_of_deposit, made = (registered(name, "0.0.1")
+                                       for name in (deposit, fetched, result))
+    fetch_run = entry(fetching.code_run_obj)
+    model_run = entry(modelling.code_run_obj)
+    @test fetch_run["inputs"] == [whole(entry_of)]
+    @test fetch_run["outputs"] == [whole(file_of_deposit)]
+    @test model_run["inputs"] == [whole(file_of_deposit)]
+    @test model_run["outputs"] == [whole(made)]
+    @test source_of(entry_of)["identifier"] ==
+          source_of(file_of_deposit)["identifier"] == "https://doi.org/$doi"
+    @test source_of(entry_of)["title"] == "A deposit of several files $uid"
+    @test source_of(file_of_deposit)["title"] == "Chain file $uid"
+    @test isnothing(object_of(entry_of)["storage_location"])
+    @test isnothing(made["external_object"])
+end
+
 end
