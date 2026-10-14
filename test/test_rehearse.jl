@@ -266,13 +266,6 @@ function user_config(name::AbstractString, data_product::AbstractString)
     return path
 end
 
-Test.@testset "fair()" begin
-    # The fair on the path, which the suite runs under
-    @test isnothing(DataPipeline.fair("--version"))
-    err = @test_throws ReadWriteException DataPipeline.fair("no-such-command")
-    @test occursin("no-such-command", err.value.msg)
-end
-
 Test.@testset "rehearse() from a user config, through fair" begin
     name = "rehearse/via-fair/$uid"
     user = user_config("fair", name)
@@ -295,6 +288,25 @@ Test.@testset "rehearse() from a user config, through fair" begin
         # The job folder, being under jobs/, is deleted
         @test !isdir(job)
         @test counts() == before
+    end
+    rm(user)
+end
+
+Test.@testset "rehearse() through the package's copy of fair" begin
+    # Installed by the tests of cli.jl, which run before these
+    copy = DataPipeline._installedcli()
+    @test !isnothing(copy)
+    name = "rehearse/via-copy/$uid"
+    user = user_config("copy", name)
+    outputs = mktempdir()
+    withenv(quiet...) do
+        job = DataPipeline.rehearse(user, outputs = outputs, local_only = true,
+                                    cli = copy)
+        @test isfile(joinpath(job, "config.yaml"))
+        handle = DataPipeline.initialise()
+        write(link_write!(handle, name), "rehearsed through the copy $uid\n")
+        @test DataPipeline.finalise(handle) == outputs
+        @test isfile(joinpath(outputs, "testing", name, "0.0.1.txt"))
     end
     rm(user)
 end
@@ -328,18 +340,28 @@ end
             withenv("PATH" => fakebin) do
                 @test DataPipeline.rehearse(user) == prepared
             end
-            # Then, with no copy of the package's own, the variable
-            withenv("PATH" => "", "FDP_FAIR_CLI" => fake) do
-                @test DataPipeline.rehearse(user) == prepared
-            end
-            withenv("PATH" => "",
-                    "FDP_FAIR_CLI" => joinpath(fakebin, "missing")) do
-                err = @test_throws ArgumentError DataPipeline.rehearse(user)
-                @test occursin("FDP_FAIR_CLI", err.value.msg)
-            end
-            withenv("PATH" => "", "FDP_FAIR_CLI" => nothing) do
-                err = @test_throws ArgumentError DataPipeline.rehearse(user)
-                @test occursin("none on the path", err.value.msg)
+            # Then the package's copy, which the tests of cli.jl installed: set
+            # aside here, so that the places looked after it are reached
+            copy = DataPipeline._installedcli()
+            @test !isnothing(copy)
+            aside = copy * ".aside"
+            mv(copy, aside)
+            try
+                # Then the variable
+                withenv("PATH" => "", "FDP_FAIR_CLI" => fake) do
+                    @test DataPipeline.rehearse(user) == prepared
+                end
+                withenv("PATH" => "",
+                        "FDP_FAIR_CLI" => joinpath(fakebin, "missing")) do
+                    err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                    @test occursin("FDP_FAIR_CLI", err.value.msg)
+                end
+                withenv("PATH" => "", "FDP_FAIR_CLI" => nothing) do
+                    err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                    @test occursin("install_cli", err.value.msg)
+                end
+            finally
+                mv(aside, copy)
             end
             # fair() runs the same fair, and fails as it fails
             @test isnothing(DataPipeline.fair("--version", cli = fake))

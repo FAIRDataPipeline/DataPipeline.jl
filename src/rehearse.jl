@@ -79,25 +79,6 @@ function discard(handle::DataRegistryHandle{RecordedRun})
     return throw(ReadWriteException("code run $(handle.code_run_uuid) is registered already, so cannot be discarded: a recorded run ends with finalise"))
 end
 
-"""
-    fair(arguments...; cli = nothing)
-
-Run the pipeline's command-line tool `fair` with `arguments`, in the current
-directory, printing what it prints: `fair pull config.yaml` is
-`DataPipeline.fair("pull", "config.yaml")`. An exit status other than 0 is a
-[`ReadWriteException`](@ref). `cli` names the `fair` to run, found as
-[`rehearse`](@ref) finds it when none is given. A command that asks questions,
-as `fair init` does without `--ci`, needs a terminal. Return `nothing`.
-"""
-function fair(arguments::AbstractString...;
-              cli::Union{Nothing, AbstractString, Cmd} = nothing)
-    command = `$(_faircommand(cli)) $arguments`
-    process = run(ignorestatus(command))
-    success(process) ||
-        throw(ReadWriteException("`fair $(join(arguments, " "))` failed with exit status $(process.exitcode)"))
-    return nothing
-end
-
 # The job folder that `path` names: a folder holding a working config; a
 # working config, whose folder it is; or a user config, for which `fair` makes
 # one
@@ -139,42 +120,6 @@ function _preparejob(config::String, local_only::Bool,
     end
     foreach(println, lines[1:(end - 1)])
     return job
-end
-
-# The command that runs `fair`: the one given, as a path or a command; else
-# the `fair` on the path, else the copy this package installed, else the
-# executable `FDP_FAIR_CLI` names
-_faircommand(cli::Cmd) = cli
-function _faircommand(cli::AbstractString)
-    path = isfile(cli) ? abspath(cli) : Sys.which(cli)
-    isnothing(path) &&
-        throw(ArgumentError("no `fair` at $cli, nor on the path"))
-    return Cmd([path])
-end
-function _faircommand(::Nothing)
-    path = Sys.which("fair")
-    isnothing(path) && (path = _installedcli())
-    isnothing(path) || return Cmd([path])
-    if haskey(ENV, "FDP_FAIR_CLI")
-        path = ENV["FDP_FAIR_CLI"]
-        isfile(path) ||
-            throw(ArgumentError("FDP_FAIR_CLI names $path, where there is no file"))
-        return Cmd([path])
-    end
-    return throw(ArgumentError(string("no `fair` found: none on the path, none installed by this package, ",
-                                      "and FDP_FAIR_CLI not set - install fair-cli (`pipx install fair-cli` ",
-                                      "puts it on every path), give `cli =` the executable, or set ",
-                                      "FDP_FAIR_CLI to it")))
-end
-
-# The folder this package keeps its own copy of the CLI in, a scratch space of
-# its own, and the executable there if one has been installed
-_clifolder() = @get_scratch!("fair-cli")
-function _installedcli()
-    executable = Sys.iswindows() ?
-                 joinpath(_clifolder(), "Scripts", "fair.exe") :
-                 joinpath(_clifolder(), "bin", "fair")
-    return isfile(executable) ? executable : nothing
 end
 
 # The outputs folder, made: the one asked for, else a new temporary one that

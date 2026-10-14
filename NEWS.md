@@ -18,14 +18,20 @@
     a folder, registering nothing. `DataPipeline.discard` ends a rehearsal
     without its outputs.
   - `DataPipeline.fair(arguments...)` runs the CLI from Julia: the `fair` on
-    the path, or the one `FDP_FAIR_CLI` names; `cli =` names another.
+    the path, else the copy `install_cli` made, else the one `FDP_FAIR_CLI`
+    names; `cli =` names another.
+  - `DataPipeline.install_cli()` installs the package's own copy of `fair`, or
+    brings it up to date, in a scratch space, with a Python that MicroMamba
+    fetches: for a Julia with no virtual environment on its path, and to set
+    the registry up from Julia with `fair("registry", "install")`.
   - `finalise()` returns the folder the outputs are under: the data store's
     root, or a rehearsal's folder.
   - `initialise()` outside `fair run` throws a `ConfigFileException` saying
     what sets a run up, rather than a `SystemError` or `KeyError`.
   - `DataRegistryHandle` takes a type parameter, the run's mode, `RecordedRun`
     or `Rehearsal`; its registry URL fields are `nothing` in a rehearsal.
-  - New dependency: Scratch. Every standard library has a compat entry.
+  - New dependencies: MicroMamba and Scratch. Every standard library has a
+    compat entry.
   - `link_write!` takes a `path`, to register a file that exists already: it is
     hard-linked into the data store, or copied. `link_read!` takes a `path`, and
     `force`, to make a registered file available there. `DataPipeline.canread`
