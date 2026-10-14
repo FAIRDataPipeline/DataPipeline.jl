@@ -46,25 +46,53 @@ fair run examples/fdp/SEIRSconfig.yaml
 with that run's uuid, then `fair push`, sends it and its data products to a
 remote registry.
 
-The two blocks below do exactly that when this documentation is built with
-the environment variable `FDP_DOCS_RUN_EXAMPLE` set to `true` and a
-registry running, as the package's own documentation build does; built
-without it, they only say so.
+The two blocks below do exactly that, through `DataPipeline.fair`, which
+runs the CLI from Julia, when this documentation is built with the
+environment variable `FDP_DOCS_RUN_EXAMPLE` set to `true` and a registry
+running, as the package's own documentation build does; built without it,
+they only say so.
 
 ```@example seirs
 run_example = get(ENV, "FDP_DOCS_RUN_EXAMPLE", "") == "true"
 run_example || println("Not run: FDP_DOCS_RUN_EXAMPLE is not set.")
-# Run a `fair` command from the root of the repository, showing its output
-function fair(args...)
-    cd(pkgdir(DataPipeline)) do
-        return run(pipeline(`fair $(collect(args))`, stderr = stdout))
-    end
+# fair runs from the root of the repository, where the project is
+run_example && cd(pkgdir(DataPipeline)) do
+    DataPipeline.fair("pull", "--local", "examples/fdp/SEIRSconfig.yaml")
 end
-run_example && fair("pull", "--local", "examples/fdp/SEIRSconfig.yaml")
 nothing # hide
 ```
 
 ```@example seirs
-run_example && fair("run", "--local", "examples/fdp/SEIRSconfig.yaml")
+run_example && cd(pkgdir(DataPipeline)) do
+    DataPipeline.fair("run", "--local", "examples/fdp/SEIRSconfig.yaml")
+end
+nothing # hide
+```
+
+## Rehearsing it
+
+Before a run is recorded, the script can be rehearsed: run through the
+pipeline from the same config, reading the registered parameter table and
+writing its outputs, with nothing registered. From the root of the clone, in
+Julia:
+
+```julia
+using DataPipeline
+DataPipeline.rehearse("examples/fdp/SEIRSconfig.yaml", local_only = true)
+include("examples/fdp/seirs_sim.jl")
+```
+
+`rehearse` has `fair run --ci` prepare the job, and the script, unchanged,
+opens a rehearsal in its `DataPipeline.initialise` and ends by collecting its
+two outputs in a folder, whose path `DataPipeline.finalise` prints and
+returns. Run after the recorded run above, it finds the results table
+registered already with the same bytes, and says so. The block below does
+this under the same condition as the two above.
+
+```@example seirs
+run_example && cd(pkgdir(DataPipeline)) do
+    DataPipeline.rehearse("examples/fdp/SEIRSconfig.yaml", local_only = true)
+    include(joinpath(example, "seirs_sim.jl"))
+end
 nothing # hide
 ```

@@ -11,9 +11,6 @@ Depth = 3
 ```@docs
 DataPipeline.initialise
 DataPipeline.finalise
-DataPipeline.rehearse
-DataPipeline.discard
-DataPipeline.fair
 DataPipeline.DataRegistryHandle
 DataPipeline.AbstractRunMode
 DataPipeline.RecordedRun
@@ -21,6 +18,52 @@ DataPipeline.Rehearsal
 DataPipeline.RegistryEndpoint
 DataPipeline.ReadWriteException
 DataPipeline.ConfigFileException
+```
+
+## Rehearsing a run
+
+A script can be run through the pipeline without being recorded, to be run
+again, unchanged, under `fair run` once it is right. In a session, prepare
+the run from the user config, then run the script, or its lines one at a
+time:
+
+```julia
+using DataPipeline
+DataPipeline.fair("pull", "config.yaml")   # when inputs need registering or syncing
+DataPipeline.rehearse("config.yaml")       # fair run --ci --dirty prepares the job
+include("script.jl")                        # or its lines, one at a time
+```
+
+`rehearse` has `fair` write the working config and the script into a job
+folder, as `fair run` does before it launches a script, and sets
+`FDP_CONFIG_DIR` to that folder, as `fair run` does, and `FDP_REHEARSAL` to
+the folder the outputs will be collected in. The script's `initialise()` then
+opens a rehearsal rather than a code run: it reads what the registry holds,
+writes to the data store, holds no registry token, and registers nothing,
+saying instead what `link_register!` and `register_authors!` would have
+registered. Its `finalise` checks the outputs as a recorded run would, saying
+which hold the bytes of the registered highest version already, moves them
+to the outputs folder as `<namespace>/<data product>/<version>.<extension>`
+with the working config beside them, prints the issues a recorded run would
+have raised, deletes the job folder, and returns the folder. `discard` ends
+a rehearsal without collecting anything.
+
+The outputs folder is a new one under the system's temporary directory,
+unless `outputs =` names one, in which case a repeated rehearsal replaces its
+files. `local_only = true` passes `--local` to `fair run`. Nothing of a
+rehearsal reaches the registry, so a model run can be rehearsed only once the
+fetch run it reads from has been recorded.
+
+`fair` is found on the path, which it is on when Julia was started from a
+shell with the CLI's virtual environment active, else as the executable
+`FDP_FAIR_CLI` names, for a Julia started by an editor; `cli =` on either
+call names one. `DataPipeline.fair(arguments...)` runs it with any
+arguments.
+
+```@docs
+DataPipeline.rehearse
+DataPipeline.discard
+DataPipeline.fair
 ```
 
 ## Reading data
