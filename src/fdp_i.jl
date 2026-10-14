@@ -33,7 +33,8 @@ _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 # else the one `fair run` launched this script for, in the folder it names in
 # FDP_CONFIG_DIR; with neither, no run was prepared
 function _launchedconfig()
-    isnothing(REHEARSAL[]) || return joinpath(REHEARSAL[].job, "config.yaml")
+    job = _sessionjob()
+    isnothing(job) || return joinpath(job, "config.yaml")
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_CONFIG()
     return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
                                             "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
@@ -42,21 +43,65 @@ function _launchedconfig()
                                             "and the submission script")))
 end
 
-# The mode a run opens in: the session's rehearsal where `rehearse` has
-# prepared one, else a recorded run; and the token the run's registry holds,
-# which a rehearsal never has, whatever the environment holds
-function _runmode()
-    current = REHEARSAL[]
-    return isnothing(current) ? RecordedRun() : Rehearsal(current.outputs)
+# The job folder of the session's rehearsal, if one is prepared and not ended
+function _sessionjob()
+    session = SESSION[]
+    (isnothing(session) || session.ended) && return nothing
+    return session.job
 end
+
+# The mode a run opens in, or the error that it cannot: a session's one run
+# is opened once, by the script's `initialise()`, and a run opened with files
+# given is the caller's own. `explicit` says whether files were given.
+_runmode(::Nothing, explicit::Bool) = RecordedRun()
+function _runmode(session::SessionRun, explicit::Bool)
+    return _runmode(session.mode, session, explicit)
+end
+function _runmode(mode::Rehearsal, session::SessionRun, ::Bool)
+    isnothing(session.handle) && return mode
+    session.ended &&
+        throw(ReadWriteException("the rehearsal has ended: call DataPipeline.rehearse again to prepare another"))
+    return throw(ReadWriteException("the rehearsal's handle is open: finalise or discard it, or call rehearse again with restart = true"))
+end
+function _runmode(::RecordedRun, session::SessionRun, explicit::Bool)
+    explicit && return RecordedRun()
+    session.ended &&
+        throw(ReadWriteException("a code run was recorded in this session already: a script making several runs is not supported, and whether it should be is undecided"))
+    return throw(ReadWriteException("code run $(session.handle.code_run_uuid) is open: finalise it before another initialise"))
+end
+
+# The token the run's registry holds, which a rehearsal never has, whatever
+# the environment holds
 _runtoken(::RecordedRun, token::Union{Nothing, AbstractString}) = token
 _runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
+
+# The session's run once `initialise` has opened one: a rehearsal's handle,
+# or the script's recorded run, a run opened with files given being no
+# business of the session's
+function _opened(handle::DataRegistryHandle{Rehearsal}, ::Bool)
+    session = SESSION[]
+    SESSION[] = SessionRun(session.mode, session.job, handle, false)
+    return nothing
+end
+function _opened(handle::DataRegistryHandle{RecordedRun}, explicit::Bool)
+    explicit || (SESSION[] = SessionRun(RecordedRun(), nothing, handle, false))
+    return nothing
+end
+
+# ... and ended, where it was the session's
+function _ended(handle::DataRegistryHandle)
+    session = SESSION[]
+    (!isnothing(session) && session.handle === handle) ||
+        return nothing
+    SESSION[] = SessionRun(session.mode, session.job, handle, true)
+    return nothing
+end
 
 # ... and the submission script beside it, wanted when a working config was
 # given alone
 function _launchedscript()
-    isnothing(REHEARSAL[]) ||
-        return joinpath(REHEARSAL[].job, FDP_SUBMISSION_SCRIPT)
+    job = _sessionjob()
+    isnothing(job) || return joinpath(job, FDP_SUBMISSION_SCRIPT)
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_SUBMISSION()
     return throw(ConfigFileException(string("initialise was given a working config and no submission script, ",
                                             "and FDP_CONFIG_DIR is not set to find one beside it: give both")))

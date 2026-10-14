@@ -48,11 +48,12 @@ the working config beside them, prints the issues a recorded run would have
 raised, deletes the job folder, and returns the folder. `discard` ends a
 rehearsal without collecting anything.
 
-A rehearsal lasts until `finalise` or `discard` ends it, and a second
-`rehearse` meanwhile is an error, unless `restart = true` discards the one
-in progress first. A script run again after a failure, with another
-`initialise()`, carries on in the same rehearsal: what its earlier handle
-wrote is removed. The outputs folder is a new one under the system's
+A session has one run, opened once: `initialise()` is an error while a run
+is open, and after `finalise` or `discard` has ended it. In a rehearsal the
+error says to `rehearse` again, which prepares a fresh one; a script that
+failed halfway is run again that way, with `restart = true` while the first
+rehearsal is still open. A recorded run cannot be followed by another in the
+same session. The outputs folder is a new one under the system's
 temporary directory, unless `outputs =` names one, in which case a repeated
 rehearsal replaces its files. `local_only = true` passes `--local` to
 `fair run`. Nothing of a rehearsal reaches the registry, so a model run can

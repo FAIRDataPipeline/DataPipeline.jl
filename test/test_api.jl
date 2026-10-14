@@ -1685,6 +1685,28 @@ Test.@testset "the registry token" begin
                                                                             String[])
 end
 
+@testset "initialise() once per fair run" begin
+    # The script's call, with no files given, opens the run fair run prepared
+    # - here the suite's own - once: not again while it is open, nor after it
+    # has ended. A call with files given, as every other test makes, is a run
+    # of the caller's own, which the session does not keep.
+    @test isnothing(DataPipeline.SESSION[])
+    launched = DataPipeline.initialise()
+    @test launched isa DataPipeline.DataRegistryHandle{DataPipeline.RecordedRun}
+    @test DataPipeline.SESSION[].handle === launched
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise()
+    @test occursin("is open", err.value.msg)
+    @test DataPipeline.initialise(config, config) isa
+          DataPipeline.DataRegistryHandle
+    DataPipeline.finalise(launched)
+    @test DataPipeline.SESSION[].ended
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise()
+    @test occursin("recorded in this session already", err.value.msg)
+    @test_throws DataPipeline.ReadWriteException DataPipeline.rehearse(dirname(config))
+    # The session is given back to the test files after this one
+    DataPipeline.SESSION[] = nothing
+end
+
 @testset "initialise outside fair run" begin
     withenv("FDP_CONFIG_DIR" => nothing, "FDP_LOCAL_TOKEN" => nothing) do
         # With nothing set, the call says what `fair run` would have set

@@ -20,14 +20,23 @@ saying so. After [`rehearse`](@ref) the same call opens a
 [`Rehearsal`](@ref) instead, from the job folder it prepared: nothing is
 registered, and the handle holds no token, whatever is given or set.
 
+A session has one run, opened once by that call: a second call while the run
+is open, or after `finalise` or [`discard`](@ref) has ended it, is a
+[`ReadWriteException`](@ref) - for a rehearsal, to `rehearse` again; for a
+recorded run, since a script making several runs is not supported. A call
+with the files given opens a run of its own, which the session does not keep.
+
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
 that ran cannot be recovered from its commit.
 """
-function initialise(config_file::String = _launchedconfig(),
-                    submission_script::String = _launchedscript();
+function initialise(config_file::Union{Nothing, String} = nothing,
+                    submission_script::Union{Nothing, String} = nothing;
                     token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
-    mode = _runmode()
+    explicit = !isnothing(config_file)
+    mode = _runmode(SESSION[], explicit)
+    isnothing(config_file) && (config_file = _launchedconfig())
+    isnothing(submission_script) && (submission_script = _launchedscript())
     println("processing config file: ", config_file)
     config = _workingconfig(config_file)
     run_metadata = config["run_metadata"]
@@ -36,7 +45,9 @@ function initialise(config_file::String = _launchedconfig(),
                                 get(run_metadata, "api_version",
                                     DEFAULT_API_VERSION),
                                 token = _runtoken(mode, token))
-    return _openrun(mode, config, config_file, submission_script, registry)
+    handle = _openrun(mode, config, config_file, submission_script, registry)
+    _opened(handle, explicit)
+    return handle
 end
 
 # Open a recorded code run: register the data store, the config, the script
@@ -137,6 +148,7 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
         return println(io, handle.code_run_uuid)
     end
     println("finished - code run locally registered as: ", url, "\n")
+    _ended(handle)
     return handle.config["run_metadata"]["write_data_store"]
 end
 

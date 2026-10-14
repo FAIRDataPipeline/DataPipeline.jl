@@ -6,16 +6,6 @@
 # it. The methods here are the rehearsal's side of what a recorded run
 # registers; the recorded side is beside each call.
 
-# The rehearsal in progress in this session: the job folder it runs from and
-# the folder its outputs go to, from `rehearse`, and its handle once
-# `initialise` has opened one. A session has one at a time.
-struct SessionRehearsal
-    job::String
-    outputs::String
-    handle::Union{Nothing, DataRegistryHandle{Rehearsal}}
-end
-const REHEARSAL = Ref{Union{Nothing, SessionRehearsal}}(nothing)
-
 """
     rehearse(path; outputs = nothing, local_only = false, restart = false)
 
@@ -32,12 +22,14 @@ itself, or the working config in it. Return the job folder.
 `outputs` is the folder the outputs are collected in, made if need be; by
 default a new folder under the system's temporary directory, which lasts as
 long as the system keeps it. The session keeps the rehearsal - the job
-folder, the outputs folder, and the handle once opened - until `finalise` or
-[`discard`](@ref) ends it, and a second `rehearse` meanwhile is an error
+folder, the outputs folder, and the handle once opened - and `initialise()`
+opens it once: a second call is an error until `finalise` or
+[`discard`](@ref) has ended it, and after that too, until `rehearse` is
+called again. A second `rehearse` before the rehearsal has ended is an error
 unless `restart` is true, when the rehearsal in progress is discarded first:
 its handle's files removed from the data store, and its job folder deleted if
-`fair run --ci` made it. A token in the environment is not used by a
-rehearsal.
+`fair run --ci` made it. A session that has recorded a code run cannot
+rehearse. A token in the environment is not used by a rehearsal.
 
 The `fair` that prepares a user config is the one [`set_cli!`](@ref)
 recorded, else the `fair` on the path, else the copy [`install_cli`](@ref)
@@ -48,15 +40,19 @@ for. [`@fair_str`](@ref) runs the same `fair` with any arguments.
 function rehearse(path::AbstractString;
                   outputs::Union{Nothing, AbstractString} = nothing,
                   local_only::Bool = false, restart::Bool = false)
-    current = REHEARSAL[]
-    if !isnothing(current)
-        restart ||
-            throw(ReadWriteException("a rehearsal prepared in $(current.job) is in progress: finalise or discard its handle, or call rehearse with restart = true to discard it"))
-        _discardcurrent()
+    session = SESSION[]
+    if !isnothing(session)
+        session.mode isa RecordedRun &&
+            throw(ReadWriteException("this session has recorded a code run: a rehearsal belongs in a session that records nothing"))
+        if !session.ended
+            restart ||
+                throw(ReadWriteException("a rehearsal prepared in $(session.job) is in progress: finalise or discard its handle, or call rehearse with restart = true to discard it"))
+            _discardcurrent()
+        end
     end
     job = _jobfolder(path, local_only)
     folder = _outputsfolder(outputs)
-    REHEARSAL[] = SessionRehearsal(job, folder, nothing)
+    SESSION[] = SessionRun(Rehearsal(folder), job, nothing, false)
     println("rehearsing the run prepared in ", job)
     println("run the script, or its lines, in this session: ",
             "DataPipeline.finalise collects its outputs in ", folder,
@@ -70,20 +66,25 @@ end
 End a rehearsal without collecting its outputs: remove the files it wrote to
 the data store, delete the job folder it ran from if `fair run --ci` made it
 under the data store's `jobs/`, and end the session's rehearsal. Return
-`nothing`. A handle that a later `initialise` has superseded only has its
-files removed. A recorded code run, being registered already at
-`initialise`, cannot be discarded: it ends with [`finalise`](@ref).
+`nothing`. A handle whose rehearsal has ended only has its files removed. A
+recorded code run, being registered already at `initialise`, cannot be
+discarded: it ends with [`finalise`](@ref).
 """
 function discard(handle::DataRegistryHandle{Rehearsal})
     _removeoutputs(handle)
-    current = REHEARSAL[]
-    if !isnothing(current) && current.handle === handle
+    if _sessionsopen(handle)
         _closerehearsal(handle)
         println("rehearsal discarded")
     else
         println("this handle's rehearsal had ended already")
     end
     return nothing
+end
+
+# Whether `handle` is the session's run, and open
+function _sessionsopen(handle::DataRegistryHandle)
+    session = SESSION[]
+    return !isnothing(session) && session.handle === handle && !session.ended
 end
 function discard(handle::DataRegistryHandle{RecordedRun})
     return throw(ReadWriteException("code run $(handle.code_run_uuid) is registered already, so cannot be discarded: a recorded run ends with finalise"))
@@ -93,16 +94,17 @@ end
 # through its handle, if one was opened, else by deleting the job folder that
 # `fair run --ci` made, there being nothing else
 function _discardcurrent()
-    current = REHEARSAL[]
-    if isnothing(current.handle)
-        working = joinpath(current.job, "config.yaml")
+    session = SESSION[]
+    isnothing(session) && return nothing
+    if isnothing(session.handle)
+        working = joinpath(session.job, "config.yaml")
         isfile(working) &&
-            _deletejob(current.job,
+            _deletejob(session.job,
                        YAML.load_file(working)["run_metadata"]["write_data_store"])
-        REHEARSAL[] = nothing
     else
-        discard(current.handle)
+        discard(session.handle)
     end
+    SESSION[] = nothing
     return nothing
 end
 
@@ -173,27 +175,18 @@ function _outputsfolder(outputs::AbstractString)
 end
 
 # Open a rehearsal: a handle with no registry URLs, its uuid made here so that
-# `${{RUN_ID}}` resolves, and a commit with uncommitted changes warned of. It
-# becomes the session's rehearsal's handle; one opened before it - a script
-# run again after a failure - has its files removed first, and is superseded.
+# `${{RUN_ID}}` resolves, and a commit with uncommitted changes warned of
 function _openrun(mode::Rehearsal, config::Dict, config_file::String,
                   ::String, registry::RegistryEndpoint)
     commit = config["run_metadata"]["latest_commit"]
     endswith(commit, "-dirty") &&
         @warn "the code repository has uncommitted changes ($commit): a recorded run would raise an issue against it"
-    handle = _newhandle(mode, config, config_file, registry,
-                        (config = nothing, script = nothing,
-                         repository = nothing, datastore = nothing,
-                         code_run = nothing), string(uuid4()))
-    current = REHEARSAL[]
-    if !isnothing(current.handle)
-        println("the rehearsal's earlier handle is superseded: what it wrote to the data store is removed")
-        _removeoutputs(current.handle)
-    end
-    REHEARSAL[] = SessionRehearsal(current.job, current.outputs, handle)
     println("rehearsal: nothing is registered, and the outputs go to ",
             mode.outputs)
-    return handle
+    return _newhandle(mode, config, config_file, registry,
+                      (config = nothing, script = nothing,
+                       repository = nothing, datastore = nothing,
+                       code_run = nothing), string(uuid4()))
 end
 
 # What `link_register!` would register, said rather than done, and `nothing`
@@ -235,13 +228,12 @@ one registered as the highest version of its data product, which is reported
 with the working config and the script copied beside them. The issues raised
 are printed, the data store's empty directories pruned, the job folder deleted
 if `fair run --ci` made it under the data store's `jobs/`, and the session's
-rehearsal ended. Return the outputs folder. A handle that a later
-`initialise` has superseded cannot be finalised.
+rehearsal ended. Return the outputs folder. A handle whose rehearsal has
+ended cannot be finalised again.
 """
 function finalise(handle::DataRegistryHandle{Rehearsal})
-    current = REHEARSAL[]
-    (!isnothing(current) && current.handle === handle) ||
-        throw(ReadWriteException("this handle's rehearsal has ended, or a later initialise superseded it: finalise the handle that is current"))
+    _sessionsopen(handle) ||
+        throw(ReadWriteException("this handle's rehearsal has ended: rehearse again for another"))
     _checksources(handle)
     for (data_product, component) in sort(collect(keys(handle.outputs)),
                                           by = string)
@@ -343,12 +335,12 @@ function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
 end
 
 # End the session's rehearsal: delete the job folder where `fair run --ci`
-# made it, and leave the session with no rehearsal, so that another
-# `initialise()` is told there is no run rather than finding no file
+# made it, and mark the run ended, so that another `initialise()` is told to
+# rehearse again rather than finding no file
 function _closerehearsal(handle::DataRegistryHandle{Rehearsal})
     _deletejob(handle.config_dir,
                handle.config["run_metadata"]["write_data_store"])
-    REHEARSAL[] = nothing
+    _ended(handle)
     return nothing
 end
 

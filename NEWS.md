@@ -18,6 +18,8 @@
     a folder, registering nothing. `DataPipeline.discard` ends a rehearsal
     without its outputs; a second `rehearse` meanwhile is an error unless
     `restart = true` discards the first.
+  - `initialise()` opens the run that `fair run` or `rehearse` prepared, once:
+    a second call while it is open, or after it has ended, is an error.
   - `DataPipeline.fair"pull config.yaml"` runs the CLI from Julia, its
     arguments written as on the command line: the `fair` that `set_cli!`
     recorded, else the one on the path, else the copy `install_cli` made.

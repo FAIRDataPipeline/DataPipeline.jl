@@ -331,6 +331,25 @@ function _showrun(io::IO, handle::DataRegistryHandle{Rehearsal})
     return println(io, "  outputs: ", handle.mode.outputs)
 end
 
+"""
+    SessionRun(mode, job, handle, ended)
+
+The run this session is in, kept in `SESSION`: a recorded run opened by the
+script's `initialise()`, or a rehearsal from [`rehearse`](@ref) on. `mode` is
+its [`AbstractRunMode`](@ref); `job` the job folder a rehearsal was prepared
+in, `nothing` for a recorded run, whose folder `FDP_CONFIG_DIR` names;
+`handle` the [`DataRegistryHandle`](@ref) once `initialise` has opened one;
+`ended` whether `finalise` or `discard` has ended it. A session has one run,
+opened once: `initialise()` refuses while it is open and after it has ended.
+"""
+struct SessionRun
+    mode::AbstractRunMode
+    job::Union{Nothing, String}
+    handle::Union{Nothing, DataRegistryHandle}
+    ended::Bool
+end
+const SESSION = Ref{Union{Nothing, SessionRun}}(nothing)
+
 # == Functions ==
 
 # The headers every registry request carries, with the endpoint's own token

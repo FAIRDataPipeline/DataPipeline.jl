@@ -23,7 +23,7 @@ namespace = launch.config["run_metadata"]["default_output_namespace"]
 
 # The session's rehearsal, which each test below ends, leaving none for the
 # next
-current() = DataPipeline.REHEARSAL[]
+current() = DataPipeline.SESSION[]
 
 # A folder laid out like a job folder, holding a working config made from the
 # launch config, under the data store but not under its jobs/
@@ -94,7 +94,7 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     # The session holds the rehearsal from here: its folders, no handle yet
     @test DataPipeline.rehearse(job, outputs = outputs) == job
     @test current().job == job
-    @test current().outputs == outputs
+    @test current().mode.outputs == outputs
     @test isnothing(current().handle)
 
     # A rehearsal handle: no token, whatever the environment holds, and
@@ -153,17 +153,16 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     @test !isfile(path)
     @test !isfile(copied)
     @test counts() == before
-    @test isnothing(current())
+    @test current().ended
     # The job folder is not under jobs/, so it stays
     @test isfile(working)
 
-    # A finalised handle cannot be finalised again; and with no rehearsal
-    # and no fair run, initialise() says so
+    # A finalised handle cannot be finalised again, and the rehearsal that
+    # has ended opens no other handle: rehearse again
     err = @test_throws ReadWriteException DataPipeline.finalise(handle)
     @test occursin("ended", err.value.msg)
-    withenv("FDP_CONFIG_DIR" => nothing) do
-        @test_throws ConfigFileException DataPipeline.initialise()
-    end
+    err = @test_throws ReadWriteException DataPipeline.initialise()
+    @test occursin("rehearse again", err.value.msg)
 end
 
 Test.@testset "a rehearsal repeated into the same folder replaces its files" begin
@@ -200,7 +199,7 @@ Test.@testset "discard()" begin
     @test !isdir(dirname(path))
     @test isempty(readdir(outputs))
     @test isempty(handle.outputs)
-    @test isnothing(current())
+    @test current().ended
     @test counts() == before
     # Discarded again, it has nothing to do
     @test isnothing(DataPipeline.discard(handle))
@@ -242,33 +241,36 @@ Test.@testset "a second rehearse(), and restart = true" begin
     @test isnothing(current())
 end
 
-Test.@testset "initialise() twice in one rehearsal" begin
-    job = job_folder("twice")
+Test.@testset "initialise() once per rehearsal" begin
+    job = job_folder("once")
     working = joinpath(job, "config.yaml")
-    whole = "rehearse/twice/$uid"
-    DataPipeline._addwrite(working, whole, "a file written twice",
+    whole = "rehearse/once/$uid"
+    DataPipeline._addwrite(working, whole, "a file written once",
                            file_type = "txt", use_version = "0.0.1")
     outputs = mktempdir()
     DataPipeline.rehearse(job, outputs = outputs)
-    first = DataPipeline.initialise()
-    path = link_write!(first, whole)
-    write(path, "first $uid\n")
+    handle = DataPipeline.initialise()
+    path = link_write!(handle, whole)
+    write(path, "once $uid\n")
 
-    # The script run again after a failure: the earlier handle's file is
-    # removed, and it is superseded
-    second = DataPipeline.initialise()
-    @test current().handle === second
-    @test !isfile(path)
-    @test isempty(first.outputs)
-    err = @test_throws ReadWriteException DataPipeline.finalise(first)
-    @test occursin("superseded", err.value.msg)
-    @test isnothing(DataPipeline.discard(first))
-    @test current().handle === second
-    write(link_write!(second, whole), "second $uid\n")
-    @test DataPipeline.finalise(second) == outputs
+    # The script run again by mistake: the open handle stays, and the error
+    # says what to do
+    err = @test_throws ReadWriteException DataPipeline.initialise()
+    @test occursin("restart = true", err.value.msg)
+    @test current().handle === handle
+    @test isfile(path)
+    @test DataPipeline.finalise(handle) == outputs
+    # Ended, the rehearsal opens no other: rehearse again, which needs no
+    # restart
+    err = @test_throws ReadWriteException DataPipeline.initialise()
+    @test occursin("rehearse again", err.value.msg)
+    DataPipeline.rehearse(job, outputs = outputs)
+    again = DataPipeline.initialise()
+    @test current().handle === again
+    write(link_write!(again, whole), "again $uid\n")
+    @test DataPipeline.finalise(again) == outputs
     @test read(joinpath(outputs, namespace, whole, "0.0.1.txt"), String) ==
-          "second $uid\n"
-    @test isnothing(current())
+          "again $uid\n"
 end
 
 Test.@testset "what rehearse() accepts" begin
@@ -291,7 +293,7 @@ Test.@testset "what rehearse() accepts" begin
     job = job_folder("config")
     @test DataPipeline.rehearse(joinpath(job, "config.yaml")) == job
     @test current().job == job
-    folder = current().outputs
+    folder = current().mode.outputs
     @test isdir(folder)
     @test startswith(basename(folder), "fdp-rehearsal-")
     DataPipeline._discardcurrent()
@@ -340,7 +342,7 @@ Test.@testset "rehearse() from a user config, through fair" begin
           "rehearsed through fair $uid\n"
     # The job folder, being under jobs/, is deleted
     @test !isdir(job)
-    @test isnothing(current())
+    @test current().ended
     @test counts() == before
 
     # Prepared twice: restart deletes the first job folder, under jobs/
@@ -485,7 +487,7 @@ Test.@testset "a token in the environment is not a rehearsal's" begin
     @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
     @test isnothing(handle.registry.token)
     DataPipeline.discard(handle)
-    @test isnothing(current())
+    @test current().ended
 end
 
 DataPipeline.finalise(launch)
