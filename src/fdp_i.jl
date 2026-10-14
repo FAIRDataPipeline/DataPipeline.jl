@@ -29,9 +29,11 @@ end
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
-# The working config of the run that `fair run` launched this script for, in
-# the folder it names in FDP_CONFIG_DIR; with that unset, no run was launched
+# The working config of the run this script is in: the session's rehearsal's,
+# else the one `fair run` launched this script for, in the folder it names in
+# FDP_CONFIG_DIR; with neither, no run was prepared
 function _launchedconfig()
+    isnothing(REHEARSAL[]) || return joinpath(REHEARSAL[].job, "config.yaml")
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_CONFIG()
     return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
                                             "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
@@ -40,23 +42,21 @@ function _launchedconfig()
                                             "and the submission script")))
 end
 
-# The mode a run opens in: a rehearsal where `rehearse` has set FDP_REHEARSAL
-# to its outputs folder, which must not come with a token - a recorded run
-# that lost its token must fail, and a rehearsal never holds one - else a
-# recorded run
-function _runmode(token::Union{Nothing, AbstractString})
-    outputs = get(ENV, "FDP_REHEARSAL", nothing)
-    isnothing(outputs) && return RecordedRun()
-    isnothing(token) ||
-        throw(ConfigFileException(string("FDP_REHEARSAL is set, for a rehearsal, and so is a token for a ",
-                                         "recorded run, in FDP_LOCAL_TOKEN or `token`: a rehearsal holds no ",
-                                         "token, so unset whichever was not meant")))
-    return Rehearsal(outputs)
+# The mode a run opens in: the session's rehearsal where `rehearse` has
+# prepared one, else a recorded run; and the token the run's registry holds,
+# which a rehearsal never has, whatever the environment holds
+function _runmode()
+    current = REHEARSAL[]
+    return isnothing(current) ? RecordedRun() : Rehearsal(current.outputs)
 end
+_runtoken(::RecordedRun, token::Union{Nothing, AbstractString}) = token
+_runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
 
 # ... and the submission script beside it, wanted when a working config was
 # given alone
 function _launchedscript()
+    isnothing(REHEARSAL[]) ||
+        return joinpath(REHEARSAL[].job, FDP_SUBMISSION_SCRIPT)
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_SUBMISSION()
     return throw(ConfigFileException(string("initialise was given a working config and no submission script, ",
                                             "and FDP_CONFIG_DIR is not set to find one beside it: give both")))

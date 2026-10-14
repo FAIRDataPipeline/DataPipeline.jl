@@ -16,22 +16,26 @@
     (a job folder, or its working config, may be given instead), the script
     then runs unchanged in the session, and `finalise` collects the outputs in
     a folder, registering nothing. `DataPipeline.discard` ends a rehearsal
-    without its outputs.
+    without its outputs; a second `rehearse` meanwhile is an error unless
+    `restart = true` discards the first.
   - `DataPipeline.fair"pull config.yaml"` runs the CLI from Julia, its
-    arguments written as on the command line: the `fair` on the path, else the
-    copy `install_cli` made, else the one `FDP_FAIR_CLI` names.
+    arguments written as on the command line: the `fair` that `set_cli!`
+    recorded, else the one on the path, else the copy `install_cli` made.
+  - `DataPipeline.set_cli!(path)` records the `fair` to use, as a preference
+    of the active environment that holds across sessions.
   - `DataPipeline.install_cli()` installs the package's own copy of `fair`, or
     brings it up to date, in a scratch space, with a Python that MicroMamba
     fetches: for a Julia with no virtual environment on its path, and to set
     the registry up from Julia with `DataPipeline.fair"registry install"`.
+    `install_cli!` records the copy as the `fair` to use as well.
   - `finalise()` returns the folder the outputs are under: the data store's
     root, or a rehearsal's folder.
   - `initialise()` outside `fair run` throws a `ConfigFileException` saying
     what sets a run up, rather than a `SystemError` or `KeyError`.
   - `DataRegistryHandle` takes a type parameter, the run's mode, `RecordedRun`
     or `Rehearsal`; its registry URL fields are `nothing` in a rehearsal.
-  - New dependencies: MicroMamba and Scratch. Every standard library has a
-    compat entry.
+  - New dependencies: MicroMamba, Preferences and Scratch. Every standard
+    library has a compat entry.
   - `link_write!` takes a `path`, to register a file that exists already: it is
     hard-linked into the data store, or copied. `link_read!` takes a `path`, and
     `force`, to make a registered file available there. `DataPipeline.canread`

@@ -12,6 +12,8 @@ module DataPipeline
 import BibInternal
 import BibParser
 import MicroMamba
+using Preferences: Preferences, @load_preference, @set_preferences!,
+                   @delete_preferences!
 using CSV
 using DataFrames
 using Dates
@@ -51,7 +53,8 @@ export raise_issue
 export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
-public initialise, finalise, rehearse, discard, install_cli
+public initialise, finalise, rehearse, discard, install_cli, install_cli!,
+       set_cli!
 public @fair_str
 public DataRegistryHandle, AbstractRunMode, RecordedRun, Rehearsal
 public RegistryEndpoint

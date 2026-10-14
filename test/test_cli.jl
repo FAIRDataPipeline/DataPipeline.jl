@@ -24,7 +24,7 @@ Test.@testset "DataPipeline.fair\"...\"" begin
     @test occursin("no such command", err.value.msg)
 end
 
-Test.@testset "install_cli()" begin
+Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
     # The copy is installed from the network, with its Python, into the
     # package's own scratch space, where a user has it too
     executable = DataPipeline.install_cli()
@@ -38,17 +38,38 @@ Test.@testset "install_cli()" begin
     @test DataPipeline.install_cli() == executable
     # The copy runs
     @test isnothing(DataPipeline._fair("--version", cli = executable))
-    # ... and is the second place looked: after the path, before FDP_FAIR_CLI.
+
+    # With nothing recorded and fair off the path, the copy is the fair run.
     # The path keeps everything but fair, since the CLI needs git on it
+    @test isnothing(DataPipeline._preferredcli())
     separator = Sys.iswindows() ? ';' : ':'
     without_fair = join(filter(dir -> isnothing(Sys.which(joinpath(dir,
                                                                    "fair"))),
                                split(ENV["PATH"], separator)), separator)
-    withenv("PATH" => without_fair,
-            "FDP_FAIR_CLI" => joinpath(tempdir(), "missing-$uid")) do
+    withenv("PATH" => without_fair) do
         @test isnothing(Sys.which("fair"))
         @test isnothing(DataPipeline.fair"--version")
     end
+
+    # set_cli! records a fair that runs, and the record comes first; a path
+    # it refuses leaves the record as it was; nothing removes it
+    @test DataPipeline.set_cli!(executable) == executable
+    try
+        @test DataPipeline._preferredcli() == executable
+        @test isnothing(DataPipeline.fair"--version")
+        @test_throws ArgumentError DataPipeline.set_cli!(joinpath(tempdir(),
+                                                                  "missing-$uid"))
+        @test DataPipeline._preferredcli() == executable
+    finally
+        @test isnothing(DataPipeline.set_cli!(nothing))
+    end
+    @test isnothing(DataPipeline._preferredcli())
+
+    # install_cli! installs, or finds the copy installed, and records it
+    @test DataPipeline.install_cli!() == executable
+    @test DataPipeline._preferredcli() == executable
+    DataPipeline.set_cli!(nothing)
+
     # A version asked for is the one installed, and the newest brought back
     DataPipeline.install_cli(version = "0.10.2")
     @test occursin("0.10.2", DataPipeline._cliversion())

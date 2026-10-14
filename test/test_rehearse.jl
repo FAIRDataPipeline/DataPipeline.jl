@@ -21,17 +21,12 @@ registry = launch.registry
 datastore = launch.config["run_metadata"]["write_data_store"]
 namespace = launch.config["run_metadata"]["default_output_namespace"]
 
-# The environment this run was launched with, which each rehearsal below
-# changes and which the test files after this one need back; and the same
-# with no token, for a rehearsal prepared without the warning about it
-launch_dir = ENV["FDP_CONFIG_DIR"]
-launch_token = ENV["FDP_LOCAL_TOKEN"]
-quiet = ("FDP_CONFIG_DIR" => launch_dir, "FDP_LOCAL_TOKEN" => nothing,
-         "FDP_REHEARSAL" => nothing)
+# The session's rehearsal, which each test below ends, leaving none for the
+# next
+current() = DataPipeline.REHEARSAL[]
 
 # A folder laid out like a job folder, holding a working config made from the
-# launch config, under the data store but not under its jobs/: made while
-# FDP_CONFIG_DIR still names the launch config
+# launch config, under the data store but not under its jobs/
 function job_folder(name::AbstractString)
     path = DataPipeline._createconfig(joinpath("coderun", datetime,
                                                "rehearse-$name",
@@ -96,76 +91,77 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     outputs = mktempdir()
     before = counts()
 
-    withenv("FDP_CONFIG_DIR" => launch_dir, "FDP_LOCAL_TOKEN" => launch_token,
-            "FDP_REHEARSAL" => nothing) do
-        # The token in the session is removed, with a warning, and the two
-        # variables set
-        @test (@test_logs (:warn, r"FDP_LOCAL_TOKEN") DataPipeline.rehearse(job,
-                                                                            outputs = outputs)) ==
-              job
-        @test ENV["FDP_CONFIG_DIR"] == job
-        @test ENV["FDP_REHEARSAL"] == outputs
-        @test !haskey(ENV, "FDP_LOCAL_TOKEN")
+    # The session holds the rehearsal from here: its folders, no handle yet
+    @test DataPipeline.rehearse(job, outputs = outputs) == job
+    @test current().job == job
+    @test current().outputs == outputs
+    @test isnothing(current().handle)
 
-        # A rehearsal handle: no token, nothing registered
-        handle = DataPipeline.initialise()
-        @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
-        @test handle.mode.outputs == outputs
-        @test isnothing(handle.registry.token)
-        @test isnothing(handle.code_run_obj) && isnothing(handle.config_obj)
-        @test occursin("rehearsal", sprint(show, handle))
-        @test occursin("registering nothing",
-                       sprint(show, MIME("text/plain"), handle))
-        @test counts() == before
+    # A rehearsal handle: no token, whatever the environment holds, and
+    # nothing registered
+    @test haskey(ENV, "FDP_LOCAL_TOKEN")
+    handle = DataPipeline.initialise()
+    @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
+    @test current().handle === handle
+    @test handle.mode.outputs == outputs
+    @test isnothing(handle.registry.token)
+    @test isnothing(handle.code_run_obj) && isnothing(handle.config_obj)
+    @test occursin("rehearsal", sprint(show, handle))
+    @test occursin("registering nothing",
+                   sprint(show, MIME("text/plain"), handle))
+    @test counts() == before
 
-        # Reads and writes go as they would
-        parameters = link_read!(handle, "parameters")
-        @test isfile(parameters)
-        path = link_write!(handle, whole)
-        @test startswith(basename(path), "dat-")
-        write(path, "a rehearsed file $uid\n")
-        @test write_estimate(handle, 4.2, estimate, "point",
-                             "a rehearsed estimate") == (estimate, "point")
-        copied = link_write!(handle, again)
-        cp(parameters, copied, force = true)
-        raise_issue(handle, whole, "a rehearsed issue $uid")
+    # Reads and writes go as they would
+    parameters = link_read!(handle, "parameters")
+    @test isfile(parameters)
+    path = link_write!(handle, whole)
+    @test startswith(basename(path), "dat-")
+    write(path, "a rehearsed file $uid\n")
+    @test write_estimate(handle, 4.2, estimate, "point",
+                         "a rehearsed estimate") == (estimate, "point")
+    copied = link_write!(handle, again)
+    cp(parameters, copied, force = true)
+    raise_issue(handle, whole, "a rehearsed issue $uid")
 
-        # What registers at the call registers nothing: an author, a deposit
-        # with no file and a file from elsewhere, the file given back as it is
-        register_citations!(handle, citations)
-        @test register_authors!(handle, person => orcid) == [person]
-        @test isnothing(link_register!(handle, deposit, bibtex = "deposit",
-                                       primary = true))
-        file = file_of("a rehearsed external file $uid")
-        @test link_register!(handle, external, path = file,
-                             bibtex = "deposit", primary = true,
-                             title = "An external file $uid") == file
-        @test handle.inputs[(external, nothing)]["path"] == file
-        @test isnothing(handle.inputs[(external, nothing)]["component_url"])
-        @test counts() == before
+    # What registers at the call registers nothing: an author, a deposit
+    # with no file and a file from elsewhere, the file given back as it is
+    register_citations!(handle, citations)
+    @test register_authors!(handle, person => orcid) == [person]
+    @test isnothing(link_register!(handle, deposit, bibtex = "deposit",
+                                   primary = true))
+    file = file_of("a rehearsed external file $uid")
+    @test link_register!(handle, external, path = file,
+                         bibtex = "deposit", primary = true,
+                         title = "An external file $uid") == file
+    @test handle.inputs[(external, nothing)]["path"] == file
+    @test isnothing(handle.inputs[(external, nothing)]["component_url"])
+    @test counts() == before
 
-        # finalise collects the outputs by namespace, name and version, the
-        # unchanged one too, with the working config beside them, and
-        # registers nothing
-        @test DataPipeline.finalise(handle) == outputs
-        placed = joinpath(outputs, namespace, whole, "0.0.1.txt")
-        @test read(placed, String) == "a rehearsed file $uid\n"
-        @test handle.outputs[(whole, nothing)]["path"] == placed
-        @test isfile(joinpath(outputs, namespace, estimate, "0.0.1.toml"))
-        @test isfile(joinpath(outputs, "PSU", "SEIRS_model", "parameters",
-                              "1.0.1.csv"))
-        @test haskey(handle.unchanged, (again, nothing))
-        @test !haskey(handle.outputs, (again, nothing))
-        @test isfile(joinpath(outputs, "config.yaml"))
-        @test !isfile(path)
-        @test !isfile(copied)
-        @test counts() == before
-        @test !haskey(ENV, "FDP_CONFIG_DIR")
-        @test !haskey(ENV, "FDP_REHEARSAL")
-        # The job folder is not under jobs/, so it stays
-        @test isfile(working)
+    # finalise collects the outputs by namespace, name and version, the
+    # unchanged one too, with the working config beside them, registers
+    # nothing, and ends the session's rehearsal
+    @test DataPipeline.finalise(handle) == outputs
+    placed = joinpath(outputs, namespace, whole, "0.0.1.txt")
+    @test read(placed, String) == "a rehearsed file $uid\n"
+    @test handle.outputs[(whole, nothing)]["path"] == placed
+    @test isfile(joinpath(outputs, namespace, estimate, "0.0.1.toml"))
+    @test isfile(joinpath(outputs, "PSU", "SEIRS_model", "parameters",
+                          "1.0.1.csv"))
+    @test haskey(handle.unchanged, (again, nothing))
+    @test !haskey(handle.outputs, (again, nothing))
+    @test isfile(joinpath(outputs, "config.yaml"))
+    @test !isfile(path)
+    @test !isfile(copied)
+    @test counts() == before
+    @test isnothing(current())
+    # The job folder is not under jobs/, so it stays
+    @test isfile(working)
 
-        # A second finalise has nothing to do with no run: the clear error
+    # A finalised handle cannot be finalised again; and with no rehearsal
+    # and no fair run, initialise() says so
+    err = @test_throws ReadWriteException DataPipeline.finalise(handle)
+    @test occursin("ended", err.value.msg)
+    withenv("FDP_CONFIG_DIR" => nothing) do
         @test_throws ConfigFileException DataPipeline.initialise()
     end
 end
@@ -178,14 +174,12 @@ Test.@testset "a rehearsal repeated into the same folder replaces its files" beg
                            file_type = "txt", use_version = "0.0.1")
     outputs = mktempdir()
     placed = joinpath(outputs, namespace, whole, "0.0.1.txt")
-    withenv(quiet...) do
-        for text in ("first $uid\n", "second $uid\n")
-            DataPipeline.rehearse(job, outputs = outputs)
-            handle = DataPipeline.initialise()
-            write(link_write!(handle, whole), text)
-            @test DataPipeline.finalise(handle) == outputs
-            @test read(placed, String) == text
-        end
+    for text in ("first $uid\n", "second $uid\n")
+        DataPipeline.rehearse(job, outputs = outputs)
+        handle = DataPipeline.initialise()
+        write(link_write!(handle, whole), text)
+        @test DataPipeline.finalise(handle) == outputs
+        @test read(placed, String) == text
     end
 end
 
@@ -197,24 +191,84 @@ Test.@testset "discard()" begin
                            file_type = "txt", use_version = "0.0.1")
     outputs = mktempdir()
     before = counts()
-    withenv(quiet...) do
-        DataPipeline.rehearse(job, outputs = outputs)
-        handle = DataPipeline.initialise()
-        path = link_write!(handle, whole)
-        write(path, "a discarded file $uid\n")
-        @test isnothing(DataPipeline.discard(handle))
-        @test !isfile(path)
-        @test !isdir(dirname(path))
-        @test isempty(readdir(outputs))
-        @test isempty(handle.outputs)
-        @test !haskey(ENV, "FDP_CONFIG_DIR")
-        @test !haskey(ENV, "FDP_REHEARSAL")
-        @test counts() == before
-    end
+    DataPipeline.rehearse(job, outputs = outputs)
+    handle = DataPipeline.initialise()
+    path = link_write!(handle, whole)
+    write(path, "a discarded file $uid\n")
+    @test isnothing(DataPipeline.discard(handle))
+    @test !isfile(path)
+    @test !isdir(dirname(path))
+    @test isempty(readdir(outputs))
+    @test isempty(handle.outputs)
+    @test isnothing(current())
+    @test counts() == before
+    # Discarded again, it has nothing to do
+    @test isnothing(DataPipeline.discard(handle))
 
     # A recorded run is registered already
     err = @test_throws ReadWriteException DataPipeline.discard(launch)
     @test occursin("finalise", err.value.msg)
+end
+
+Test.@testset "a second rehearse(), and restart = true" begin
+    job = job_folder("restart")
+    working = joinpath(job, "config.yaml")
+    whole = "rehearse/restarted/$uid"
+    DataPipeline._addwrite(working, whole, "a restarted file",
+                           file_type = "txt", use_version = "0.0.1")
+    other = job_folder("restart-other")
+
+    # Prepared but never opened: a second rehearse refuses, and with restart
+    # discards it - its job folder, not being under jobs/, stays
+    DataPipeline.rehearse(job)
+    err = @test_throws ReadWriteException DataPipeline.rehearse(other)
+    @test occursin(job, err.value.msg)
+    @test occursin("restart = true", err.value.msg)
+    @test current().job == job
+    @test DataPipeline.rehearse(other, restart = true) == other
+    @test current().job == other
+    @test isfile(working)
+
+    # Opened and written to: restart removes what was written
+    DataPipeline.rehearse(job, restart = true)
+    handle = DataPipeline.initialise()
+    path = link_write!(handle, whole)
+    write(path, "restarted $uid\n")
+    @test DataPipeline.rehearse(other, restart = true) == other
+    @test !isfile(path)
+    @test isempty(handle.outputs)
+    @test isnothing(current().handle)
+    DataPipeline._discardcurrent()
+    @test isnothing(current())
+end
+
+Test.@testset "initialise() twice in one rehearsal" begin
+    job = job_folder("twice")
+    working = joinpath(job, "config.yaml")
+    whole = "rehearse/twice/$uid"
+    DataPipeline._addwrite(working, whole, "a file written twice",
+                           file_type = "txt", use_version = "0.0.1")
+    outputs = mktempdir()
+    DataPipeline.rehearse(job, outputs = outputs)
+    first = DataPipeline.initialise()
+    path = link_write!(first, whole)
+    write(path, "first $uid\n")
+
+    # The script run again after a failure: the earlier handle's file is
+    # removed, and it is superseded
+    second = DataPipeline.initialise()
+    @test current().handle === second
+    @test !isfile(path)
+    @test isempty(first.outputs)
+    err = @test_throws ReadWriteException DataPipeline.finalise(first)
+    @test occursin("superseded", err.value.msg)
+    @test isnothing(DataPipeline.discard(first))
+    @test current().handle === second
+    write(link_write!(second, whole), "second $uid\n")
+    @test DataPipeline.finalise(second) == outputs
+    @test read(joinpath(outputs, namespace, whole, "0.0.1.txt"), String) ==
+          "second $uid\n"
+    @test isnothing(current())
 end
 
 Test.@testset "what rehearse() accepts" begin
@@ -230,18 +284,18 @@ Test.@testset "what rehearse() accepts" begin
                                                "script" => "julia script.jl")))
     err = @test_throws ArgumentError DataPipeline.rehearse(user)
     @test occursin("fair init", err.value.msg)
-    # A working config is taken as its folder
+    @test isnothing(current())
+    # A working config is taken as its folder, and the default outputs folder
+    # is a new temporary one. That it outlives the session (made with
+    # `cleanup = false`) is not tested here: it would take a second process
     job = job_folder("config")
-    withenv(quiet...) do
-        @test DataPipeline.rehearse(joinpath(job, "config.yaml")) == job
-        @test ENV["FDP_CONFIG_DIR"] == job
-        # ... and the default outputs folder is a new temporary one. That it
-        # outlives the session (made with `cleanup = false`) is not tested
-        # here: it would take a second Julia process
-        folder = ENV["FDP_REHEARSAL"]
-        @test isdir(folder)
-        @test startswith(basename(folder), "fdp-rehearsal-")
-    end
+    @test DataPipeline.rehearse(joinpath(job, "config.yaml")) == job
+    @test current().job == job
+    folder = current().outputs
+    @test isdir(folder)
+    @test startswith(basename(folder), "fdp-rehearsal-")
+    DataPipeline._discardcurrent()
+    @test isnothing(current())
 end
 
 # A user config inside the project, as a user's would be, reading the SEIRS
@@ -271,42 +325,54 @@ Test.@testset "rehearse() from a user config, through fair" begin
     user = user_config("fair", name)
     outputs = mktempdir()
     before = counts()
-    withenv(quiet...) do
-        # fair run --ci prepares the job under the data store's jobs/
-        job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
-        @test isdir(job)
-        @test !startswith(relpath(job, joinpath(datastore, "jobs")), "..")
-        @test isfile(joinpath(job, "config.yaml"))
-        @test ENV["FDP_CONFIG_DIR"] == job
-        handle = DataPipeline.initialise()
-        @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
-        @test isfile(link_read!(handle, "parameters"))
-        write(link_write!(handle, name), "rehearsed through fair $uid\n")
-        @test DataPipeline.finalise(handle) == outputs
-        @test read(joinpath(outputs, "testing", name, "0.0.1.txt"), String) ==
-              "rehearsed through fair $uid\n"
-        # The job folder, being under jobs/, is deleted
-        @test !isdir(job)
-        @test counts() == before
-    end
+    # fair run --ci prepares the job under the data store's jobs/
+    job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
+    @test isdir(job)
+    @test !startswith(relpath(job, joinpath(datastore, "jobs")), "..")
+    @test isfile(joinpath(job, "config.yaml"))
+    @test current().job == job
+    handle = DataPipeline.initialise()
+    @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
+    @test isfile(link_read!(handle, "parameters"))
+    write(link_write!(handle, name), "rehearsed through fair $uid\n")
+    @test DataPipeline.finalise(handle) == outputs
+    @test read(joinpath(outputs, "testing", name, "0.0.1.txt"), String) ==
+          "rehearsed through fair $uid\n"
+    # The job folder, being under jobs/, is deleted
+    @test !isdir(job)
+    @test isnothing(current())
+    @test counts() == before
+
+    # Prepared twice: restart deletes the first job folder, under jobs/
+    first = DataPipeline.rehearse(user, local_only = true)
+    second = DataPipeline.rehearse(user, local_only = true, restart = true)
+    @test !isdir(first)
+    @test isdir(second)
+    DataPipeline._discardcurrent()
+    @test !isdir(second)
+    @test isnothing(current())
     rm(user)
 end
 
 Test.@testset "rehearse() through the package's copy of fair" begin
-    # Installed by the tests of cli.jl, which run before these
+    # Installed by the tests of cli.jl, which run before these; recorded by
+    # set_cli!, it is the fair used whatever the path holds
     copy = DataPipeline._installedcli()
     @test !isnothing(copy)
     name = "rehearse/via-copy/$uid"
     user = user_config("copy", name)
     outputs = mktempdir()
-    withenv(quiet...) do
-        job = DataPipeline.rehearse(user, outputs = outputs, local_only = true,
-                                    cli = copy)
+    @test DataPipeline.set_cli!(copy) == copy
+    try
+        job = DataPipeline.rehearse(user, outputs = outputs,
+                                    local_only = true)
         @test isfile(joinpath(job, "config.yaml"))
         handle = DataPipeline.initialise()
         write(link_write!(handle, name), "rehearsed through the copy $uid\n")
         @test DataPipeline.finalise(handle) == outputs
         @test isfile(joinpath(outputs, "testing", name, "0.0.1.txt"))
+    finally
+        DataPipeline.set_cli!(nothing)
     end
     rm(user)
 end
@@ -329,70 +395,97 @@ end
         silent = stand_in("silent", "echo Running run please wait\n")
         user = user_config("fake", "rehearse/fake/$uid")
 
-        withenv(quiet...) do
-            # The keyword first, whatever the path holds
-            @test DataPipeline.rehearse(user, cli = fake) == prepared
-            @test DataPipeline.rehearse(user, cli = `$fake`) == prepared
-            @test_throws ArgumentError DataPipeline.rehearse(user,
-                                                             cli = joinpath(fakebin,
-                                                                            "missing"))
-            # Then the path
-            withenv("PATH" => fakebin) do
-                @test DataPipeline.rehearse(user) == prepared
-            end
-            # Then the package's copy, which the tests of cli.jl installed: set
-            # aside here, so that the places looked after it are reached
-            copy = DataPipeline._installedcli()
-            @test !isnothing(copy)
-            aside = copy * ".aside"
-            mv(copy, aside)
-            try
-                # Then the variable
-                withenv("PATH" => "", "FDP_FAIR_CLI" => fake) do
-                    @test DataPipeline.rehearse(user) == prepared
-                end
-                withenv("PATH" => "",
-                        "FDP_FAIR_CLI" => joinpath(fakebin, "missing")) do
-                    err = @test_throws ArgumentError DataPipeline.rehearse(user)
-                    @test occursin("FDP_FAIR_CLI", err.value.msg)
-                end
-                withenv("PATH" => "", "FDP_FAIR_CLI" => nothing) do
-                    err = @test_throws ArgumentError DataPipeline.rehearse(user)
-                    @test occursin("install_cli", err.value.msg)
-                end
-            finally
-                mv(aside, copy)
-            end
-            # fair() runs the same fair, and fails as it fails
-            @test isnothing(DataPipeline._fair("--version", cli = fake))
-            err = @test_throws ReadWriteException DataPipeline._fair("anything",
-                                                                     cli = failing)
-            @test occursin("exit status 1", err.value.msg)
-            # A fair that fails, and one that exits 0 printing no folder
-            err = @test_throws ReadWriteException DataPipeline.rehearse(user,
-                                                                        cli = failing)
-            @test occursin("no such thing", err.value.msg)
-            err = @test_throws ReadWriteException DataPipeline.rehearse(user,
-                                                                        cli = silent)
+        # The preference first, whatever the path holds; set_cli! records
+        # only a fair that runs
+        @test DataPipeline.set_cli!(fake) == fake
+        try
+            @test DataPipeline.rehearse(user) == prepared
+            DataPipeline._discardcurrent()
+            @test_throws ArgumentError DataPipeline.set_cli!(failing)
+            @test_throws ArgumentError DataPipeline.set_cli!(joinpath(fakebin,
+                                                                      "missing"))
+            @test DataPipeline._preferredcli() == fake
+            # One that exits 0 printing no folder passes set_cli!, and
+            # prepares no job
+            DataPipeline.set_cli!(silent)
+            err = @test_throws ReadWriteException DataPipeline.rehearse(user)
             @test occursin("no job folder", err.value.msg)
-            # A config in no project
-            elsewhere = joinpath(outside, "elsewhere.yaml")
-            cp(user, elsewhere)
-            err = @test_throws ArgumentError DataPipeline.rehearse(elsewhere,
-                                                                   cli = fake)
-            @test occursin("fair init", err.value.msg)
+            # The record of a file since gone
+            DataPipeline.set_cli!(fake)
+            mv(fake, fake * ".gone")
+            try
+                err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                @test occursin("set_cli!", err.value.msg)
+            finally
+                mv(fake * ".gone", fake)
+            end
+        finally
+            DataPipeline.set_cli!(nothing)
         end
+        @test isnothing(current())
+
+        # Then the path
+        withenv("PATH" => fakebin) do
+            @test DataPipeline.rehearse(user) == prepared
+            DataPipeline._discardcurrent()
+        end
+
+        # Then the package's copy, which the tests of cli.jl installed: set
+        # aside here, so that the error after it is reached
+        copy = DataPipeline._installedcli()
+        @test !isnothing(copy)
+        aside = copy * ".aside"
+        mv(copy, aside)
+        try
+            withenv("PATH" => "") do
+                err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                @test occursin("install_cli!", err.value.msg)
+            end
+        finally
+            mv(aside, copy)
+        end
+
+        # The private worker runs any fair it is given, and fails as it fails
+        @test isnothing(DataPipeline._fair("--version", cli = fake))
+        err = @test_throws ReadWriteException DataPipeline._fair("anything",
+                                                                 cli = failing)
+        @test occursin("exit status 1", err.value.msg)
+
+        # A failing fair preparing a job, recorded directly since set_cli!
+        # would refuse it: the error carries what it said
+        DataPipeline.Preferences.set_preferences!(DataPipeline,
+                                                  "cli" => failing,
+                                                  force = true)
+        try
+            err = @test_throws ReadWriteException DataPipeline.rehearse(user)
+            @test occursin("no such thing", err.value.msg)
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+
+        # A config in no project
+        elsewhere = joinpath(outside, "elsewhere.yaml")
+        cp(user, elsewhere)
+        DataPipeline.set_cli!(fake)
+        try
+            err = @test_throws ArgumentError DataPipeline.rehearse(elsewhere)
+            @test occursin("fair init", err.value.msg)
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+        @test isnothing(current())
         rm(user)
     end
 end
 
-Test.@testset "a rehearsal and a token together" begin
-    withenv("FDP_REHEARSAL" => mktempdir()) do
-        err = @test_throws ConfigFileException DataPipeline.initialise(config,
-                                                                       config)
-        @test occursin("FDP_REHEARSAL", err.value.msg)
-        @test occursin("FDP_LOCAL_TOKEN", err.value.msg)
-    end
+Test.@testset "a token in the environment is not a rehearsal's" begin
+    @test haskey(ENV, "FDP_LOCAL_TOKEN")
+    DataPipeline.rehearse(job_folder("token"))
+    handle = DataPipeline.initialise(config, config, token = "not used")
+    @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
+    @test isnothing(handle.registry.token)
+    DataPipeline.discard(handle)
+    @test isnothing(current())
 end
 
 DataPipeline.finalise(launch)

@@ -6,8 +6,18 @@
 # it. The methods here are the rehearsal's side of what a recorded run
 # registers; the recorded side is beside each call.
 
+# The rehearsal in progress in this session: the job folder it runs from and
+# the folder its outputs go to, from `rehearse`, and its handle once
+# `initialise` has opened one. A session has one at a time.
+struct SessionRehearsal
+    job::String
+    outputs::String
+    handle::Union{Nothing, DataRegistryHandle{Rehearsal}}
+end
+const REHEARSAL = Ref{Union{Nothing, SessionRehearsal}}(nothing)
+
 """
-    rehearse(path; outputs = nothing, local_only = false, cli = nothing)
+    rehearse(path; outputs = nothing, local_only = false, restart = false)
 
 Prepare this session to run a script through the pipeline without recording
 it. The script then runs unchanged: its [`initialise`](@ref) opens a
@@ -21,31 +31,32 @@ itself, or the working config in it. Return the job folder.
 
 `outputs` is the folder the outputs are collected in, made if need be; by
 default a new folder under the system's temporary directory, which lasts as
-long as the system keeps it. The folder's path is kept in `FDP_REHEARSAL` and
-the job folder's in `FDP_CONFIG_DIR`, the variables `initialise` reads; a
-`FDP_LOCAL_TOKEN` in the session is removed, with a warning, since a
-rehearsal holds no token. [`discard`](@ref) ends a rehearsal without
-collecting its outputs.
+long as the system keeps it. The session keeps the rehearsal - the job
+folder, the outputs folder, and the handle once opened - until `finalise` or
+[`discard`](@ref) ends it, and a second `rehearse` meanwhile is an error
+unless `restart` is true, when the rehearsal in progress is discarded first:
+its handle's files removed from the data store, and its job folder deleted if
+`fair run --ci` made it. A token in the environment is not used by a
+rehearsal.
 
-`cli` is the `fair` to prepare a user config with: a path or a command. With
-none given, the `fair` on the path is used, else the copy this package
-installed, else the executable that `FDP_FAIR_CLI` names, and with none of
-those the call fails saying so. Julia started from an editor has no virtual
-environment on its path, which is what the last two are for.
-[`@fair_str`](@ref) runs the same `fair` with any arguments.
+The `fair` that prepares a user config is the one [`set_cli!`](@ref)
+recorded, else the `fair` on the path, else the copy [`install_cli`](@ref)
+made, and with none of those the call fails saying so. Julia started from an
+editor has no virtual environment on its path, which is what the last two are
+for. [`@fair_str`](@ref) runs the same `fair` with any arguments.
 """
 function rehearse(path::AbstractString;
                   outputs::Union{Nothing, AbstractString} = nothing,
-                  local_only::Bool = false,
-                  cli::Union{Nothing, AbstractString, Cmd} = nothing)
-    job = _jobfolder(path, local_only, cli)
-    folder = _outputsfolder(outputs)
-    if haskey(ENV, "FDP_LOCAL_TOKEN")
-        @warn "FDP_LOCAL_TOKEN was set in this session and is removed: a rehearsal holds no token"
-        delete!(ENV, "FDP_LOCAL_TOKEN")
+                  local_only::Bool = false, restart::Bool = false)
+    current = REHEARSAL[]
+    if !isnothing(current)
+        restart ||
+            throw(ReadWriteException("a rehearsal prepared in $(current.job) is in progress: finalise or discard its handle, or call rehearse with restart = true to discard it"))
+        _discardcurrent()
     end
-    ENV["FDP_CONFIG_DIR"] = job
-    ENV["FDP_REHEARSAL"] = folder
+    job = _jobfolder(path, local_only)
+    folder = _outputsfolder(outputs)
+    REHEARSAL[] = SessionRehearsal(job, folder, nothing)
     println("rehearsing the run prepared in ", job)
     println("run the script, or its lines, in this session: ",
             "DataPipeline.finalise collects its outputs in ", folder,
@@ -58,32 +69,62 @@ end
 
 End a rehearsal without collecting its outputs: remove the files it wrote to
 the data store, delete the job folder it ran from if `fair run --ci` made it
-under the data store's `jobs/`, and clear `FDP_CONFIG_DIR` and
-`FDP_REHEARSAL` from the session. Return `nothing`. A recorded code run,
-being registered already at `initialise`, cannot be discarded: it ends with
-[`finalise`](@ref).
+under the data store's `jobs/`, and end the session's rehearsal. Return
+`nothing`. A handle that a later `initialise` has superseded only has its
+files removed. A recorded code run, being registered already at
+`initialise`, cannot be discarded: it ends with [`finalise`](@ref).
 """
 function discard(handle::DataRegistryHandle{Rehearsal})
-    datastore = handle.config["run_metadata"]["write_data_store"]
-    for metadata in values(handle.outputs)
-        path = metadata["path"]
-        isfile(path) && rm(path)
-        isdir(dirname(path)) && _pruneempty(dirname(path), datastore)
+    _removeoutputs(handle)
+    current = REHEARSAL[]
+    if !isnothing(current) && current.handle === handle
+        _closerehearsal(handle)
+        println("rehearsal discarded")
+    else
+        println("this handle's rehearsal had ended already")
     end
-    empty!(handle.outputs)
-    _closerehearsal(handle)
-    println("rehearsal discarded")
     return nothing
 end
 function discard(handle::DataRegistryHandle{RecordedRun})
     return throw(ReadWriteException("code run $(handle.code_run_uuid) is registered already, so cannot be discarded: a recorded run ends with finalise"))
 end
 
+# Discard the session's rehearsal where `rehearse` is told to start again:
+# through its handle, if one was opened, else by deleting the job folder that
+# `fair run --ci` made, there being nothing else
+function _discardcurrent()
+    current = REHEARSAL[]
+    if isnothing(current.handle)
+        working = joinpath(current.job, "config.yaml")
+        isfile(working) &&
+            _deletejob(current.job,
+                       YAML.load_file(working)["run_metadata"]["write_data_store"])
+        REHEARSAL[] = nothing
+    else
+        discard(current.handle)
+    end
+    return nothing
+end
+
+# Remove what a rehearsal's handle wrote to the data store, and prune the
+# store's empty directories: a file already moved to the outputs folder is
+# not in the store, and stays
+function _removeoutputs(handle::DataRegistryHandle{Rehearsal})
+    datastore = handle.config["run_metadata"]["write_data_store"]
+    for metadata in values(handle.outputs)
+        path = metadata["path"]
+        _within(path, datastore) || continue
+        isfile(path) && rm(path)
+        isdir(dirname(path)) && _pruneempty(dirname(path), datastore)
+    end
+    empty!(handle.outputs)
+    return nothing
+end
+
 # The job folder that `path` names: a folder holding a working config; a
 # working config, whose folder it is; or a user config, for which `fair` makes
 # one
-function _jobfolder(path::AbstractString, local_only::Bool,
-                    cli::Union{Nothing, AbstractString, Cmd})
+function _jobfolder(path::AbstractString, local_only::Bool)
     if isdir(path)
         isfile(joinpath(path, "config.yaml")) ||
             throw(ArgumentError("$path holds no config.yaml: a job folder is one that `fair run --ci` wrote"))
@@ -91,7 +132,7 @@ function _jobfolder(path::AbstractString, local_only::Bool,
     elseif isfile(path)
         _isworkingconfig(YAML.load_file(path)) &&
             return dirname(abspath(path))
-        return _preparejob(abspath(path), local_only, cli)
+        return _preparejob(abspath(path), local_only)
     end
     return throw(ArgumentError("no file or folder at $path"))
 end
@@ -101,12 +142,11 @@ end
 # last line, having checked that the folder is there: `fair` can fail and
 # still exit 0. Its other lines, the warnings about the repository among
 # them, are printed.
-function _preparejob(config::String, local_only::Bool,
-                     cli::Union{Nothing, AbstractString, Cmd})
+function _preparejob(config::String, local_only::Bool)
     root = _fairroot(dirname(config))
     isnothing(root) &&
         throw(ArgumentError("$config is in no FAIR project: run `fair init` in the repository that holds it"))
-    command = `$(_faircommand(cli)) run --ci --dirty $(local_only ? ["--local"] : String[]) $config`
+    command = `$(_faircommand(nothing)) run --ci --dirty $(local_only ? ["--local"] : String[]) $config`
     output = IOBuffer()
     process = run(pipeline(Cmd(ignorestatus(command), dir = root),
                            stdout = output, stderr = output))
@@ -133,18 +173,27 @@ function _outputsfolder(outputs::AbstractString)
 end
 
 # Open a rehearsal: a handle with no registry URLs, its uuid made here so that
-# `${{RUN_ID}}` resolves, and a commit with uncommitted changes warned of
+# `${{RUN_ID}}` resolves, and a commit with uncommitted changes warned of. It
+# becomes the session's rehearsal's handle; one opened before it - a script
+# run again after a failure - has its files removed first, and is superseded.
 function _openrun(mode::Rehearsal, config::Dict, config_file::String,
                   ::String, registry::RegistryEndpoint)
     commit = config["run_metadata"]["latest_commit"]
     endswith(commit, "-dirty") &&
         @warn "the code repository has uncommitted changes ($commit): a recorded run would raise an issue against it"
+    handle = _newhandle(mode, config, config_file, registry,
+                        (config = nothing, script = nothing,
+                         repository = nothing, datastore = nothing,
+                         code_run = nothing), string(uuid4()))
+    current = REHEARSAL[]
+    if !isnothing(current.handle)
+        println("the rehearsal's earlier handle is superseded: what it wrote to the data store is removed")
+        _removeoutputs(current.handle)
+    end
+    REHEARSAL[] = SessionRehearsal(current.job, current.outputs, handle)
     println("rehearsal: nothing is registered, and the outputs go to ",
             mode.outputs)
-    return _newhandle(mode, config, config_file, registry,
-                      (config = nothing, script = nothing,
-                       repository = nothing, datastore = nothing,
-                       code_run = nothing), string(uuid4()))
+    return handle
 end
 
 # What `link_register!` would register, said rather than done, and `nothing`
@@ -185,10 +234,14 @@ one registered as the highest version of its data product, which is reported
 `<namespace>/<data product>/<version>.<extension>`, replacing what is there,
 with the working config and the script copied beside them. The issues raised
 are printed, the data store's empty directories pruned, the job folder deleted
-if `fair run --ci` made it under the data store's `jobs/`, and `FDP_CONFIG_DIR`
-and `FDP_REHEARSAL` cleared from the session. Return the outputs folder.
+if `fair run --ci` made it under the data store's `jobs/`, and the session's
+rehearsal ended. Return the outputs folder. A handle that a later
+`initialise` has superseded cannot be finalised.
 """
 function finalise(handle::DataRegistryHandle{Rehearsal})
+    current = REHEARSAL[]
+    (!isnothing(current) && current.handle === handle) ||
+        throw(ReadWriteException("this handle's rehearsal has ended, or a later initialise superseded it: finalise the handle that is current"))
     _checksources(handle)
     for (data_product, component) in sort(collect(keys(handle.outputs)),
                                           by = string)
@@ -289,20 +342,26 @@ function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
     return nothing
 end
 
-# End a rehearsal's hold on the session: delete the job folder where `fair run
-# --ci` made it, under the data store's `jobs/` - one made elsewhere is the
-# user's and stays - and clear the two variables, so that another
+# End the session's rehearsal: delete the job folder where `fair run --ci`
+# made it, and leave the session with no rehearsal, so that another
 # `initialise()` is told there is no run rather than finding no file
 function _closerehearsal(handle::DataRegistryHandle{Rehearsal})
-    jobs = joinpath(handle.config["run_metadata"]["write_data_store"], "jobs")
-    if _within(handle.config_dir, jobs)
-        rm(handle.config_dir, recursive = true)
+    _deletejob(handle.config_dir,
+               handle.config["run_metadata"]["write_data_store"])
+    REHEARSAL[] = nothing
+    return nothing
+end
+
+# Delete a rehearsal's job folder where `fair run --ci` made it, under the
+# data store's `jobs/`; one made elsewhere is the user's and stays
+function _deletejob(job::AbstractString, datastore::AbstractString)
+    jobs = joinpath(datastore, "jobs")
+    if _within(job, jobs)
+        rm(job, recursive = true)
     else
-        println("  the job folder ", handle.config_dir, " is not under ",
-                jobs, " and is left as it is")
+        println("  the job folder ", job, " is not under ", jobs,
+                " and is left as it is")
     end
-    delete!(ENV, "FDP_CONFIG_DIR")
-    delete!(ENV, "FDP_REHEARSAL")
     return nothing
 end
 

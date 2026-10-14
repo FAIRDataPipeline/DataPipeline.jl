@@ -16,9 +16,9 @@ registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 With no arguments, the files are those in the folder `fair run` names in
 `FDP_CONFIG_DIR` when it launches a script: a call with that unset, or with a
 file that is not a working config, throws a [`ConfigFileException`](@ref)
-saying so. After [`rehearse`](@ref), which sets `FDP_REHEARSAL`, the same
-call opens a [`Rehearsal`](@ref) instead: nothing is registered, the handle
-holds no token, and a token given with it is an error.
+saying so. After [`rehearse`](@ref) the same call opens a
+[`Rehearsal`](@ref) instead, from the job folder it prepared: nothing is
+registered, and the handle holds no token, whatever is given or set.
 
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
@@ -27,7 +27,7 @@ that ran cannot be recovered from its commit.
 function initialise(config_file::String = _launchedconfig(),
                     submission_script::String = _launchedscript();
                     token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
-    mode = _runmode(token)
+    mode = _runmode()
     println("processing config file: ", config_file)
     config = _workingconfig(config_file)
     run_metadata = config["run_metadata"]
@@ -35,7 +35,7 @@ function initialise(config_file::String = _launchedconfig(),
                                     DEFAULT_REGISTRY_URL),
                                 get(run_metadata, "api_version",
                                     DEFAULT_API_VERSION),
-                                token = token)
+                                token = _runtoken(mode, token))
     return _openrun(mode, config, config_file, submission_script, registry)
 end
 

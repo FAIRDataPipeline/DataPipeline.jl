@@ -17,9 +17,9 @@ the command line, in the current directory, printing what it prints:
 split as Julia's backticks split a command, so quotes group a word, and
 `\$name` and `\$(expression)` interpolate, as in `fair"pull \$config"`. An exit
 status other than 0 is a [`ReadWriteException`](@ref). The `fair` run is
-found as [`rehearse`](@ref) finds it: on the path, else the copy
-[`install_cli`](@ref) made, else the one `FDP_FAIR_CLI` names. A command that
-asks questions, as `fair init` does without `--ci`, needs a terminal.
+found as [`rehearse`](@ref) finds it: the one [`set_cli!`](@ref) recorded,
+else the one on the path, else the copy [`install_cli`](@ref) made. A command
+that asks questions, as `fair init` does without `--ci`, needs a terminal.
 """
 macro fair_str(text)
     command = Expr(:macrocall, GlobalRef(Base, Symbol("@cmd")), __source__,
@@ -35,6 +35,34 @@ function _fair(arguments::AbstractString...;
     process = run(ignorestatus(command))
     success(process) ||
         throw(ReadWriteException("`fair $(join(arguments, " "))` failed with exit status $(process.exitcode)"))
+    return nothing
+end
+
+"""
+    set_cli!(path)
+    set_cli!(nothing)
+
+Record `path` as the `fair` this package runs - by [`rehearse`](@ref) and
+[`@fair_str`](@ref), before any `fair` on the path or the copy
+[`install_cli`](@ref) made - after checking that it runs. The record is a
+preference in the active environment's `LocalPreferences.toml`, so it holds
+for every later session of that environment. `nothing` removes it. Return
+the path recorded.
+"""
+function set_cli!(path::AbstractString)
+    executable = abspath(path)
+    isfile(executable) ||
+        throw(ArgumentError("no file at $executable to record as fair"))
+    try
+        read(`$executable --version`, String)
+    catch
+        throw(ArgumentError("$executable does not run as fair: `--version` failed"))
+    end
+    @set_preferences!("cli" => executable)
+    return executable
+end
+function set_cli!(::Nothing)
+    @delete_preferences!("cli")
     return nothing
 end
 
@@ -90,9 +118,22 @@ function install_cli(;
     return executable
 end
 
+"""
+    install_cli!(; version = nothing, python = nothing)
+
+[`install_cli`](@ref), then [`set_cli!`](@ref) on the copy, whether it was
+installed by this call or before: so that the copy is the `fair` this package
+runs, whatever is on the path. Return the executable's path.
+"""
+function install_cli!(;
+                      version::Union{Nothing, VersionNumber, AbstractString} = nothing,
+                      python::Union{Nothing, AbstractString} = nothing)
+    return set_cli!(install_cli(; version, python))
+end
+
 # The command that runs `fair`: the one given, as a path or a command; else
-# the `fair` on the path, else the copy this package installed, else the
-# executable `FDP_FAIR_CLI` names
+# the one the preference records, else the `fair` on the path, else the copy
+# this package installed
 _faircommand(cli::Cmd) = cli
 function _faircommand(cli::AbstractString)
     path = isfile(cli) ? abspath(cli) : Sys.which(cli)
@@ -101,19 +142,22 @@ function _faircommand(cli::AbstractString)
     return Cmd([path])
 end
 function _faircommand(::Nothing)
+    preferred = _preferredcli()
+    if !isnothing(preferred)
+        isfile(preferred) ||
+            throw(ArgumentError("the preference names $preferred as fair, where there is no file: set_cli! records another, or nothing"))
+        return Cmd([preferred])
+    end
     path = Sys.which("fair")
     isnothing(path) && (path = _installedcli())
     isnothing(path) || return Cmd([path])
-    if haskey(ENV, "FDP_FAIR_CLI")
-        path = ENV["FDP_FAIR_CLI"]
-        isfile(path) ||
-            throw(ArgumentError("FDP_FAIR_CLI names $path, where there is no file"))
-        return Cmd([path])
-    end
-    return throw(ArgumentError(string("no `fair` found: none on the path, none installed by this package, ",
-                                      "and FDP_FAIR_CLI not set - run DataPipeline.install_cli() to install ",
-                                      "one, give `cli =` the executable, or set FDP_FAIR_CLI to it")))
+    return throw(ArgumentError(string("no `fair` found: none recorded by set_cli!, none on the path, and ",
+                                      "none installed by this package - run DataPipeline.install_cli!() to ",
+                                      "install one and record it, or set_cli! on one you have")))
 end
+
+# The `fair` the preference records, or `nothing`
+_preferredcli() = @load_preference("cli", nothing)
 
 # The folder this package keeps its own copy of the CLI in, a scratch space of
 # its own; the executable and the interpreter in such a folder, laid out as

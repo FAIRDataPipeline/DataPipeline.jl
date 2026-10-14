@@ -35,40 +35,46 @@ include("script.jl")                    # or its lines, one at a time
 ```
 
 `rehearse` has `fair` write the working config and the script into a job
-folder, as `fair run` does before it launches a script, and sets
-`FDP_CONFIG_DIR` to that folder, as `fair run` does, and `FDP_REHEARSAL` to
-the folder the outputs will be collected in. The script's `initialise()` then
-opens a rehearsal rather than a code run: it reads what the registry holds,
-writes to the data store, holds no registry token, and registers nothing,
-saying instead what `link_register!` and `register_authors!` would have
-registered. Its `finalise` checks the outputs as a recorded run would, saying
-which hold the bytes of the registered highest version already, moves them
-to the outputs folder as `<namespace>/<data product>/<version>.<extension>`
-with the working config beside them, prints the issues a recorded run would
-have raised, deletes the job folder, and returns the folder. `discard` ends
-a rehearsal without collecting anything.
+folder, as `fair run` does before it launches a script, and the session then
+holds the rehearsal: that folder, the folder the outputs will be collected
+in, and the handle once opened. The script's `initialise()` opens a
+rehearsal rather than a code run: it reads what the registry holds, writes to
+the data store, holds no registry token, and registers nothing, saying
+instead what `link_register!` and `register_authors!` would have registered.
+Its `finalise` checks the outputs as a recorded run would, saying which hold
+the bytes of the registered highest version already, moves them to the
+outputs folder as `<namespace>/<data product>/<version>.<extension>` with
+the working config beside them, prints the issues a recorded run would have
+raised, deletes the job folder, and returns the folder. `discard` ends a
+rehearsal without collecting anything.
 
-The outputs folder is a new one under the system's temporary directory,
-unless `outputs =` names one, in which case a repeated rehearsal replaces its
-files. `local_only = true` passes `--local` to `fair run`. Nothing of a
-rehearsal reaches the registry, so a model run can be rehearsed only once the
-fetch run it reads from has been recorded.
+A rehearsal lasts until `finalise` or `discard` ends it, and a second
+`rehearse` meanwhile is an error, unless `restart = true` discards the one
+in progress first. A script run again after a failure, with another
+`initialise()`, carries on in the same rehearsal: what its earlier handle
+wrote is removed. The outputs folder is a new one under the system's
+temporary directory, unless `outputs =` names one, in which case a repeated
+rehearsal replaces its files. `local_only = true` passes `--local` to
+`fair run`. Nothing of a rehearsal reaches the registry, so a model run can
+be rehearsed only once the fetch run it reads from has been recorded.
 
-`fair` is found on the path, which it is on when Julia was started from a
-shell with the CLI's virtual environment active; else as the copy the package
-installed; else as the executable `FDP_FAIR_CLI` names; and `cli =` on either
-call names one. `DataPipeline.fair"..."` runs it with any arguments,
-written as on the command line: `DataPipeline.fair"pull config.yaml"`, or
+The `fair` used is the one `DataPipeline.set_cli!(path)` has recorded, a
+preference of the active environment that holds across sessions; else the
+`fair` on the path, which it is on when Julia was started from a shell with
+the CLI's virtual environment active; else the copy the package installed.
+`DataPipeline.fair"..."` runs it with any arguments, written as on the
+command line: `DataPipeline.fair"pull config.yaml"`, or
 `DataPipeline.fair"pull $config"`.
 
 A Julia started by an editor has no virtual environment on its path, so the
 package can install a copy of its own, with a Python of its own that
-MicroMamba fetches: `DataPipeline.install_cli()`, once, and again to bring
-it up to date. The whole pipeline can then be set up from Julia:
+MicroMamba fetches: `DataPipeline.install_cli!()`, once, which records the
+copy as the `fair` to use, and again to bring it up to date. The whole
+pipeline can then be set up from Julia:
 
 ```julia
 using DataPipeline
-DataPipeline.install_cli()             # once: fair, with its Python
+DataPipeline.install_cli!()            # once: fair, with its Python, recorded
 DataPipeline.fair"registry install"    # once: the local registry
 DataPipeline.fair"init"                # once per project, from its root; asks questions
 DataPipeline.fair"registry start"
@@ -80,7 +86,9 @@ DataPipeline.rehearse("config.yaml")
 DataPipeline.rehearse
 DataPipeline.discard
 DataPipeline.@fair_str
+DataPipeline.set_cli!
 DataPipeline.install_cli
+DataPipeline.install_cli!
 ```
 
 ## Reading data
