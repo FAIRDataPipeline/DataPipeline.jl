@@ -13,6 +13,7 @@ DataPipeline.initialise
 DataPipeline.finalise
 DataPipeline.rehearse
 DataPipeline.discard
+DataPipeline.fair
 DataPipeline.DataRegistryHandle
 DataPipeline.AbstractRunMode
 DataPipeline.RecordedRun

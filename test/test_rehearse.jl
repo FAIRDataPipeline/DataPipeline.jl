@@ -222,14 +222,14 @@ Test.@testset "what rehearse() accepts" begin
                                                               "nowhere"))
     # A folder with no config.yaml
     @test_throws ArgumentError DataPipeline.rehearse(outside)
-    # A user config, which no fair run --ci has made a job of
+    # A user config outside any project, so that fair cannot prepare it
     user = joinpath(outside, "user.yaml")
     DataPipeline.YAML.write_file(user,
                                  Dict("run_metadata" =>
                                           Dict("description" => "A user config",
                                                "script" => "julia script.jl")))
     err = @test_throws ArgumentError DataPipeline.rehearse(user)
-    @test occursin("fair run --ci", err.value.msg)
+    @test occursin("fair init", err.value.msg)
     # A working config is taken as its folder
     job = job_folder("config")
     withenv(quiet...) do
@@ -241,6 +241,126 @@ Test.@testset "what rehearse() accepts" begin
         folder = ENV["FDP_REHEARSAL"]
         @test isdir(folder)
         @test startswith(basename(folder), "fdp-rehearsal-")
+    end
+end
+
+# A user config inside the project, as a user's would be, reading the SEIRS
+# parameters and writing one text file
+function user_config(name::AbstractString, data_product::AbstractString)
+    path = joinpath(pwd(), "rehearse-$name-$uid.yaml")
+    DataPipeline.YAML.write_file(path,
+                                 Dict("run_metadata" =>
+                                          Dict("description" => "A rehearsed run $uid",
+                                               "script" => "julia script.jl",
+                                               "default_input_namespace" => "testing",
+                                               "default_output_namespace" => "testing"),
+                                      "read" =>
+                                          [Dict("data_product" => "parameters",
+                                                "use" =>
+                                                    Dict("namespace" => "PSU",
+                                                         "data_product" => "SEIRS_model/parameters"))],
+                                      "write" =>
+                                          [Dict("data_product" => data_product,
+                                                "description" => "a file rehearsed through fair",
+                                                "file_type" => "txt")]))
+    return path
+end
+
+Test.@testset "fair()" begin
+    # The fair on the path, which the suite runs under
+    @test isnothing(DataPipeline.fair("--version"))
+    err = @test_throws ReadWriteException DataPipeline.fair("no-such-command")
+    @test occursin("no-such-command", err.value.msg)
+end
+
+Test.@testset "rehearse() from a user config, through fair" begin
+    name = "rehearse/via-fair/$uid"
+    user = user_config("fair", name)
+    outputs = mktempdir()
+    before = counts()
+    withenv(quiet...) do
+        # fair run --ci prepares the job under the data store's jobs/
+        job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
+        @test isdir(job)
+        @test !startswith(relpath(job, joinpath(datastore, "jobs")), "..")
+        @test isfile(joinpath(job, "config.yaml"))
+        @test ENV["FDP_CONFIG_DIR"] == job
+        handle = DataPipeline.initialise()
+        @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
+        @test isfile(link_read!(handle, "parameters"))
+        write(link_write!(handle, name), "rehearsed through fair $uid\n")
+        @test DataPipeline.finalise(handle) == outputs
+        @test read(joinpath(outputs, "testing", name, "0.0.1.txt"), String) ==
+              "rehearsed through fair $uid\n"
+        # The job folder, being under jobs/, is deleted
+        @test !isdir(job)
+        @test counts() == before
+    end
+    rm(user)
+end
+
+@static if !Sys.iswindows()
+    Test.@testset "how rehearse() finds fair" begin
+        # Stand-ins for fair: one printing a prepared job folder as fair does,
+        # one failing, one exiting 0 having printed no folder
+        fakebin = mktempdir()
+        prepared = job_folder("fake")
+        function stand_in(name::AbstractString, script::AbstractString)
+            path = joinpath(fakebin, name)
+            write(path, "#!/bin/sh\n" * script)
+            chmod(path, 0o755)
+            return path
+        end
+        fake = stand_in("fair",
+                        "echo Running run please wait\necho $prepared\n")
+        failing = stand_in("failing", "echo no such thing >&2\nexit 1\n")
+        silent = stand_in("silent", "echo Running run please wait\n")
+        user = user_config("fake", "rehearse/fake/$uid")
+
+        withenv(quiet...) do
+            # The keyword first, whatever the path holds
+            @test DataPipeline.rehearse(user, cli = fake) == prepared
+            @test DataPipeline.rehearse(user, cli = `$fake`) == prepared
+            @test_throws ArgumentError DataPipeline.rehearse(user,
+                                                             cli = joinpath(fakebin,
+                                                                            "missing"))
+            # Then the path
+            withenv("PATH" => fakebin) do
+                @test DataPipeline.rehearse(user) == prepared
+            end
+            # Then, with no copy of the package's own, the variable
+            withenv("PATH" => "", "FDP_FAIR_CLI" => fake) do
+                @test DataPipeline.rehearse(user) == prepared
+            end
+            withenv("PATH" => "",
+                    "FDP_FAIR_CLI" => joinpath(fakebin, "missing")) do
+                err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                @test occursin("FDP_FAIR_CLI", err.value.msg)
+            end
+            withenv("PATH" => "", "FDP_FAIR_CLI" => nothing) do
+                err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                @test occursin("none on the path", err.value.msg)
+            end
+            # fair() runs the same fair, and fails as it fails
+            @test isnothing(DataPipeline.fair("--version", cli = fake))
+            err = @test_throws ReadWriteException DataPipeline.fair("anything",
+                                                                    cli = failing)
+            @test occursin("exit status 1", err.value.msg)
+            # A fair that fails, and one that exits 0 printing no folder
+            err = @test_throws ReadWriteException DataPipeline.rehearse(user,
+                                                                        cli = failing)
+            @test occursin("no such thing", err.value.msg)
+            err = @test_throws ReadWriteException DataPipeline.rehearse(user,
+                                                                        cli = silent)
+            @test occursin("no job folder", err.value.msg)
+            # A config in no project
+            elsewhere = joinpath(outside, "elsewhere.yaml")
+            cp(user, elsewhere)
+            err = @test_throws ArgumentError DataPipeline.rehearse(elsewhere,
+                                                                   cli = fake)
+            @test occursin("fair init", err.value.msg)
+        end
+        rm(user)
     end
 end
 

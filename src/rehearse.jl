@@ -7,15 +7,17 @@
 # registers; the recorded side is beside each call.
 
 """
-    rehearse(path; outputs = nothing)
+    rehearse(path; outputs = nothing, local_only = false, cli = nothing)
 
 Prepare this session to run a script through the pipeline without recording
 it. The script then runs unchanged: its [`initialise`](@ref) opens a
 [`Rehearsal`](@ref) rather than a recorded code run, its reads and writes go
 as they would, and its [`finalise`](@ref) collects the outputs in a folder and
-registers nothing. `path` is the job folder that `fair run --ci` wrote,
-holding the working config and the script, or that working config itself.
-Return the job folder.
+registers nothing. `path` is a user config, which is prepared as `fair run`
+prepares one - `fair run --ci --dirty`, with `--local` if `local_only` is true,
+run from the project the config is in, which writes the working config and
+the script into a new job folder and registers nothing - or that job folder
+itself, or the working config in it. Return the job folder.
 
 `outputs` is the folder the outputs are collected in, made if need be; by
 default a new folder under the system's temporary directory, which lasts as
@@ -24,10 +26,19 @@ the job folder's in `FDP_CONFIG_DIR`, the variables `initialise` reads; a
 `FDP_LOCAL_TOKEN` in the session is removed, with a warning, since a
 rehearsal holds no token. [`discard`](@ref) ends a rehearsal without
 collecting its outputs.
+
+`cli` is the `fair` to prepare a user config with: a path or a command. With
+none given, the `fair` on the path is used, else the copy this package
+installed, else the executable that `FDP_FAIR_CLI` names, and with none of
+those the call fails saying so. Julia started from an editor has no virtual
+environment on its path, which is what the last two are for. [`fair`](@ref)
+runs the same `fair` with any arguments.
 """
 function rehearse(path::AbstractString;
-                  outputs::Union{Nothing, AbstractString} = nothing)
-    job = _jobfolder(path)
+                  outputs::Union{Nothing, AbstractString} = nothing,
+                  local_only::Bool = false,
+                  cli::Union{Nothing, AbstractString, Cmd} = nothing)
+    job = _jobfolder(path, local_only, cli)
     folder = _outputsfolder(outputs)
     if haskey(ENV, "FDP_LOCAL_TOKEN")
         @warn "FDP_LOCAL_TOKEN was set in this session and is removed: a rehearsal holds no token"
@@ -68,9 +79,30 @@ function discard(handle::DataRegistryHandle{RecordedRun})
     return throw(ReadWriteException("code run $(handle.code_run_uuid) is registered already, so cannot be discarded: a recorded run ends with finalise"))
 end
 
-# The job folder that `path` names: a folder holding a working config, or a
-# working config, whose folder it is
-function _jobfolder(path::AbstractString)
+"""
+    fair(arguments...; cli = nothing)
+
+Run the pipeline's command-line tool `fair` with `arguments`, in the current
+directory, printing what it prints: `fair pull config.yaml` is
+`DataPipeline.fair("pull", "config.yaml")`. An exit status other than 0 is a
+[`ReadWriteException`](@ref). `cli` names the `fair` to run, found as
+[`rehearse`](@ref) finds it when none is given. A command that asks questions,
+as `fair init` does without `--ci`, needs a terminal. Return `nothing`.
+"""
+function fair(arguments::AbstractString...;
+              cli::Union{Nothing, AbstractString, Cmd} = nothing)
+    command = `$(_faircommand(cli)) $arguments`
+    process = run(ignorestatus(command))
+    success(process) ||
+        throw(ReadWriteException("`fair $(join(arguments, " "))` failed with exit status $(process.exitcode)"))
+    return nothing
+end
+
+# The job folder that `path` names: a folder holding a working config; a
+# working config, whose folder it is; or a user config, for which `fair` makes
+# one
+function _jobfolder(path::AbstractString, local_only::Bool,
+                    cli::Union{Nothing, AbstractString, Cmd})
     if isdir(path)
         isfile(joinpath(path, "config.yaml")) ||
             throw(ArgumentError("$path holds no config.yaml: a job folder is one that `fair run --ci` wrote"))
@@ -78,9 +110,71 @@ function _jobfolder(path::AbstractString)
     elseif isfile(path)
         _isworkingconfig(YAML.load_file(path)) &&
             return dirname(abspath(path))
-        throw(ArgumentError("$path is not a working config: run `fair run --ci --dirty` on it and give rehearse the job folder it prints"))
+        return _preparejob(abspath(path), local_only, cli)
     end
     return throw(ArgumentError("no file or folder at $path"))
+end
+
+# Have `fair run --ci --dirty` prepare a job for a user config, from the root
+# of the project the config is in, and return the job folder it prints as its
+# last line, having checked that the folder is there: `fair` can fail and
+# still exit 0. Its other lines, the warnings about the repository among
+# them, are printed.
+function _preparejob(config::String, local_only::Bool,
+                     cli::Union{Nothing, AbstractString, Cmd})
+    root = _fairroot(dirname(config))
+    isnothing(root) &&
+        throw(ArgumentError("$config is in no FAIR project: run `fair init` in the repository that holds it"))
+    command = `$(_faircommand(cli)) run --ci --dirty $(local_only ? ["--local"] : String[]) $config`
+    output = IOBuffer()
+    process = run(pipeline(Cmd(ignorestatus(command), dir = root),
+                           stdout = output, stderr = output))
+    text = String(take!(output))
+    success(process) ||
+        throw(ReadWriteException("`fair run --ci` failed in $root:\n$text"))
+    lines = filter(!isempty, strip.(split(text, '\n')))
+    job = isempty(lines) ? "" : String(last(lines))
+    if !(isdir(job) && isfile(joinpath(job, "config.yaml")))
+        throw(ReadWriteException("`fair run --ci` in $root printed no job folder:\n$text"))
+    end
+    foreach(println, lines[1:(end - 1)])
+    return job
+end
+
+# The command that runs `fair`: the one given, as a path or a command; else
+# the `fair` on the path, else the copy this package installed, else the
+# executable `FDP_FAIR_CLI` names
+_faircommand(cli::Cmd) = cli
+function _faircommand(cli::AbstractString)
+    path = isfile(cli) ? abspath(cli) : Sys.which(cli)
+    isnothing(path) &&
+        throw(ArgumentError("no `fair` at $cli, nor on the path"))
+    return Cmd([path])
+end
+function _faircommand(::Nothing)
+    path = Sys.which("fair")
+    isnothing(path) && (path = _installedcli())
+    isnothing(path) || return Cmd([path])
+    if haskey(ENV, "FDP_FAIR_CLI")
+        path = ENV["FDP_FAIR_CLI"]
+        isfile(path) ||
+            throw(ArgumentError("FDP_FAIR_CLI names $path, where there is no file"))
+        return Cmd([path])
+    end
+    return throw(ArgumentError(string("no `fair` found: none on the path, none installed by this package, ",
+                                      "and FDP_FAIR_CLI not set - install fair-cli (`pipx install fair-cli` ",
+                                      "puts it on every path), give `cli =` the executable, or set ",
+                                      "FDP_FAIR_CLI to it")))
+end
+
+# The folder this package keeps its own copy of the CLI in, a scratch space of
+# its own, and the executable there if one has been installed
+_clifolder() = @get_scratch!("fair-cli")
+function _installedcli()
+    executable = Sys.iswindows() ?
+                 joinpath(_clifolder(), "Scripts", "fair.exe") :
+                 joinpath(_clifolder(), "bin", "fair")
+    return isfile(executable) ? executable : nothing
 end
 
 # The outputs folder, made: the one asked for, else a new temporary one that
