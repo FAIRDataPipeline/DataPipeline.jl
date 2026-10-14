@@ -6,17 +6,17 @@
     "codeRepository": "https://github.com/FAIRDataPipeline/DataPipeline.jl",
     "name": "DataPipeline.jl",
     "issueTracker": "https://github.com/FAIRDataPipeline/DataPipeline.jl/issues",
-    "readme": "https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/rr/fixes/README.md",
+    "readme": "https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/HEAD/README.md",
     "dateCreated": "2020-10-08",
     "operatingSystem": [
         "Linux",
         "Windows",
         "macOS"
     ],
-    "version": "v0.54.1",
-    "dateModified": "2026-10-04",
+    "version": "v0.55.0",
+    "dateModified": "2026-10-14",
     "datePublished": "2021-08-27",
-    "downloadUrl": "https://github.com/FAIRDataPipeline/DataPipeline.jl/archive/refs/tags/v0.54.1.tar.gz",
+    "downloadUrl": "https://github.com/FAIRDataPipeline/DataPipeline.jl/archive/refs/tags/v0.55.0.tar.gz",
     "license": "https://spdx.org/licenses/LGPL-3.0-or-later",
     "author": [
         {
