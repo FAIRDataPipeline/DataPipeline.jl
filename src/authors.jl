@@ -13,10 +13,11 @@ const UNNAMEABLE = ('[', ']', '?', '*')
 
 Register authors with the registry together with the identifiers that say who
 they are - an ORCID for a person, a ROR id for an organisation - and return
-their names, sorted. A citation gives its authors by name alone: a name
-registered here stands, for the rest of the run, for the author with its
-identifier, and any other name is an author by the name alone, whatever the
-registry holds under it.
+their names, sorted. A citation in BibTeX gives its authors by name alone: a
+name registered here stands, for the rest of the run, for the author with
+its identifier, and any other name is an author by the name alone, whatever
+the registry holds under it. Where a DOI's metadata identifies one of its
+authors, that identifier is the one for that author.
 
 Each of `authors` is a `name => identifier` pair, or the path of a TOML file
 with a line for each author:

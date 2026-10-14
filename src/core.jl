@@ -154,7 +154,11 @@ registry's record of a file's source is drawn from.
 - `release_date`: when it was released, a missing month or day being the
   first, or `nothing`
 - `release_version`: its version as the citation writes it, or `nothing`
-- `description`: the citation's note, or `nothing`
+- `description`: the citation's note or abstract, or `nothing`
+- `licence`: its licence, an identifier in the SPDX licence list or a URL, or
+  `nothing`
+- `identifiers`: the ORCIDs and ROR ids the citation gives its authors, by
+  name
 """
 struct SourceCitation
     key::String
@@ -164,6 +168,8 @@ struct SourceCitation
     release_date::Union{Nothing, DateTime}
     release_version::Union{Nothing, String}
     description::Union{Nothing, String}
+    licence::Union{Nothing, String}
+    identifiers::Dict{String, String}
 end
 
 """

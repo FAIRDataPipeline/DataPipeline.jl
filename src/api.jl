@@ -327,10 +327,16 @@ the registered file; a file that is written afterwards is found so by
 
 A file that comes from somewhere else is registered with its source. The
 source is named by its `doi`, or by `bibtex`, the key of a citation that
-[`register_citations!`](@ref) has read - one or the other. The authors of the
-registered file are then the citation's, found as
-[`register_authors!`](@ref) describes when the call is made, and not the
-user. Of a source:
+[`register_citations!`](@ref) has read - one or the other. A DOI with no
+citation registered for it is looked up: its formal metadata, DataCite's
+record of it or else its CSL record, gives what it has of the title, the
+description, the licence, the release date and version, and the authors with
+their ORCIDs or ROR ids. Each keyword below takes the place of what the
+citation says, and the title and the release date must come from one or the
+other. The authors of the registered file are the citation's, found when the
+call is made - by the identifier the citation gives one, which is registered
+and comes before any that [`register_authors!`](@ref) was given, else as
+[`register_authors!`](@ref) describes - and not the user. Of a source:
 
 - `primary` must be given: `true` if the file is the cited item or one of its
   files, so that the same bytes can be fetched again; `false` if it was

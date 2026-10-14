@@ -274,6 +274,52 @@ Test.@testset "what may be said of a source" begin
                               ReadWriteException))
 end
 
+Test.@testset "what a source's own metadata says" begin
+    named, overridden = "sources/metadata/$uid", "sources/metadata/given/$uid"
+    handle = offering(named => "0.0.1", overridden => "0.0.1")
+    # A DOI's metadata, as a lookup of it would have read it: a creator with
+    # an ORCID, one with none, a date, and a licence by its SPDX identifier
+    doi = "https://doi.org/10.5555/metadata.$uid"
+    ada, unidentified = "Ada Example $uid", "Unidentified Example $uid"
+    from_doi, from_file = "$orcid-dc", "$orcid-file"
+    record = Dict("doi" => "10.5555/metadata.$uid",
+                  "titles" => [Dict("title" => "From its metadata $uid")],
+                  "creators" => [
+                      Dict("givenName" => "Ada",
+                           "familyName" => "Example $uid",
+                           "nameIdentifiers" =>
+                               [Dict("nameIdentifier" => from_doi,
+                                     "nameIdentifierScheme" => "ORCID")]),
+                      Dict("name" => unidentified)],
+                  "dates" =>
+                      [Dict("date" => "2024-01-02", "dateType" => "Issued")],
+                  "rightsList" => [Dict("rightsIdentifier" => "cc-by-4.0",
+                        "rightsIdentifierScheme" => "SPDX")])
+    handle.doi_lookups[doi] = DataPipeline._datacitecitation(record, doi)
+    register_authors!(handle, ada => from_file)
+
+    # What the metadata says fills in what the call does not; the ORCID it
+    # gives is registered and is the author's, before the run's own
+    link_write!(handle, named, path = file_of("named $uid\n"), doi = doi,
+                primary = true)
+    # ... and what the call says takes the place of the metadata's
+    link_write!(handle, overridden, path = file_of("given $uid\n"), doi = doi,
+                primary = true, title = "Given $uid", licence = "CC0-1.0")
+    DataPipeline.finalise(handle)
+    product = registered(named, "0.0.1")
+    source = source_of(product)
+    @test source["title"] == "From its metadata $uid"
+    @test source["release_date"] == "2024-01-02T00:00:00Z"
+    @test licences_of(object_of(product)) == [("CC-BY-4.0", spdx * "CC-BY-4.0")]
+    @test sort(object_of(product)["authors"]) ==
+          sort([author(from_doi), author_named(unidentified)])
+    @test !(author(from_file) in object_of(product)["authors"])
+    @test handle.authors[ada] == [from_file, from_doi]
+    given = registered(overridden, "0.0.1")
+    @test source_of(given)["title"] == "Given $uid"
+    @test licences_of(object_of(given)) == [("CC0-1.0", spdx * "CC0-1.0")]
+end
+
 Test.@testset "a registry that keeps sources as rows of their own" begin
     # This registry is one; one before v1.4.0 is refused with an error saying
     # so, which no registry these tests run against can show

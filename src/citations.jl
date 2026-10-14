@@ -33,7 +33,9 @@ From an entry are taken its `doi`, as a URL in lower case, or else its `url`,
 to identify the source; its `title`; its `author`s, a person as given names
 then family name and an organisation as it is written; its `date`, or its
 `year`, `month` and `day` as far as they go, as the source's release date; its
-`version`; and its `note`, as a description. Braces are dropped, and LaTeX
+`version`; its `note`, as a description; and its `license` or `copyright`, as
+its licence, when that is an identifier in the SPDX licence list or a URL -
+any other is warned of and passed over. Braces are dropped, and LaTeX
 commands are left as they are.
 """
 function register_citations!(handle::DataRegistryHandle,
@@ -140,7 +142,8 @@ function _bracemonths(text::AbstractString)
                    r"(\bmonth\s*=\s*)([A-Za-z]+)(\s*[,}])"i => s"\1{\2}\3")
 end
 
-# What a parsed BibTeX entry says of its source
+# What a parsed BibTeX entry says of its source. BibTeX gives no identifiers
+# for its authors.
 function _sourcecitation(entry::BibInternal.Entry)
     authors = String[name
                      for name in map(_personname, entry.authors)
@@ -148,7 +151,27 @@ function _sourcecitation(entry::BibInternal.Entry)
     return SourceCitation(entry.id, _entryidentifier(entry),
                           _unbrace(entry.title), authors, _entrydate(entry),
                           _unbrace(get(entry.fields, "version", "")),
-                          _unbrace(entry.note))
+                          _unbrace(entry.note), _bibtexlicence(entry),
+                          Dict{String, String}())
+end
+
+# The licence that a BibTeX entry gives in a `license` or `copyright` field,
+# if it is one that can be recorded: an identifier in the SPDX licence list,
+# or a URL. Any other is warned of, and is no licence.
+function _bibtexlicence(entry::BibInternal.Entry)
+    for field in ("license", "copyright")
+        written = _unbrace(get(entry.fields, field, ""))
+        isnothing(written) && continue
+        try
+            _licence(written)
+            return written
+        catch e
+            e isa ArgumentError || rethrow()
+            @warn "the citation '$(entry.id)' gives its licence as '$written', which is neither an identifier in the SPDX licence list nor a URL, so it is not recorded: give `licence` to record one"
+            return nothing
+        end
+    end
+    return nothing
 end
 
 # A field of an entry as plain text: its braces dropped and its white space
@@ -194,14 +217,19 @@ end
 # The release date an entry gives: its `date`, which starts with a date in ISO
 # form, or else its year, month and day
 function _entrydate(entry::BibInternal.Entry)
-    iso = match(r"^\s*(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?",
-                get(entry.fields, "date", ""))
-    isnothing(iso) ||
-        return _dateasfaras(parse(Int, iso[1]), _number(iso[2]),
-                            _number(iso[3]))
+    date = _isodate(get(entry.fields, "date", ""))
+    isnothing(date) || return date
     return _dateasfaras(_number(entry.date.year),
                         _monthnumber(entry.date.month),
                         _number(entry.date.day))
+end
+
+# The date that text starting with one in ISO form gives, as far as it goes,
+# or `nothing` if it does not start with a year
+function _isodate(text::AbstractString)
+    iso = match(r"^\s*(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?", text)
+    isnothing(iso) && return nothing
+    return _dateasfaras(parse(Int, iso[1]), _number(iso[2]), _number(iso[3]))
 end
 
 # A whole number written as text, or `nothing` if it is not one
@@ -250,37 +278,35 @@ function _citation(::DataRegistryHandle, ::AbstractString, ::AbstractString)
 end
 
 """
-    _doicitation(handle, doi; fetch = _fetchbibtex)
+    _doicitation(handle, doi; fetch = _fetchmetadata)
 
 Return the citation of a DOI, given bare or as a URL. A registered citation of
 that DOI is the one, so that a run with no network can use a DOI whose
 citation it was given; several registered for it must say the same of it,
 nothing else saying which is meant.
 
-With none registered it is the BibTeX that the DOI's own URL returns, read as
-any other, its identifier the DOI as asked for. A citation that names another
-DOI - as that of an alias would, or one that is mistaken - is warned of, since
-which of the two is meant is the caller's to say. A DOI is looked up once in a
-code run. `fetch` is what asks for the BibTeX at a URL.
+With none registered it is what the DOI's formal metadata says - DataCite's
+record of it, or for a DOI that is not DataCite's its CSL record - its
+identifier the DOI as asked for. Metadata that names another DOI - as that of
+an alias would, or that is mistaken - is warned of, since which of the two is
+meant is the caller's to say. A DOI is looked up once in a code run. `fetch`
+asks a URL for metadata of a type, as `_fetchmetadata` does.
 """
 function _doicitation(handle::DataRegistryHandle, doi::AbstractString;
-                      fetch::Function = _fetchbibtex)
+                      fetch::Function = _fetchmetadata)
     identifier = _doiurl(doi)
     registered = _registeredcitation(handle, identifier)
     isnothing(registered) || return registered
     return get!(handle.doi_lookups, identifier) do
-        found = _parsecitations(fetch(identifier),
-                                "the citation returned for $identifier")
-        length(found) == 1 ||
-            throw(ReadWriteException("$(length(found)) citations were returned for $identifier"))
-        citation = only(found)
+        citation = _lookupcitation(identifier, fetch)
         named = something(citation.identifier, identifier)
         if named != identifier && startswith(named, DOI_RESOLVER)
-            @warn "the citation returned for $identifier names another DOI, $named: the source is recorded under the one asked for - if the other is the one meant, give that"
+            @warn "the metadata of $identifier names another DOI, $named: the source is recorded under the one asked for - if the other is the one meant, give that"
         end
         return SourceCitation(citation.key, identifier, citation.title,
                               citation.authors, citation.release_date,
-                              citation.release_version, citation.description)
+                              citation.release_version, citation.description,
+                              citation.licence, citation.identifiers)
     end
 end
 
@@ -299,12 +325,15 @@ function _registeredcitation(handle::DataRegistryHandle,
     return chosen
 end
 
-# Ask a URL for a citation as BibTeX, which a DOI's URL gives when asked for
-# that type. Needs a network, and says so when it cannot be reached.
-function _fetchbibtex(url::AbstractString)
+# Ask a URL for metadata of one type, which a DOI's URL gives when asked for
+# it, and return it as text: `nothing` when it is not to be had in that type,
+# answered with a 406 or with something else. Needs a network, and says so
+# when it cannot be reached.
+function _fetchmetadata(url::AbstractString, type::AbstractString)
     response = try
-        HTTP.get(url, ["Accept" => "application/x-bibtex"])
+        HTTP.get(url, ["Accept" => type])
     catch e
+        e isa HTTP.StatusError && e.status == 406 && return nothing
         if e isa HTTP.StatusError
             throw(ReadWriteException("no citation is to be had from $url (HTTP status $(e.status)): give the citation itself, as BibTeX"))
         elseif e isa Union{Base.IOError, HTTP.ConnectError, HTTP.TimeoutError}
@@ -312,8 +341,208 @@ function _fetchbibtex(url::AbstractString)
         end
         rethrow()
     end
+    occursin("json", HTTP.header(response, "Content-Type", "")) ||
+        return nothing
     return String(response.body)
 end
+
+# The citation that a DOI's formal metadata gives, from the first of the
+# types in `METADATA_READERS` that `fetch` has for it
+function _lookupcitation(identifier::AbstractString, fetch::Function)
+    for (type, reader) in METADATA_READERS
+        reply = fetch(identifier, type)
+        isnothing(reply) || return reader(JSON.parse(reply), identifier)
+    end
+    return throw(ReadWriteException("no metadata is to be had from $identifier as DataCite's record or as CSL: give the citation itself, as BibTeX"))
+end
+
+# The dates of a DataCite record that say when a source was released, in the
+# order they are looked for
+const RELEASE_DATE_TYPES = ("Issued", "Available", "Created", "Submitted")
+
+"""
+    _datacitecitation(record, doi)
+
+Return what DataCite's record of a DOI says of its source, as a citation keyed
+by the DOI: its main title; its creators, a person as given names then family
+name and an organisation as it is written, with the ORCIDs and ROR ids the
+record gives them; the first of its Issued, Available, Created and Submitted
+dates, or else its year; its version; its abstract; and its licence, by its
+identifier in the SPDX licence list where a right gives one that the list
+has, else by the first right whose address is a web page.
+"""
+function _datacitecitation(record::AbstractDict, doi::AbstractString)
+    authors = String[]
+    identifiers = Dict{String, String}()
+    for creator in _items(record, "creators")
+        name = _creatorname(creator)
+        isnothing(name) && continue
+        push!(authors, name)
+        identifier = _creatoridentifier(creator)
+        isnothing(identifier) || get!(identifiers, name, identifier)
+    end
+    titles = _items(record, "titles")
+    main = findfirst(title -> isnothing(get(title, "titleType", nothing)),
+                     titles)
+    title = isempty(titles) ? nothing :
+            get(titles[something(main, 1)], "title", nothing)
+    abstract = findfirst(_items(record, "descriptions")) do description
+        return get(description, "descriptionType", nothing) == "Abstract"
+    end
+    description = isnothing(abstract) ? nothing :
+                  get(_items(record, "descriptions")[abstract], "description",
+                      nothing)
+    return SourceCitation(doi, _named(get(record, "doi", nothing)),
+                          _plain(title), authors, _datacitedate(record),
+                          _plain(get(record, "version", nothing)),
+                          _markupless(description),
+                          _datacitelicence(_items(record, "rightsList")),
+                          identifiers)
+end
+
+# The entries of a list in parsed JSON, none where it is missing or null
+function _items(record::AbstractDict, key::AbstractString)
+    items = get(record, key, nothing)
+    return isnothing(items) ? [] : items
+end
+
+# A DOI that metadata names, as a URL in the one form, or `nothing`
+_named(doi::AbstractString) = _trydoiurl(doi)
+_named(::Nothing) = nothing
+
+# Text from metadata with its white space single, or `nothing` if that leaves
+# nothing
+_plain(::Nothing) = nothing
+function _plain(text::AbstractString)
+    plain = strip(replace(text, r"\s+" => " "))
+    return isempty(plain) ? nothing : String(plain)
+end
+# ... and of anything else JSON holds, as a year may be written as a number
+_plain(value) = _plain(string(value))
+
+# Text from metadata with its markup taken out - the HTML of a description,
+# the JATS of an abstract, a heading of one dropped - and its white space
+# single
+_markupless(::Nothing) = nothing
+function _markupless(text::AbstractString)
+    text = replace(text, r"<(jats:)?title>.*?</(jats:)?title>"is => " ")
+    text = replace(text, r"<[^<>]*>" => " ")
+    for (entity, character) in ("&lt;" => "<", "&gt;" => ">", "&quot;" => "\"",
+        "&#39;" => "'", "&amp;" => "&")
+        text = replace(text, entity => character)
+    end
+    return _plain(text)
+end
+
+# A creator of a DataCite record as the registry names an author: a person's
+# given names and then family name, an organisation as it is written
+function _creatorname(creator::AbstractDict)
+    given = _plain(get(creator, "givenName", nothing))
+    family = _plain(get(creator, "familyName", nothing))
+    !isnothing(given) && !isnothing(family) && return "$given $family"
+    name = _plain(get(creator, "name", nothing))
+    isnothing(name) && return nothing
+    parts = split(name, ',', limit = 2)
+    (get(creator, "nameType", nothing) == "Personal" && length(parts) == 2) ||
+        return name
+    return _plain(string(parts[2], " ", parts[1]))
+end
+
+# The ORCID or ROR id that a DataCite record gives a creator, as a URL with
+# `https:`, or `nothing`
+function _creatoridentifier(creator::AbstractDict)
+    for given in _items(creator, "nameIdentifiers")
+        scheme = lowercase(something(get(given, "nameIdentifierScheme",
+                                         nothing),
+                                     ""))
+        scheme in ("orcid", "ror") || continue
+        value = something(_plain(get(given, "nameIdentifier", nothing)), "")
+        isempty(value) && continue
+        if !occursin(r"^https?://", value)
+            base = something(_plain(get(given, "schemeUri", nothing)),
+                             "https://$scheme.org/")
+            value = string(rstrip(base, '/'), "/", value)
+        end
+        occursin(r"^https?://\S+$", value) &&
+            return replace(value, r"^http:" => "https:")
+    end
+    return nothing
+end
+
+# The date that a DataCite record gives for a source's release: the first of
+# the kinds that say so, as far as it goes, else its year
+function _datacitedate(record::AbstractDict)
+    for kind in RELEASE_DATE_TYPES, entry in _items(record, "dates")
+        get(entry, "dateType", nothing) == kind || continue
+        date = _isodate(something(_plain(get(entry, "date", nothing)), ""))
+        isnothing(date) || return date
+    end
+    return _isodate(something(_plain(get(record, "publicationYear", nothing)),
+                              ""))
+end
+
+# The licence that a DataCite record's rights give: an identifier in the SPDX
+# licence list, as the list writes it, else the first right's web address
+function _datacitelicence(rights::AbstractVector)
+    for right in rights
+        scheme = something(get(right, "rightsIdentifierScheme", nothing), "")
+        identifier = something(get(right, "rightsIdentifier", nothing), "")
+        lowercase(scheme) == "spdx" || continue
+        haskey(SPDX_IDENTIFIERS, lowercase(identifier)) &&
+            return SPDX_IDENTIFIERS[lowercase(identifier)]
+    end
+    for right in rights
+        address = something(get(right, "rightsUri", nothing), "")
+        occursin(r"^https?://\S+$", address) && return String(address)
+    end
+    return nothing
+end
+
+"""
+    _cslcitation(record, doi)
+
+Return what the CSL record of a DOI says of its source, as a citation keyed by
+the DOI: its title; its authors, with the ORCIDs it gives them; the date it
+was issued, as far as it goes; its version; and its abstract. A CSL record's
+licence is the publisher's terms for the work, not for data, and is not taken.
+"""
+function _cslcitation(record::AbstractDict, doi::AbstractString)
+    authors = String[]
+    identifiers = Dict{String, String}()
+    for author in _items(record, "author")
+        family = _plain(get(author, "family", nothing))
+        name = isnothing(family) ? _plain(get(author, "literal", nothing)) :
+               _plain(string(something(_plain(get(author, "given", nothing)),
+                                       ""), " ", family))
+        isnothing(name) && continue
+        push!(authors, name)
+        orcid = something(_plain(get(author, "ORCID", nothing)), "")
+        occursin(r"^https?://\S+$", orcid) &&
+            get!(identifiers, name, replace(orcid, r"^http:" => "https:"))
+    end
+    title = get(record, "title", nothing)
+    title isa AbstractVector &&
+        (title = isempty(title) ? nothing : first(title))
+    issued = get(something(get(record, "issued", nothing), Dict()),
+                 "date-parts",
+                 [])
+    parts = isempty(issued) ? [] :
+            [_number(_plain(part)) for part in first(issued)]
+    date = isempty(parts) ? nothing :
+           _dateasfaras(parts[1], get(parts, 2, nothing),
+                        get(parts, 3, nothing))
+    return SourceCitation(doi, _named(get(record, "DOI", nothing)),
+                          _plain(title), authors, date,
+                          _plain(get(record, "version", nothing)),
+                          _markupless(get(record, "abstract", nothing)),
+                          nothing, identifiers)
+end
+
+# The types of metadata a DOI is asked for, in order, and what reads each
+const METADATA_READERS = ("application/vnd.datacite.datacite+json" =>
+                              _datacitecitation,
+                          "application/vnd.citationstyles.csl+json" =>
+                              _cslcitation)
 
 """
     _sourcefacts(citation; primary, title, description, release_date,
@@ -321,7 +550,9 @@ end
 
 Return what the registry records of a source, drawn from its citation and
 from what the caller says of it, as `(identifier, title, version,
-release_date, description, primary, authors)`.
+release_date, description, primary, authors, licence, identifiers)` - the last
+two the licence the citation gives, or `nothing`, and the identifiers it gives
+its authors, by name.
 
 `primary` says whether the registered file is the cited item itself or one of
 its files, as against something requested or derived from it. Each other
@@ -357,7 +588,8 @@ function _sourcefacts(citation::SourceCitation; primary::Bool,
             release_date = _releasedate(release_date),
             description = something(description, citation.description,
                                     Some(nothing)),
-            primary = primary, authors = citation.authors)
+            primary = primary, authors = citation.authors,
+            licence = citation.licence, identifiers = citation.identifiers)
 end
 
 # A release date as the registry takes one, from a date, a date and time, or

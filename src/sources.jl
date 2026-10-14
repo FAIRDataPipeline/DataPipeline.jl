@@ -30,9 +30,12 @@ function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
     facts = _sourcefacts(citation; primary, title, description, release_date,
                          release_version)
     store = _originalstore(original_store)
-    terms = _licence(_eitherspelling(licence, license))
+    given = _eitherspelling(licence, license)
+    terms = _licence(something(given, facts.licence, Some(nothing)))
     # Nothing is registered until everything that was said has been read
-    authors = unique!(String[_authorurl(handle, name)
+    authors = unique!(String[_sourceauthorurl(handle, name,
+                                              get(facts.identifiers, name,
+                                                  nothing))
                              for name in facts.authors])
     description = isnothing(facts.description) ? nothing :
                   String(facts.description)
@@ -55,6 +58,22 @@ function _checksourcerows(registry::RegistryEndpoint)
         throw(ReadWriteException("the registry at $(registry.url) keeps a source for each data product, as a registry before v1.4.0 does, so a source's own release version cannot be recorded: registering a file with its source needs a registry at v1.4.0 or later"))
     end
     return nothing
+end
+
+# The registry's author for an author of a source: the one with the identifier
+# that the source's own metadata gives, registered as `register_authors!` would
+# register it, since that metadata is taken to be right; else the one the name
+# gives
+function _sourceauthorurl(handle::DataRegistryHandle, name::AbstractString,
+                          ::Nothing)
+    return _authorurl(handle, name)
+end
+function _sourceauthorurl(handle::DataRegistryHandle, name::AbstractString,
+                          identifier::AbstractString)
+    author = _author(name, identifier)
+    _registerauthor!(handle, author.first, author.second)
+    return _geturl(handle.registry, "author",
+                   Dict("identifier" => author.second))
 end
 
 # Where a file was fetched from, as the storage root and the path under it
