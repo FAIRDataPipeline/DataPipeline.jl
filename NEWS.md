@@ -1,5 +1,33 @@
 # NEWS
 
+- v0.55.0
+  - `link_write!` takes a `path`, to register a file that exists already: it is
+    hard-linked into the data store, or copied. `link_read!` takes a `path`, and
+    `force`, to make a registered file available there. `DataPipeline.canread`
+    and `DataPipeline.canwrite` say whether the working config allows a call.
+  - An output whose bytes are those of the highest version of its data product
+    is no longer registered again: no version is made, the file written is
+    removed, and it is not an output of the code run.
+  - `write_array` writes HDF5 files that record no times, so the same arrays
+    give the same file.
+  - `link_write!` takes a file's source - `doi` or `bibtex`, with `title`,
+    `primary`, `description`, `original_store`, `licence` (or `license`),
+    `release_date` and `release_version` - and `finalise` registers it, the
+    source's authors being the file's. A source is one file.
+  - `register_citations!` reads BibTeX citations for `bibtex =`. A `doi` with
+    none is looked up as DataCite's record, or CSL's, which gives what it has of
+    the title, description, licence, date, version and authors' ORCIDs.
+  - `register_authors!` registers authors with their ORCIDs or ROR ids, from
+    TOML files or `name => identifier` pairs, for citations that name them.
+  - A licence is an identifier in the SPDX licence list, checked against a copy
+    the package keeps, or a URL.
+  - `link_register!` registers something from outside the pipeline, with its
+    source, as an input of the code run: a deposit with no file, or a file.
+  - Registering a source needs `data-registry` v1.4.0 or later, which is checked.
+    Wildcard writes need `fair-cli` 0.10.0 or later, a pattern read of a family
+    written more than once 0.10.1, and reading a data product pulled from a
+    remote, or pushing or pulling a deposit with no file, 0.10.2.
+  - New dependencies: BibParser and BibInternal.
 - v0.54.1
   - `link_write!`, and the component writers, accept a data product name that a
     wildcard `write:` entry of the working config stands for, registering the
