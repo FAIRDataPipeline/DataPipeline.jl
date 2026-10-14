@@ -13,15 +13,20 @@ works on. The registry is `run_metadata.local_data_registry_url` (default
 (default `$DEFAULT_API_VERSION`). `token` is the registry's access token, which
 registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 
+With no arguments, the files are those in the folder `fair run` names in
+`FDP_CONFIG_DIR` when it launches a script: a call with that unset, or with a
+file that is not a working config, throws a [`ConfigFileException`](@ref)
+saying so.
+
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
 that ran cannot be recovered from its commit.
 """
-function initialise(config_file::String = FDP_PATH_CONFIG(),
-                    submission_script::String = FDP_PATH_SUBMISSION();
+function initialise(config_file::String = _launchedconfig(),
+                    submission_script::String = _launchedscript();
                     token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
-    print("processing config file: ", config_file)
-    config = YAML.load_file(config_file)
+    println("processing config file: ", config_file)
+    config = _workingconfig(config_file)
     run_metadata = config["run_metadata"]
     registry = RegistryEndpoint(get(run_metadata, "local_data_registry_url",
                                     DEFAULT_REGISTRY_URL),
@@ -53,9 +58,10 @@ function initialise(config_file::String = FDP_PATH_CONFIG(),
                                "code_repo" => repo_url,
                                "model_config" => config_url,
                                "submission_script" => script_url))
-    println(" - pipeline initialised.")
+    println("pipeline initialised.")
 
-    return DataRegistryHandle(config, dirname(abspath(config_file)), registry,
+    return DataRegistryHandle(RecordedRun(), config,
+                              dirname(abspath(config_file)), registry,
                               config_url, script_url, repo_url, datastore_url,
                               code_run["url"], code_run["uuid"],
                               Dict(), Dict(), Dict(), PendingIssue[],
@@ -70,7 +76,9 @@ end
 Complete the code run: name every output file by its hash and register it,
 register the issues raised, attach the inputs and outputs to the code run,
 and append the code run's uuid to `coderuns.txt` beside the working config,
-where the CLI's `fair add` and `fair push` find it.
+where the CLI's `fair add` and `fair push` find it. Return the data store's
+root, the folder under which the output files now sit, by namespace and data
+product.
 
 A file whose bytes are those of the highest version of its data product
 already registered is not registered again: no version is made, the file
@@ -103,7 +111,7 @@ function finalise(handle::DataRegistryHandle)
         return println(io, handle.code_run_uuid)
     end
     println("finished - code run locally registered as: ", url, "\n")
-    return nothing
+    return handle.config["run_metadata"]["write_data_store"]
 end
 
 """

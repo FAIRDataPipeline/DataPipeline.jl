@@ -29,6 +29,47 @@ end
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
+# The working config of the run that `fair run` launched this script for, in
+# the folder it names in FDP_CONFIG_DIR; with that unset, no run was launched
+function _launchedconfig()
+    haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_CONFIG()
+    return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
+                                            "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
+                                            "run the script with `fair run`, or give initialise the working config ",
+                                            "and the submission script")))
+end
+
+# ... and the submission script beside it, wanted when a working config was
+# given alone
+function _launchedscript()
+    haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_SUBMISSION()
+    return throw(ConfigFileException(string("initialise was given a working config and no submission script, ",
+                                            "and FDP_CONFIG_DIR is not set to find one beside it: give both")))
+end
+
+# The working config at `path`, the one `fair run` writes. A file that is not
+# there is a job folder that is gone; one without the data store and the commit
+# that `fair run` fills in is a user config, and no run was launched from it.
+function _workingconfig(path::AbstractString)
+    isfile(path) ||
+        throw(ConfigFileException(string("no working config at ", path,
+                                         " - a job folder that is gone, or a place `fair run` wrote none: ",
+                                         "run the script with `fair run`")))
+    config = YAML.load_file(path)
+    run_metadata = config isa AbstractDict ?
+                   get(config, "run_metadata", nothing) :
+                   nothing
+    if !(run_metadata isa AbstractDict) ||
+       !haskey(run_metadata, "write_data_store") ||
+       !haskey(run_metadata, "latest_commit")
+        throw(ConfigFileException(string(path,
+                                         " is not a working config: it lacks the data store and the commit ",
+                                         "that `fair run` fills in when it writes the working config it ",
+                                         "launches a script with - run the script with `fair run`")))
+    end
+    return config
+end
+
 """
     _registerobject(registry, path, root, description;
                     hash, local_root, public, file_type, new_object, authors)

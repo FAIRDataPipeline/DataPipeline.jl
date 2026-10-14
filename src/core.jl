@@ -207,21 +207,45 @@ struct SourceRecord
 end
 
 """
-    DataRegistryHandle
+    AbstractRunMode
+
+The way a code run is being made, which decides what the API registers. A
+[`DataRegistryHandle`](@ref) carries its run's mode as its type parameter.
+A [`RecordedRun`](@ref) registers everything.
+"""
+abstract type AbstractRunMode end
+
+"""
+    RecordedRun()
+
+The mode of a code run made under `fair run`: its working config, script,
+repository and code run are registered at [`initialise`](@ref), and its
+outputs, issues, inputs and outputs at [`finalise`](@ref).
+"""
+struct RecordedRun <: AbstractRunMode end
+
+"""
+    DataRegistryHandle{M <: AbstractRunMode}
 
 The state of one code run, created by [`initialise`](@ref) and completed by
-[`finalise`](@ref). Every other function in the API takes one.
+[`finalise`](@ref). Every other function in the API takes one. `M` is the
+run's [`AbstractRunMode`](@ref), which decides what the run registers.
 
 # Fields
+- `mode`: the run's mode, an `M`
 - `config`: the working config, as read from `config.yaml`
 - `config_dir`: the directory the working config was read from, where
   `coderuns.txt` is appended to at `finalise`
 - `registry`: the [`RegistryEndpoint`](@ref) every request goes to
-- `config_obj`: registry URL of the object for the working config file
-- `script_obj`: registry URL of the object for the submission script
-- `repo_obj`: registry URL of the object for the remote code repository
-- `datastore_obj_url`: registry URL of the storage root for the data store
-- `code_run_obj`: registry URL of the code run
+- `config_obj`: registry URL of the object for the working config file, or
+  `nothing` in a run that registers none
+- `script_obj`: registry URL of the object for the submission script, or
+  `nothing`
+- `repo_obj`: registry URL of the object for the remote code repository, or
+  `nothing`
+- `datastore_obj_url`: registry URL of the storage root for the data store,
+  or `nothing`
+- `code_run_obj`: registry URL of the code run, or `nothing`
 - `code_run_uuid`: the code run's uuid, as the CLI's staging refers to it
 - `inputs`, `outputs`: metadata of what has been read and written so far,
   keyed by `(data_product, component)`, with `component` `nothing` for a whole
@@ -235,15 +259,16 @@ The state of one code run, created by [`initialise`](@ref) and completed by
 - `authors`: the identifiers that [`register_authors!`](@ref) has been given
   for each author's name
 """
-struct DataRegistryHandle
+struct DataRegistryHandle{M <: AbstractRunMode}
+    mode::M
     config::Dict
     config_dir::String
     registry::RegistryEndpoint
-    config_obj::String
-    script_obj::String
-    repo_obj::String
-    datastore_obj_url::String
-    code_run_obj::String
+    config_obj::Union{Nothing, String}
+    script_obj::Union{Nothing, String}
+    repo_obj::Union{Nothing, String}
+    datastore_obj_url::Union{Nothing, String}
+    code_run_obj::Union{Nothing, String}
     code_run_uuid::String
     inputs::Dict
     outputs::Dict

@@ -49,7 +49,7 @@ export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
 public initialise, finalise
-public DataRegistryHandle, RegistryEndpoint
+public DataRegistryHandle, AbstractRunMode, RecordedRun, RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct

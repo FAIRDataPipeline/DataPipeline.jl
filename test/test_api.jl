@@ -67,8 +67,8 @@ Test.@testset "link_write()" begin
         println(file, "$uid/2")
     end
 
-    # Finalise Code Run
-    DataPipeline.finalise(handle)
+    # Finalise Code Run, which returns the data store the outputs are under
+    @test DataPipeline.finalise(handle) == datastore
 
     # Check path: a temporary name in the data product's directory
     @test dirname(path1) == joinpath(datastore, namespace, data_product)
@@ -1683,6 +1683,35 @@ Test.@testset "the registry token" begin
     @test_throws DataPipeline.ReadWriteException DataPipeline._patchcoderun(DataPipeline.DataRegistryHandle(fields...),
                                                                             String[],
                                                                             String[])
+end
+
+@testset "initialise outside fair run" begin
+    withenv("FDP_CONFIG_DIR" => nothing, "FDP_LOCAL_TOKEN" => nothing) do
+        # With nothing set, the call says what `fair run` would have set
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise()
+        @test occursin("fair run", err.value.msg)
+        @test occursin("FDP_CONFIG_DIR", err.value.msg)
+
+        # A working config given alone has no script to go with it
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config)
+        @test occursin("submission script", err.value.msg)
+
+        # A job folder that is gone
+        withenv("FDP_CONFIG_DIR" => mktempdir()) do
+            err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise()
+            @test occursin("gone", err.value.msg)
+        end
+
+        # A user config, which no `fair run` has made a working config from
+        user = joinpath(mktempdir(), "config.yaml")
+        DataPipeline.YAML.write_file(user,
+                                     Dict("run_metadata" =>
+                                              Dict("description" => "A user config",
+                                                   "script" => "julia script.jl")))
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(user,
+                                                                                    user)
+        @test occursin("not a working config", err.value.msg)
+    end
 end
 
 end

@@ -12,6 +12,8 @@ Depth = 3
 DataPipeline.initialise
 DataPipeline.finalise
 DataPipeline.DataRegistryHandle
+DataPipeline.AbstractRunMode
+DataPipeline.RecordedRun
 DataPipeline.RegistryEndpoint
 DataPipeline.ReadWriteException
 DataPipeline.ConfigFileException
