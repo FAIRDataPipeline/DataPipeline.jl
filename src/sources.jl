@@ -23,6 +23,7 @@ function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
             throw(ArgumentError("`$(join(given, "`, `"))` given of a source that is not named: give its `doi` or its `bibtex` key"))
         return nothing
     end
+    _checksourcerows(handle.registry)
     citation = _citation(handle, doi, bibtex)
     isnothing(primary) &&
         throw(ArgumentError("say what the file is to its source: `primary = true` if it is the cited item or one of its files, `primary = false` if it was requested or derived from it"))
@@ -38,6 +39,22 @@ function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
     return SourceRecord(facts.identifier, facts.title, facts.version,
                         facts.release_date, description, facts.primary,
                         authors, store, terms)
+end
+
+# Throw unless the registry keeps one row for each source, shared by the data
+# products registered from it, as a registry does from v1.4.0: only such a
+# registry takes a query for the sources of a data product, whatever data
+# products it holds
+function _checksourcerows(registry::RegistryEndpoint)
+    try
+        _getentry(registry,
+                  URIs.URI(string(registry.url,
+                                  "external_object/?data_products=0")))
+    catch e
+        (e isa HTTP.StatusError && e.status == 400) || rethrow()
+        throw(ReadWriteException("the registry at $(registry.url) keeps a source for each data product, as a registry before v1.4.0 does, so a source's own release version cannot be recorded: registering a file with its source needs a registry at v1.4.0 or later"))
+    end
+    return nothing
 end
 
 # Where a file was fetched from, as the storage root and the path under it

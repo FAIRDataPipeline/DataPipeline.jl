@@ -274,6 +274,12 @@ Test.@testset "what may be said of a source" begin
                               ReadWriteException))
 end
 
+Test.@testset "a registry that keeps sources as rows of their own" begin
+    # This registry is one; one before v1.4.0 is refused with an error saying
+    # so, which no registry these tests run against can show
+    @test isnothing(DataPipeline._checksourcerows(registry))
+end
+
 Test.@testset "a licence" begin
     cc0 = (info = "CC0-1.0", identifier = spdx * "CC0-1.0")
     # One in the SPDX list is known by its identifier there, in any case or

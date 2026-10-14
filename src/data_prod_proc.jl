@@ -6,6 +6,22 @@ import AxisArrays
 import NetCDF
 
 ### hdf5 file processing ###
+
+# Write `data` as the dataset at `path` in an HDF5 file, making the groups
+# that hold it, none of them recording times: what is written is then the
+# same bytes whenever it is written, as a file must be to be found unchanged.
+# A new file's root group must be made with `obj_track_times = false` too.
+function _writeuntimed(file::HDF5.File, path::AbstractString, data::Array)
+    parts = split(path, '/', keepempty = false)
+    for group in accumulate((parent, part) -> "$parent/$part",
+                            parts[1:(end - 1)])
+        haskey(file, group) ||
+            HDF5.create_group(file, group, obj_track_times = false)
+    end
+    HDF5.write_dataset(file, path, data, obj_track_times = false)
+    return nothing
+end
+
 const ARRAY_OBJ_NAME = "array"
 const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"

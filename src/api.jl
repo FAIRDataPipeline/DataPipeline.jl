@@ -473,6 +473,8 @@ end
 
 Write `data` as `component` of an HDF5 `write:` data product of the working
 config, recording it as an output, and return `(data_product, component)`.
+The file records no times, so that the same arrays give the same bytes and
+are found to be registered already.
 
 See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
@@ -484,8 +486,15 @@ function write_array(handle::DataRegistryHandle, data::Array,
     metadata = _resolvewrite(handle, data_product, component, "h5",
                              description)
     path = metadata["path"]
-    HDF5.h5open(path, isfile(path) ? "r+" : "w") do file
-        return write(file, metadata["use_component"], data)
+    if isfile(path)
+        HDF5.h5open(path, "r+") do file
+            return _writeuntimed(file, metadata["use_component"], data)
+        end
+    else
+        # The root group of a new file records no times either
+        HDF5.h5open(path, "w", obj_track_times = false) do file
+            return _writeuntimed(file, metadata["use_component"], data)
+        end
     end
     handle.outputs[key] = metadata
     return key

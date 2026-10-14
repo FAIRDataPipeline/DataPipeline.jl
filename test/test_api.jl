@@ -1488,6 +1488,32 @@ Test.@testset "an output that is registered already" begin
     DataPipeline.finalise(handle)
     @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2"]
     @test length(code_run_of(handle)["outputs"]) == 2
+
+    # Arrays are found unchanged too: an HDF5 file records no times, which
+    # would make the same arrays other bytes a second later. Two components,
+    # one in a group within a group, the second added to the file once made
+    arrayed = "data_product/unchanged/arrayed/$uid"
+    arrays = ("first/array" => [1.0 2.0; 3.0 4.0],
+              "second/deeper/array" => collect(1:6))
+    for (offered, versions) in (("0.0.1", ["0.0.1"]), ("0.0.2", ["0.0.1"]))
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, arrayed, "description",
+                               file_type = "h5", use_version = offered)
+        handle = DataPipeline.initialise(config, config)
+        # Times are kept to the second: the second run writes in another
+        offered == "0.0.2" && sleep(1.5)
+        for (part, array) in arrays
+            write_array(handle, array, arrayed, part, "an array")
+        end
+        DataPipeline.finalise(handle)
+        @test registered_versions(registry, arrayed) == versions
+    end
+    @test isempty(handle.outputs) && length(handle.unchanged) == 2
+    stored = only(unique(metadata["path"]
+                         for metadata in values(handle.unchanged)))
+    @test all(HDF5.h5open(stored) do file
+                  return [read(file, part) == array for (part, array) in arrays]
+              end)
 end
 
 Test.@testset "link_read!() with a path" begin
