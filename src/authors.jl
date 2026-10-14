@@ -108,8 +108,7 @@ function _registerauthor!(handle::DataRegistryHandle, name::AbstractString,
     query = Dict("identifier" => identifier)
     held = _getentry(handle.registry, "author", query)
     if isnothing(held)
-        _createentry(handle.registry, "author",
-                     Dict("name" => name, "identifier" => identifier))
+        _createauthor(handle, name, identifier)
     elseif held["name"] != name
         known = isnothing(held["name"]) ? "with no name" :
                 "as '$(held["name"])'"
@@ -117,6 +116,14 @@ function _registerauthor!(handle::DataRegistryHandle, name::AbstractString,
     end
     identifiers = get!(handle.authors, name, String[])
     identifier in identifiers || push!(identifiers, identifier)
+    return nothing
+end
+
+# Create the author in the registry
+function _createauthor(handle::DataRegistryHandle{RecordedRun},
+                       name::AbstractString, identifier::AbstractString)
+    _createentry(handle.registry, "author",
+                 Dict("name" => name, "identifier" => identifier))
     return nothing
 end
 
@@ -131,28 +138,35 @@ name with several identifiers, since it cannot say which of them is meant.
 """
 function _authorurl(handle::DataRegistryHandle, name::AbstractString)
     identifiers = get(handle.authors, name, String[])
+    # Only a rehearsal leaves an identifier given in the run unregistered
     length(identifiers) == 1 &&
-        return _geturl(handle.registry, "author",
-                       Dict("identifier" => only(identifiers)))
+        return something(_geturl(handle.registry, "author",
+                                 Dict("identifier" => only(identifiers))),
+                         _unregisteredauthor(name))
     isempty(identifiers) ||
         @warn "'$name' is registered in this run with $(length(identifiers)) identifiers, $(join(identifiers, ", ")): a citation cannot say which is meant, so its author is recorded by the name alone"
-    return _namedauthorurl(handle.registry, name)
+    return _namedauthorurl(handle, name)
 end
 
 # The URL of the registry's author of exactly this name and no identifier:
 # the first that was registered, or a new one
-function _namedauthorurl(registry::RegistryEndpoint, name::AbstractString)
+function _namedauthorurl(handle::DataRegistryHandle, name::AbstractString)
     # With no pattern character in it, a name is looked up as it is written
     _checkauthorname(name)
     unidentified = [author
-                    for author in _getentries(registry, "author",
+                    for author in _getentries(handle.registry, "author",
                                               Dict("name" => name))
                     if isnothing(author["identifier"])]
-    isempty(unidentified) &&
-        return _createentry(registry, "author", Dict("name" => name))["url"]
+    isempty(unidentified) && return _newnamedauthor(handle, name)
     # The first is the one that stays the same when another is registered
     oldest = argmin(unidentified) do author
         return parse(Int, _extractid(author["url"]))
     end
     return oldest["url"]
+end
+
+# Create an author of this name alone and return its URL
+function _newnamedauthor(handle::DataRegistryHandle{RecordedRun},
+                         name::AbstractString)
+    return _createentry(handle.registry, "author", Dict("name" => name))["url"]
 end

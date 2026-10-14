@@ -35,8 +35,23 @@ function _launchedconfig()
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_CONFIG()
     return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
                                             "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
-                                            "run the script with `fair run`, or give initialise the working config ",
+                                            "run the script with `fair run`, prepare a rehearsal with ",
+                                            "DataPipeline.rehearse, or give initialise the working config ",
                                             "and the submission script")))
+end
+
+# The mode a run opens in: a rehearsal where `rehearse` has set FDP_REHEARSAL
+# to its outputs folder, which must not come with a token - a recorded run
+# that lost its token must fail, and a rehearsal never holds one - else a
+# recorded run
+function _runmode(token::Union{Nothing, AbstractString})
+    outputs = get(ENV, "FDP_REHEARSAL", nothing)
+    isnothing(outputs) && return RecordedRun()
+    isnothing(token) ||
+        throw(ConfigFileException(string("FDP_REHEARSAL is set, for a rehearsal, and so is a token for a ",
+                                         "recorded run, in FDP_LOCAL_TOKEN or `token`: a rehearsal holds no ",
+                                         "token, so unset whichever was not meant")))
+    return Rehearsal(outputs)
 end
 
 # ... and the submission script beside it, wanted when a working config was
@@ -56,18 +71,24 @@ function _workingconfig(path::AbstractString)
                                          " - a job folder that is gone, or a place `fair run` wrote none: ",
                                          "run the script with `fair run`")))
     config = YAML.load_file(path)
-    run_metadata = config isa AbstractDict ?
-                   get(config, "run_metadata", nothing) :
-                   nothing
-    if !(run_metadata isa AbstractDict) ||
-       !haskey(run_metadata, "write_data_store") ||
-       !haskey(run_metadata, "latest_commit")
+    if !_isworkingconfig(config)
         throw(ConfigFileException(string(path,
                                          " is not a working config: it lacks the data store and the commit ",
                                          "that `fair run` fills in when it writes the working config it ",
                                          "launches a script with - run the script with `fair run`")))
     end
     return config
+end
+
+# Whether a config read from YAML is a working config: one with the data store
+# and the commit that `fair run` fills in
+function _isworkingconfig(config)
+    run_metadata = config isa AbstractDict ?
+                   get(config, "run_metadata", nothing) :
+                   nothing
+    return run_metadata isa AbstractDict &&
+           haskey(run_metadata, "write_data_store") &&
+           haskey(run_metadata, "latest_commit")
 end
 
 """

@@ -211,7 +211,7 @@ end
 
 The way a code run is being made, which decides what the API registers. A
 [`DataRegistryHandle`](@ref) carries its run's mode as its type parameter.
-A [`RecordedRun`](@ref) registers everything.
+A [`RecordedRun`](@ref) registers everything; a [`Rehearsal`](@ref) nothing.
 """
 abstract type AbstractRunMode end
 
@@ -223,6 +223,19 @@ repository and code run are registered at [`initialise`](@ref), and its
 outputs, issues, inputs and outputs at [`finalise`](@ref).
 """
 struct RecordedRun <: AbstractRunMode end
+
+"""
+    Rehearsal(outputs)
+
+The mode of a run that registers nothing, prepared by [`rehearse`](@ref): the
+script runs as `fair run` would run it, reading what the registry holds and
+writing to the data store, and [`finalise`](@ref) collects what it wrote in
+the folder `outputs`, as `<namespace>/<data product>/<version>.<extension>`,
+beside the working config it ran under. The handle holds no registry token.
+"""
+struct Rehearsal <: AbstractRunMode
+    outputs::String
+end
 
 """
     DataRegistryHandle{M <: AbstractRunMode}
@@ -280,16 +293,14 @@ struct DataRegistryHandle{M <: AbstractRunMode}
 end
 
 function Base.show(io::IO, handle::DataRegistryHandle)
-    return print(io, "DataRegistryHandle(", handle.code_run_uuid, ", ",
+    return print(io, "DataRegistryHandle(", _runlabel(handle), ", ",
                  length(handle.inputs), " inputs, ",
                  length(handle.outputs), " outputs, ",
                  length(handle.issues), " issues)")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
-    println(io, "DataRegistryHandle for code run ", handle.code_run_uuid)
-    println(io, "  registry: ", handle.registry.url)
-    println(io, "  code run: ", handle.code_run_obj)
+    _showrun(io, handle)
     for (label, table) in (("inputs", handle.inputs),
         ("outputs", handle.outputs), ("unchanged", handle.unchanged))
         println(io, "  ", label, ": ", length(table))
@@ -302,6 +313,22 @@ function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
     println(io, "  issues: ", length(handle.issues))
     println(io, "  citations: ", length(handle.citations))
     return print(io, "  authors: ", length(handle.authors))
+end
+
+# What the compact display names a run by
+_runlabel(handle::DataRegistryHandle{RecordedRun}) = handle.code_run_uuid
+_runlabel(::DataRegistryHandle{Rehearsal}) = "rehearsal"
+
+# The first lines of the full display: what run this is, and where it goes
+function _showrun(io::IO, handle::DataRegistryHandle{RecordedRun})
+    println(io, "DataRegistryHandle for code run ", handle.code_run_uuid)
+    println(io, "  registry: ", handle.registry.url)
+    return println(io, "  code run: ", handle.code_run_obj)
+end
+function _showrun(io::IO, handle::DataRegistryHandle{Rehearsal})
+    println(io, "DataRegistryHandle for a rehearsal, registering nothing")
+    println(io, "  registry: ", handle.registry.url)
+    return println(io, "  outputs: ", handle.mode.outputs)
 end
 
 # == Functions ==

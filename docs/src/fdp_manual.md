@@ -11,9 +11,12 @@ Depth = 3
 ```@docs
 DataPipeline.initialise
 DataPipeline.finalise
+DataPipeline.rehearse
+DataPipeline.discard
 DataPipeline.DataRegistryHandle
 DataPipeline.AbstractRunMode
 DataPipeline.RecordedRun
+DataPipeline.Rehearsal
 DataPipeline.RegistryEndpoint
 DataPipeline.ReadWriteException
 DataPipeline.ConfigFileException

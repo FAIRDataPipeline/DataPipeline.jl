@@ -22,6 +22,7 @@ using Plots
 using SHA
 using YAML
 using URIs
+using UUIDs: uuid4
 
 # The registry the CLI writes into a working config when the user has not set one
 const DEFAULT_REGISTRY_URL = "http://127.0.0.1:8000/api/"
@@ -48,8 +49,9 @@ export raise_issue
 export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
-public initialise, finalise
-public DataRegistryHandle, AbstractRunMode, RecordedRun, RegistryEndpoint
+public initialise, finalise, rehearse, discard
+public DataRegistryHandle, AbstractRunMode, RecordedRun, Rehearsal
+public RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
@@ -66,6 +68,7 @@ include("citations.jl")
 include("authors.jl")
 include("licences.jl")
 include("sources.jl")
+include("rehearse.jl")
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits

@@ -72,8 +72,10 @@ function _sourceauthorurl(handle::DataRegistryHandle, name::AbstractString,
                           identifier::AbstractString)
     author = _author(name, identifier)
     _registerauthor!(handle, author.first, author.second)
-    return _geturl(handle.registry, "author",
-                   Dict("identifier" => author.second))
+    url = _geturl(handle.registry, "author",
+                  Dict("identifier" => author.second))
+    # Only a rehearsal leaves an author unregistered
+    return something(url, _unregisteredauthor(author.first))
 end
 
 # Where a file was fetched from, as the storage root and the path under it
@@ -306,16 +308,21 @@ function _linkregister!(handle::DataRegistryHandle, data_product::String,
                 target.version, ")")
     end
 
-    object = _getentry(registry, URIs.URI(product["object"]))
-    stored = isnothing(object["storage_location"]) ? nothing :
-             _getstoragelocation(registry, product["object"]).path
+    if isnothing(product)
+        # A rehearsal registered nothing: the input is the file as given
+        stored = isnothing(file) ? nothing : file.path
+        component_url = nothing
+    else
+        object = _getentry(registry, URIs.URI(product["object"]))
+        stored = isnothing(object["storage_location"]) ? nothing :
+                 _getstoragelocation(registry, product["object"]).path
+        component_url = _wholeobjectcomponent(registry, product["object"])
+    end
     handle.inputs[key] = Dict("use_dp" => data_product,
                               "use_namespace" => namespace,
                               "use_version" => target.version,
                               "use_component" => nothing,
-                              "component_url" =>
-                                  _wholeobjectcomponent(registry,
-                                                        product["object"]),
+                              "component_url" => component_url,
                               "path" => stored, "hash" => hash)
     return stored
 end
@@ -371,7 +378,8 @@ end
 # Register a version of a data product that comes from elsewhere: its object -
 # its file put in the data store by its hash, or none - the data product, and
 # its source. Return the data product's entry.
-function _registerexternal(handle::DataRegistryHandle, data_product::String,
+function _registerexternal(handle::DataRegistryHandle{RecordedRun},
+                           data_product::String,
                            namespace::String, version::String,
                            file::Union{Nothing, NamedTuple},
                            source::SourceRecord)
