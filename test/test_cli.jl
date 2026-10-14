@@ -9,11 +9,19 @@ const ReadWriteException = DataPipeline.ReadWriteException
 
 uid = DataPipeline._randomhash()
 
-Test.@testset "fair()" begin
-    # The fair on the path, which the suite runs under
-    @test isnothing(DataPipeline.fair("--version"))
-    err = @test_throws ReadWriteException DataPipeline.fair("no-such-command")
-    @test occursin("no-such-command", err.value.msg)
+Test.@testset "DataPipeline.fair\"...\"" begin
+    # The fair on the path, which the suite runs under, with the text split
+    # as a command line is: quoting and interpolation
+    @test isnothing(DataPipeline.fair"--version")
+    flag = "--version"
+    @test isnothing(DataPipeline.fair"$flag")
+    @test isnothing(DataPipeline.fair"$(flag)")
+    @test isnothing(DataPipeline.fair" --version ")
+    err = @test_throws ReadWriteException DataPipeline.fair"no-such-command --with-option"
+    @test occursin("no-such-command --with-option", err.value.msg)
+    # A quoted word stays one argument, which the CLI refuses as one
+    err = @test_throws ReadWriteException DataPipeline.fair"'no such command'"
+    @test occursin("no such command", err.value.msg)
 end
 
 Test.@testset "install_cli()" begin
@@ -29,7 +37,7 @@ Test.@testset "install_cli()" begin
     # Run again, the copy is up to date, and the call quick
     @test DataPipeline.install_cli() == executable
     # The copy runs
-    @test isnothing(DataPipeline.fair("--version", cli = executable))
+    @test isnothing(DataPipeline._fair("--version", cli = executable))
     # ... and is the second place looked: after the path, before FDP_FAIR_CLI.
     # The path keeps everything but fair, since the CLI needs git on it
     separator = Sys.iswindows() ? ';' : ':'
@@ -39,7 +47,7 @@ Test.@testset "install_cli()" begin
     withenv("PATH" => without_fair,
             "FDP_FAIR_CLI" => joinpath(tempdir(), "missing-$uid")) do
         @test isnothing(Sys.which("fair"))
-        @test isnothing(DataPipeline.fair("--version"))
+        @test isnothing(DataPipeline.fair"--version")
     end
     # A version asked for is the one installed, and the newest brought back
     DataPipeline.install_cli(version = "0.10.2")

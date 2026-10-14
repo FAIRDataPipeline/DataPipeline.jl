@@ -29,9 +29,9 @@ time:
 
 ```julia
 using DataPipeline
-DataPipeline.fair("pull", "config.yaml")   # when inputs need registering or syncing
-DataPipeline.rehearse("config.yaml")       # fair run --ci --dirty prepares the job
-include("script.jl")                        # or its lines, one at a time
+DataPipeline.fair"pull config.yaml"    # when inputs need registering or syncing
+DataPipeline.rehearse("config.yaml")   # fair run --ci --dirty prepares the job
+include("script.jl")                    # or its lines, one at a time
 ```
 
 `rehearse` has `fair` write the working config and the script into a job
@@ -57,8 +57,9 @@ fetch run it reads from has been recorded.
 `fair` is found on the path, which it is on when Julia was started from a
 shell with the CLI's virtual environment active; else as the copy the package
 installed; else as the executable `FDP_FAIR_CLI` names; and `cli =` on either
-call names one. `DataPipeline.fair(arguments...)` runs it with any
-arguments.
+call names one. `DataPipeline.fair"..."` runs it with any arguments,
+written as on the command line: `DataPipeline.fair"pull config.yaml"`, or
+`DataPipeline.fair"pull $config"`.
 
 A Julia started by an editor has no virtual environment on its path, so the
 package can install a copy of its own, with a Python of its own that
@@ -67,18 +68,18 @@ it up to date. The whole pipeline can then be set up from Julia:
 
 ```julia
 using DataPipeline
-DataPipeline.install_cli()                  # once: fair, with its Python
-DataPipeline.fair("registry", "install")   # once: the local registry
-DataPipeline.fair("init")                  # once per project, from its root; asks questions
-DataPipeline.fair("registry", "start")
-DataPipeline.fair("pull", "config.yaml")
+DataPipeline.install_cli()             # once: fair, with its Python
+DataPipeline.fair"registry install"    # once: the local registry
+DataPipeline.fair"init"                # once per project, from its root; asks questions
+DataPipeline.fair"registry start"
+DataPipeline.fair"pull config.yaml"
 DataPipeline.rehearse("config.yaml")
 ```
 
 ```@docs
 DataPipeline.rehearse
 DataPipeline.discard
-DataPipeline.fair
+DataPipeline.@fair_str
 DataPipeline.install_cli
 ```
 

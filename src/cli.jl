@@ -9,17 +9,28 @@
 const CLI_PYTHON = "3.12"
 
 """
-    fair(arguments...; cli = nothing)
+    DataPipeline.fair"arguments"
 
-Run the pipeline's command-line tool `fair` with `arguments`, in the current
-directory, printing what it prints: `fair pull config.yaml` is
-`DataPipeline.fair("pull", "config.yaml")`. An exit status other than 0 is a
-[`ReadWriteException`](@ref). `cli` names the `fair` to run, found as
-[`rehearse`](@ref) finds it when none is given. A command that asks questions,
-as `fair init` does without `--ci`, needs a terminal. Return `nothing`.
+Run the pipeline's command-line tool `fair` with its arguments written as on
+the command line, in the current directory, printing what it prints:
+`DataPipeline.fair"pull config.yaml"` is `fair pull config.yaml`. The text is
+split as Julia's backticks split a command, so quotes group a word, and
+`\$name` and `\$(expression)` interpolate, as in `fair"pull \$config"`. An exit
+status other than 0 is a [`ReadWriteException`](@ref). The `fair` run is
+found as [`rehearse`](@ref) finds it: on the path, else the copy
+[`install_cli`](@ref) made, else the one `FDP_FAIR_CLI` names. A command that
+asks questions, as `fair init` does without `--ci`, needs a terminal.
 """
-function fair(arguments::AbstractString...;
-              cli::Union{Nothing, AbstractString, Cmd} = nothing)
+macro fair_str(text)
+    command = Expr(:macrocall, GlobalRef(Base, Symbol("@cmd")), __source__,
+                   text)
+    return :(_fair($(esc(command)).exec...))
+end
+
+# Run `fair` with these arguments - `cli` naming the one to run, else the one
+# found - and throw on an exit status other than 0
+function _fair(arguments::AbstractString...;
+               cli::Union{Nothing, AbstractString, Cmd} = nothing)
     command = `$(_faircommand(cli)) $arguments`
     process = run(ignorestatus(command))
     success(process) ||
@@ -34,7 +45,8 @@ Install the package's own copy of `fair`, or bring it up to date, and return
 the path of its executable. The copy lives in a scratch space of the
 package's, with a Python of its own that MicroMamba fetches from conda-forge,
 so it needs no Python on the machine and no virtual environment, and
-[`rehearse`](@ref) and [`fair`](@ref) use it when no `fair` is on the path.
+[`rehearse`](@ref) and [`@fair_str`](@ref) use it when no `fair` is on the
+path.
 `fair-cli` is installed from PyPI at its newest version, or at `version`; run
 again, the call brings the copy up to date, printing its version before and
 after. The Python is $CLI_PYTHON unless `python` names another minor version;

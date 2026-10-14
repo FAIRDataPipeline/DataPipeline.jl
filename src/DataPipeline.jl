@@ -51,7 +51,8 @@ export raise_issue
 export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
-public initialise, finalise, rehearse, discard, fair, install_cli
+public initialise, finalise, rehearse, discard, install_cli
+public @fair_str
 public DataRegistryHandle, AbstractRunMode, RecordedRun, Rehearsal
 public RegistryEndpoint
 public ReadWriteException, ConfigFileException

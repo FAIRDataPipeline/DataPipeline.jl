@@ -364,9 +364,9 @@ end
                 mv(aside, copy)
             end
             # fair() runs the same fair, and fails as it fails
-            @test isnothing(DataPipeline.fair("--version", cli = fake))
-            err = @test_throws ReadWriteException DataPipeline.fair("anything",
-                                                                    cli = failing)
+            @test isnothing(DataPipeline._fair("--version", cli = fake))
+            err = @test_throws ReadWriteException DataPipeline._fair("anything",
+                                                                     cli = failing)
             @test occursin("exit status 1", err.value.msg)
             # A fair that fails, and one that exits 0 printing no folder
             err = @test_throws ReadWriteException DataPipeline.rehearse(user,

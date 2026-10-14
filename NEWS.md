@@ -17,13 +17,13 @@
     then runs unchanged in the session, and `finalise` collects the outputs in
     a folder, registering nothing. `DataPipeline.discard` ends a rehearsal
     without its outputs.
-  - `DataPipeline.fair(arguments...)` runs the CLI from Julia: the `fair` on
-    the path, else the copy `install_cli` made, else the one `FDP_FAIR_CLI`
-    names; `cli =` names another.
+  - `DataPipeline.fair"pull config.yaml"` runs the CLI from Julia, its
+    arguments written as on the command line: the `fair` on the path, else the
+    copy `install_cli` made, else the one `FDP_FAIR_CLI` names.
   - `DataPipeline.install_cli()` installs the package's own copy of `fair`, or
     brings it up to date, in a scratch space, with a Python that MicroMamba
     fetches: for a Julia with no virtual environment on its path, and to set
-    the registry up from Julia with `fair("registry", "install")`.
+    the registry up from Julia with `DataPipeline.fair"registry install"`.
   - `finalise()` returns the folder the outputs are under: the data store's
     root, or a rehearsal's folder.
   - `initialise()` outside `fair run` throws a `ConfigFileException` saying

@@ -31,8 +31,8 @@ collecting its outputs.
 none given, the `fair` on the path is used, else the copy this package
 installed, else the executable that `FDP_FAIR_CLI` names, and with none of
 those the call fails saying so. Julia started from an editor has no virtual
-environment on its path, which is what the last two are for. [`fair`](@ref)
-runs the same `fair` with any arguments.
+environment on its path, which is what the last two are for.
+[`@fair_str`](@ref) runs the same `fair` with any arguments.
 """
 function rehearse(path::AbstractString;
                   outputs::Union{Nothing, AbstractString} = nothing,
