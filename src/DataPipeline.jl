@@ -43,6 +43,7 @@ FDP_PATH_CONFIG() = joinpath(FDP_CONFIG_DIR(), "config.yaml")
 FDP_PATH_SUBMISSION() = joinpath(FDP_CONFIG_DIR(), FDP_SUBMISSION_SCRIPT)
 FDP_LOCAL_TOKEN() = get(ENV, "FDP_LOCAL_TOKEN", nothing)
 
+include("naming.jl")
 include("core.jl")
 
 include("api.jl")
@@ -56,18 +57,24 @@ export register_authors!, register_citations!
 public initialise, finalise, rehearse, discard, install_cli, install_cli!,
        set_cli!
 public @fair_str
-public DataRegistryHandle, AbstractRunMode, RecordedRun, Rehearsal
+public DataRegistryHandle, RecordedRun, Rehearsal
 public RegistryEndpoint
 public ReadWriteException, ConfigFileException
-public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
+public WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
 # Asking what the working config lets a run read and write
 public canread, canwrite
 # Asking what the registry knows about a file or a git repository on disk
 public identify
 public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
+public UpstreamIssue, OutdatedInput
 public RepositoryIdentification, RegisteredCommit, CodeRunRecord
-public AbstractCommitSelection, AncestorCommits, CheckedOutCommit, AllCommits
+# Tracing where a data product came from, what was made from it, and the
+# crate that packs files with their provenance
+public provenance, downstream, crate
+public Trace
+public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
+public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
 
 include("fdp_i.jl")
 include("citations.jl")
@@ -78,9 +85,13 @@ include("cli.jl")
 include("rehearse.jl")
 
 include("data_prod_proc.jl")    # dp file handling
+include("provenance.jl")
 include("api_audit.jl")         # DR audits
+include("downstream.jl")
+include("crate.jl")
 
 include("testing.jl")
+include("deprecated.jl")
 
 # ---- SEIRS model ----
 module SeirsModel

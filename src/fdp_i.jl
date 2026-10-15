@@ -494,10 +494,6 @@ function _pruneempty(directory::AbstractString, stop::AbstractString)
     return nothing
 end
 
-# The placeholder in a `write:` name that stands for the code run's uuid, which
-# the CLI leaves for the API to fill in at `finalise`
-const RUN_ID_PLACEHOLDER = r"\$\{\{\s*RUN_ID\s*\}\}"
-
 """
     _registerdataproduct(handle, data_product, component)
 
@@ -629,8 +625,10 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     wmd, use_data_product = _writemetadata(handle, data_product)
     use = get(wmd, "use", Dict())
     data_store = handle.config["run_metadata"]["write_data_store"]
-    use_namespace = _writenamespace(handle, wmd)
+    use_namespace = _checknamespace(_writenamespace(handle, wmd))
+    _checkdataproduct(use_data_product)
     use_component = get(use, "component", component)
+    isnothing(use_component) || _checkcomponent(use_component)
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])
 
@@ -676,9 +674,11 @@ output in the handle and return its metadata.
 """
 function _writekeyval(handle::DataRegistryHandle, data::Dict,
                       data_product::String,
-                      component::String, description::String)
+                      component::String, description::String,
+                      supersede::Bool)
     metadata = _resolvewrite(handle, data_product, component, "toml",
                              description)
+    metadata["supersede"] = supersede
     use_component = metadata["use_component"]
     path = metadata["path"]
 
@@ -771,8 +771,9 @@ function _issuecomponents(handle::DataRegistryHandle,
     if any(entry["data_product"] == target.data_product
            for entry in get(handle.config, "read", []))
         rmd = _readmetadata(handle, target.data_product)
-        existing = ExistingDataProduct(rmd.namespace, rmd.data_product,
-                                       rmd.version,
+        existing = ExistingDataProduct(_dataproductname(rmd.namespace,
+                                                        rmd.data_product,
+                                                        rmd.version),
                                        component = target.component)
         return _issuecomponents(handle, existing)
     end
@@ -780,10 +781,80 @@ function _issuecomponents(handle::DataRegistryHandle,
 end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ExistingDataProduct)
-    dp_entry = _finddataproduct(handle.registry, target.namespace,
-                                target.data_product, target.version)
-    return [_componenturl(handle.registry, dp_entry["object"],
-                          target.component)]
+    registry = handle.registry
+    if isnothing(target.version)
+        dp_entry = _latestdataproduct(registry, target.namespace,
+                                      target.data_product)
+        isnothing(dp_entry) &&
+            throw(ReadWriteException("no data product $(_dataproductname(target.namespace, target.data_product)) is registered"))
+    else
+        dp_entry = _finddataproduct(registry, target.namespace,
+                                    target.data_product, target.version)
+    end
+    return [_componenturl(registry, dp_entry["object"], target.component)]
+end
+
+# The severity of the issue `supersede = true` raises on a superseded version:
+# the lowest, below the default, since the old data is not wrong
+const SUPERSEDED_ISSUE_SEVERITY = 0
+
+# What `supersede = true` does once a data product's version is settled: queue
+# the issue on the version it supersedes - the highest before, `previous` as
+# the registry holds it or `nothing` - or say that there was nothing to
+# supersede: the highest version was unchanged, there was none before, or the
+# version is not above it
+function _supersede!(handle::DataRegistryHandle, namespace::String,
+                     name::String, version::String,
+                     previous::Union{Nothing, AbstractDict}, unchanged::Bool)
+    label = _dataproductname(namespace, name, version)
+    if unchanged
+        @info "nothing to supersede: $label is the highest version already, unchanged"
+    elseif isnothing(previous)
+        @info "nothing to supersede: $label is the first version of its name"
+    elseif VersionNumber(previous["version"]) >= VersionNumber(version)
+        @info "nothing to supersede: $label is not above the highest version, $(previous["version"])"
+    else
+        superseded = _dataproductname(namespace, name, previous["version"])
+        push!(handle.issues,
+              PendingIssue([ExistingDataProduct(superseded)],
+                           "Superseded by " * label,
+                           SUPERSEDED_ISSUE_SEVERITY))
+    end
+    return nothing
+end
+
+# For each data product written with `supersede = true`, what the registry
+# holds as its highest version before this run registers anything, with the
+# name and version the run writes
+function _previousversions(handle::DataRegistryHandle)
+    previous = Dict{String, NamedTuple}()
+    for (key, metadata) in handle.outputs
+        get(metadata, "supersede", false) || continue
+        haskey(previous, key[1]) && continue
+        name = replace(metadata["use_dp"],
+                       RUN_ID_PLACEHOLDER => handle.code_run_uuid)
+        previous[key[1]] = (namespace = String(metadata["use_namespace"]),
+                            name = name,
+                            version = String(metadata["use_version"]),
+                            latest = _latestdataproduct(handle.registry,
+                                                        metadata["use_namespace"],
+                                                        name))
+    end
+    return previous
+end
+
+# Once the outputs are settled, each data product written with
+# `supersede = true` supersedes what it supersedes, or says it does not
+function _supersedeoutputs!(handle::DataRegistryHandle,
+                            previous::Dict{String, NamedTuple})
+    for data_product in sort(collect(keys(previous)))
+        before = previous[data_product]
+        unchanged = any(key[1] == data_product
+                        for key in keys(handle.unchanged))
+        _supersede!(handle, before.namespace, before.name, before.version,
+                    before.latest, unchanged)
+    end
+    return nothing
 end
 
 # The issue raised against a code repository registered with uncommitted

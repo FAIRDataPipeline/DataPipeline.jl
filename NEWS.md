@@ -11,6 +11,10 @@
     - A source is one file: a second file under one identifier, title and
       release version is refused, at the call or at `finalise`.
     - Registering a source needs `data-registry` v1.4.0 or later.
+    - `registry_audit`, `registry_audit_recursive` and `record_issues!` are
+      removed: written for the registry's 2021 schema, they could not run
+      against any registry since. `provenance` and `downstream` are what they
+      were for.
   - `DataPipeline.rehearse(path)` runs a script through the pipeline without
     recording it: `fair run --ci --dirty` prepares the job for a user config
     (a job folder, or its working config, may be given instead), the script
@@ -65,6 +69,37 @@
     written more than once 0.10.1, and reading a data product pulled from a
     remote, or pushing or pulling a deposit with no file, 0.10.2.
   - New dependencies: BibParser and BibInternal.
+  - The abstract supertypes `AbstractIssueTarget` and `AbstractCommitSelection`
+    are no longer `public`: they annotate arguments and are not for extending.
+  - `DataPipeline.provenance(x)` traces where a data product came from - `x` a
+    file or `namespace:name@version` - as a `Trace`, printed as a tree: each
+    run at its commit, what it read, each input's source, issues and the
+    version that supersedes it, back to the data registered from elsewhere.
+  - `DataPipeline.downstream(x)` traces the other way, to everything made from
+    a data product, from the runs of a repository with `repo = `, or from
+    everything an issue is raised on with `issue = `: what must be made again.
+  - `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
+    files, folders and data products named, as its metadata or saved as a
+    zip with `to = "paper.zip"`.
+  - `identify` of a file also reports the issues raised on anything behind it,
+    each with the run it reaches the file through, and with `superseded = true`
+    the inputs behind it that a newer version of has been registered since.
+  - A git repository is named to `identify` by `repo = folder`, or by the URL
+    of its remote with no clone; the folder by position is deprecated. `commits`
+    takes a commit by name - a tag, a branch, a hash or a registered release's
+    version - as a string or `NamedCommit`.
+  - A registered data product is named `namespace:name@version` everywhere, as
+    the CLI names one, with `namespace:name` for its newest version:
+    `link_register!` takes the form in place of its `namespace` and `version`
+    keywords, `ExistingDataProduct` takes it (the three-part constructor is
+    deprecated), `raise_issue` takes it bare, and `identify` prints it.
+  - `supersede = true` on `link_write!`, `link_register!` and the component
+    writers raises an issue on the version a new version supersedes, at
+    severity 0, so that what was made from the old version reports it; where
+    there is nothing to supersede an info message says so.
+  - Names are held to the pipeline's convention wherever the package registers
+    one: a namespace of ASCII letters, digits, `_` and `-`, a data product or
+    component name of such parts joined by `/`; any other is an `ArgumentError`.
 - v0.54.1
   - `link_write!`, and the component writers, accept a data product name that a
     wildcard `write:` entry of the working config stands for, registering the

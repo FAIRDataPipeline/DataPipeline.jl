@@ -708,23 +708,23 @@ Test.@testset "link_register!() with no file" begin
     # A version asked for: registered so already, it is that one; registered
     # otherwise, an error; not registered, it is registered
     handle = offering()
-    link_register!(handle, deposit; of(version = "0.0.1")...)
+    link_register!(handle, "$deposit@0.0.1"; of()...)
     @test handle.inputs[(deposit, nothing)]["use_version"] == "0.0.1"
     msg = message_of(ReadWriteException) do
-        return link_register!(offering(), deposit; of(version = "0.0.2")...)
+        return link_register!(offering(), "$deposit@v0.0.2"; of()...)
     end
     @test occursin("version 0.0.2 of $inputs_namespace:$deposit", msg)
-    link_register!(offering(), deposit; of(version = v"1.0")...)
+    link_register!(offering(), "$deposit@1.0"; of()...)
     @test registered_versions(deposit) == ["0.0.1", "0.0.2", "1.0.0"]
     # ... and one run reads one version of a name
     msg = message_of(ReadWriteException) do
-        return link_register!(handle, deposit; of(version = "1.0.0")...)
+        return link_register!(handle, "$deposit@1.0.0"; of()...)
     end
     @test occursin("already an input of this code run, as version 0.0.1", msg)
 
-    # In a namespace of its own
+    # In a namespace of its own, named before the colon
     elsewhere = "elsewhere-$(uid[1:8])"
-    link_register!(offering(), deposit; of(namespace = elsewhere)...)
+    link_register!(offering(), "$elsewhere:$deposit"; of()...)
     space = DataPipeline._getid(registry, "namespace",
                                 Dict("name" => elsewhere))
     @test !isnothing(DataPipeline._getentry(registry, "data_product",
@@ -794,6 +794,39 @@ Test.@testset "link_register!() with a file" begin
     @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
 end
 
+Test.@testset "link_register!() with supersede = true" begin
+    name = "sources/register/supersede/$uid"
+    of(; keywords...) = (; bibtex = "deposit", primary = true,
+                         supersede = true, keywords...)
+
+    # The first version supersedes nothing; the next patch supersedes it,
+    # with an issue queued for finalise; the same again is unchanged
+    handle = offering()
+    @test_logs (:info, r"first version of its name") match_mode=:any link_register!(handle,
+                                                                                    name;
+                                                                                    of()...)
+    @test isempty(handle.issues)
+    DataPipeline.finalise(handle)
+    handle = offering()
+    link_register!(handle, name; of(licence = "CC0-1.0")...)
+    issue = only(handle.issues)
+    @test issue.severity == 0
+    @test issue.description == "Superseded by $inputs_namespace:$name@v0.0.2"
+    @test issue.targets ==
+          [DataPipeline.ExistingDataProduct("$inputs_namespace:$name@v0.0.1")]
+    DataPipeline.finalise(handle)
+    posted = DataPipeline._getentry(registry, "issue",
+                                    Dict("description" =>
+                                             issue.description))
+    @test posted["component_issues"] == [whole(registered(name, "0.0.1"))]
+    handle = offering()
+    @test_logs (:info, r"highest version already, unchanged") match_mode=:any link_register!(handle,
+                                                                                             name;
+                                                                                             of(licence = "CC0-1.0")...)
+    @test isempty(handle.issues)
+    DataPipeline.finalise(handle)
+end
+
 Test.@testset "what link_register!() refuses" begin
     handle = offering()
     name = "sources/register/refused/$uid"
@@ -814,8 +847,24 @@ Test.@testset "what link_register!() refuses" begin
                    refused(ArgumentError, bibtex = "deposit", primary = true,
                            original_store = "https://example.org/f.txt"))
     @test occursin("`version`",
-                   refused(ArgumentError, bibtex = "deposit", primary = true,
-                           version = "061"))
+                   message_of(ArgumentError) do
+                       return link_register!(handle, "$name@061",
+                                             bibtex = "deposit",
+                                             primary = true)
+                   end)
+    # A name outside the convention, in the name or the namespace
+    @test occursin("is not a data product name",
+                   message_of(ArgumentError) do
+                       return link_register!(handle, "$name.csv",
+                                             bibtex = "deposit",
+                                             primary = true)
+                   end)
+    @test occursin("is not a namespace",
+                   message_of(ArgumentError) do
+                       return link_register!(handle, "a space:$name",
+                                             bibtex = "deposit",
+                                             primary = true)
+                   end)
     @test occursin("no file to register",
                    refused(ReadWriteException, bibtex = "deposit",
                            primary = true,

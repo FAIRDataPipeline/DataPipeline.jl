@@ -110,23 +110,24 @@ struct ConfigDataProduct <: AbstractIssueTarget
 end
 
 """
-    ExistingDataProduct(namespace, data_product, version; component = nothing)
+    ExistingDataProduct(data_product; component = nothing)
 
 Target for [`raise_issue`](@ref): a data product already in the registry,
-whether or not this code run uses it, identified by its `namespace`, registry
-name and `version`, and optionally one named `component` of it.
+whether or not this code run uses it, named as the pipeline names one -
+`namespace:name@version`, or `namespace:name` for its newest version - and
+optionally one named `component` of it. A `String` of that form given to
+`raise_issue` means this target.
 """
 struct ExistingDataProduct <: AbstractIssueTarget
     namespace::String
     data_product::String
-    version::String
+    version::Union{Nothing, String}
     component::Union{Nothing, String}
 
-    function ExistingDataProduct(namespace::AbstractString,
-                                 data_product::AbstractString,
-                                 version::AbstractString;
+    function ExistingDataProduct(data_product::AbstractString;
                                  component::Union{Nothing, AbstractString} = nothing)
-        return new(String(namespace), String(data_product), String(version),
+        named = _parsedataproduct(data_product)
+        return new(named.namespace, named.name, named.version,
                    isnothing(component) ? nothing : String(component))
     end
 end

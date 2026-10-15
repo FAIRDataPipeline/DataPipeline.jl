@@ -244,4 +244,70 @@ Test.@testset "FDP_LOCAL_TOKEN()" begin
     end
 end
 
+Test.@testset "a data product named namespace:name@version" begin
+    parse = DataPipeline._parsedataproduct
+    full = parse("PSU:SEIRS_model/parameters@v1.0.0")
+    @test full == (namespace = "PSU", name = "SEIRS_model/parameters",
+           version = "1.0.0")
+    # The version with or without its v, and written in full; none, nothing
+    @test parse("PSU:SEIRS_model/parameters@1.0.0") == full
+    @test parse("PSU:SEIRS_model/parameters@1.0").version == "1.0.0"
+    @test isnothing(parse("PSU:SEIRS_model/parameters").version)
+    # The namespace given, else the default, else an error
+    @test parse("x:a").namespace == "x"
+    @test parse("a", default = "d") == (namespace = "d", name = "a",
+           version = nothing)
+    @test parse("a@2.0.0", default = "d").version == "2.0.0"
+    @test parse("x:a", default = "d").namespace == "x"
+    err = @test_throws ArgumentError parse("a")
+    @test occursin("names no namespace", err.value.msg)
+    # What the convention refuses: in the namespace, the name, the version
+    for text in ("P SU:a", "p.su:a", "PSU/x:a")
+        err = @test_throws ArgumentError parse(text)
+        @test occursin("is not a namespace", err.value.msg)
+    end
+    for text in ("PSU:a b", "PSU:a.csv", "PSU:a:b", "PSU:a@b@1.0.0", "PSU:",
+        "PSU:/a", "PSU:a//b", "PSU:a/")
+        err = @test_throws ArgumentError parse(text)
+        @test occursin("is not a data product name", err.value.msg)
+    end
+    err = @test_throws ArgumentError parse("PSU:a@061")
+    @test occursin("`version`", err.value.msg)
+    @test_throws ArgumentError parse("PSU:a@")
+
+    # The name written back, and a name to be written may hold the run's id
+    name = DataPipeline._dataproductname
+    @test name("PSU", "SEIRS_model/parameters", "1.0.0") ==
+          "PSU:SEIRS_model/parameters@v1.0.0"
+    @test name("PSU", "SEIRS_model/parameters", v"1.0.0") ==
+          "PSU:SEIRS_model/parameters@v1.0.0"
+    @test name("PSU", "SEIRS_model/parameters") == "PSU:SEIRS_model/parameters"
+    @test DataPipeline._checkdataproduct("out/\${{RUN_ID}}") ==
+          "out/\${{RUN_ID}}"
+    @test DataPipeline._checkdataproduct("out/\${{ RUN_ID }}/x") ==
+          "out/\${{ RUN_ID }}/x"
+    @test_throws ArgumentError DataPipeline._checkdataproduct("out/\${{ID}}")
+    @test DataPipeline._checkcomponent("a/b-c_1") == "a/b-c_1"
+    @test_throws ArgumentError DataPipeline._checkcomponent("a b")
+    @test_throws ArgumentError DataPipeline._checknamespace("")
+
+    # The issue target, from the string, with the three-part form kept as a
+    # deprecation that makes the same thing
+    target = DataPipeline.ExistingDataProduct("PSU:SEIRS_model/parameters@v1.0.0",
+                                              component = "c")
+    @test target.namespace == "PSU" &&
+          target.data_product ==
+          "SEIRS_model/parameters" && target.version == "1.0.0" &&
+          target.component == "c"
+    @test isnothing(DataPipeline.ExistingDataProduct("PSU:a").version)
+    @test isnothing(DataPipeline.ExistingDataProduct("PSU:a").component)
+    @test_throws ArgumentError DataPipeline.ExistingDataProduct("a")
+    @test DataPipeline.ExistingDataProduct("PSU", "SEIRS_model/parameters",
+                                           "1.0.0", component = "c") == target
+    # A bare string to raise_issue: a config name, unless it holds a colon
+    @test DataPipeline._astarget("a/b") == DataPipeline.ConfigDataProduct("a/b")
+    @test DataPipeline._astarget("PSU:a/b@v1.0.0") ==
+          DataPipeline.ExistingDataProduct("PSU:a/b@v1.0.0")
+end
+
 end

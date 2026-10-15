@@ -127,6 +127,7 @@ version must be the same as well.
 """
 function finalise(handle::DataRegistryHandle{RecordedRun})
     _checksources(handle)
+    previous = _previousversions(handle)
     # In name order, so which of two identical outputs keeps its file, and the
     # order of the code run's inputs and outputs, are the same on every machine
     for (data_product, component) in sort(collect(keys(handle.outputs)),
@@ -138,6 +139,7 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
         metadata["unchanged"] || continue
         handle.unchanged[key] = pop!(handle.outputs, key)
     end
+    _supersedeoutputs!(handle, previous)
     outputs = String[handle.outputs[key]["component_url"]
                      for key in sort(collect(keys(handle.outputs)),
                                      by = string)]
@@ -347,11 +349,11 @@ function read_distribution(handle::DataRegistryHandle, data_product::String,
 end
 
 """
-    link_write!(handle, data_product; path = nothing, doi = nothing,
-                bibtex = nothing, title = nothing, primary = nothing,
-                description = nothing, original_store = nothing,
-                licence = nothing, license = nothing, release_date = nothing,
-                release_version = nothing)
+    link_write!(handle, data_product; path = nothing, supersede = false,
+                doi = nothing, bibtex = nothing, title = nothing,
+                primary = nothing, description = nothing,
+                original_store = nothing, licence = nothing, license = nothing,
+                release_date = nothing, release_version = nothing)
 
 Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
@@ -417,10 +419,20 @@ registered as given. A name matching the patterns of several entries is an
 error, since nothing distinguishes them: the file type comes from the entry
 found, not from the caller.
 
+`supersede = true` says that this version supersedes the one before it for
+everything made from that: once the new version is registered at
+[`finalise`](@ref), an issue reading `Superseded by namespace:name@vX.Y.Z` is
+raised on the highest version before it, at severity 0, the lowest, so that
+[`identify`](@ref) of anything made from the old version reports it. Where
+there is nothing to supersede - the file is the highest version's and
+unchanged, the name has no version before, or the version written is not
+above the highest - nothing is raised, and an info message says so.
+
 See also: [`canwrite`](@ref)
 """
 function link_write!(handle::DataRegistryHandle, data_product::String;
                      path::Union{Nothing, AbstractString} = nothing,
+                     supersede::Bool = false,
                      doi::Union{Nothing, AbstractString} = nothing,
                      bibtex::Union{Nothing, AbstractString} = nothing,
                      title::Union{Nothing, AbstractString} = nothing,
@@ -436,21 +448,24 @@ function link_write!(handle::DataRegistryHandle, data_product::String;
     source = _source(handle; doi, bibtex, title, primary, description,
                      original_store, licence, license, release_date,
                      release_version)
-    return _linkwrite!(handle, data_product, path, source)
+    return _linkwrite!(handle, data_product, path, source, supersede)
 end
 
 # A new file in the data store, for the caller to write
 function _linkwrite!(handle::DataRegistryHandle, data_product::String,
-                     ::Nothing, source::Union{Nothing, SourceRecord})
+                     ::Nothing, source::Union{Nothing, SourceRecord},
+                     supersede::Bool)
     key = (data_product, nothing)
     if haskey(handle.outputs, key)
         _checksamesource(handle, data_product, source)
+        supersede && (handle.outputs[key]["supersede"] = true)
         return handle.outputs[key]["path"]
     end
     wmd = _writemetadata(handle, data_product).entry
     metadata = _resolvewrite(handle, data_product, nothing, wmd["file_type"],
                              nothing)
     isnothing(source) || (metadata["source"] = source)
+    metadata["supersede"] = supersede
     handle.outputs[key] = metadata
     return metadata["path"]
 end
@@ -458,7 +473,7 @@ end
 # A file that exists already, linked or copied into the data store
 function _linkwrite!(handle::DataRegistryHandle, data_product::String,
                      path::AbstractString,
-                     source::Union{Nothing, SourceRecord})
+                     source::Union{Nothing, SourceRecord}, supersede::Bool)
     path = String(path)
     isfile(path) || throw(ReadWriteException("no file to register at $path"))
     wmd, name = _writemetadata(handle, data_product)
@@ -480,6 +495,11 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
         (isfile(file) && _getfilehash(file) == hash) ||
             throw(ReadWriteException("'$data_product' is already being written by this code run, from another file"))
         _checksamesource(handle, data_product, source)
+        if supersede
+            for (key, value) in handle.outputs
+                key[1] == data_product && (value["supersede"] = true)
+            end
+        end
         return file
     end
 
@@ -488,6 +508,8 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
                                name, hash, source)
     if !isnothing(unchanged)
         println("data product unchanged: ", name, " (", unchanged.version, ")")
+        supersede &&
+            @info "nothing to supersede: $(_dataproductname(_writenamespace(handle, wmd), name, unchanged.version)) is the highest version already, unchanged"
         whole = _wholeobjectcomponent(handle.registry, unchanged.object)
         found = Dict("path" => unchanged.path,
                      "object_url" => unchanged.object,
@@ -500,6 +522,7 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
                              nothing)
     _placefile(path, metadata["path"])
     isnothing(source) || (metadata["source"] = source)
+    metadata["supersede"] = supersede
     handle.outputs[(data_product, nothing)] = metadata
     return metadata["path"]
 end
@@ -523,9 +546,9 @@ function canwrite(handle::DataRegistryHandle, data_product::String)
 end
 
 """
-    link_register!(handle, data_product; namespace, version = nothing,
-                   path = nothing, doi = nothing, bibtex = nothing,
-                   title = nothing, primary = nothing, description = nothing,
+    link_register!(handle, data_product; path = nothing, supersede = false,
+                   doi = nothing, bibtex = nothing, title = nothing,
+                   primary = nothing, description = nothing,
                    original_store = nothing, licence = nothing,
                    license = nothing, release_date = nothing,
                    release_version = nothing)
@@ -533,7 +556,9 @@ end
 Register something that comes from outside the pipeline, with its source, as
 the data product `data_product`, which the working config does not name, and
 record it as an input of the code run. No run made it: it is this run's
-input and no run's output.
+input and no run's output. The data product is named as the pipeline names
+one, `namespace:name@version`, and may leave out the namespace, the version
+or both: `name`, `name@1.2.3`, `namespace:name`.
 
 With no `path` it is a data product with no file - the deposit that a
 source's files belong to, which a run that fetches them reads, so that each
@@ -542,25 +567,27 @@ With a `path` it is that file, put in the data store as [`link_write!`](@ref)
 puts one, as a hard link where one can be made and else a copy, and its path
 there is returned.
 
-`namespace` is the data product's, by default the run's default input
-namespace. `version` is its version in the pipeline, as `"1.0.0"` or
-`v"1.0.0"` - the source's own is `release_version`. With none given, a name
-not yet registered is version 0.0.1; a name whose highest version is
-registered with the same file, or with none, and the same source, authors and
-licence is that version, and nothing new is registered; any other is the
-highest version's next patch. A `version` given that is registered already
-must be registered so too, or it is an error.
+The namespace is by default the run's default input namespace. The version
+is the data product's in the pipeline - the source's own is
+`release_version`. With none given, a name not yet registered is version
+0.0.1; a name whose highest version is registered with the same file, or
+with none, and the same source, authors and licence is that version, and
+nothing new is registered; any other is the highest version's next patch. A
+version given that is registered already must be registered so too, or it is
+an error.
 
 The source is named by `doi` or `bibtex`, and must be: `title`, `primary`,
 `description`, `original_store`, `licence` or `license`, `release_date` and
 `release_version` say of it what they say for [`link_write!`](@ref), and
 `primary` must be given here too. `original_store`, where a file was fetched
-from, needs a `path`. A source is one file, as there.
+from, needs a `path`. A source is one file, as there. `supersede = true` is as
+there too: a new version registered by the call supersedes the highest before
+it, with an issue on that version raised at [`finalise`](@ref), and an info
+message where there is nothing to supersede.
 """
 function link_register!(handle::DataRegistryHandle, data_product::String;
-                        namespace::AbstractString = handle.config["run_metadata"]["default_input_namespace"],
-                        version::Union{Nothing, VersionNumber, AbstractString} = nothing,
                         path::Union{Nothing, AbstractString} = nothing,
+                        supersede::Bool = false,
                         doi::Union{Nothing, AbstractString} = nothing,
                         bibtex::Union{Nothing, AbstractString} = nothing,
                         title::Union{Nothing, AbstractString} = nothing,
@@ -577,35 +604,43 @@ function link_register!(handle::DataRegistryHandle, data_product::String;
         throw(ArgumentError("'$data_product' is a pattern: a data product registered has a name of its own"))
     isnothing(path) && !isnothing(original_store) &&
         throw(ArgumentError("`original_store` is where a file was fetched from, and a data product with no `path` has no file"))
-    wanted = isnothing(version) ? nothing :
-             _releaseversion(version, keyword = "version")
+    named = _parsedataproduct(data_product,
+                              default = handle.config["run_metadata"]["default_input_namespace"])
     file = _externalfile(path)
     isnothing(doi) && isnothing(bibtex) &&
         throw(ArgumentError("'$data_product' is registered as coming from elsewhere: name its source, by its `doi` or its `bibtex` key"))
     source = _source(handle; doi, bibtex, title, primary, description,
                      original_store, licence, license, release_date,
                      release_version)
-    return _linkregister!(handle, data_product, String(namespace), wanted,
-                          file, source)
+    return _linkregister!(handle, named.name, named.namespace, named.version,
+                          file, source, supersede)
 end
 
 """
-    write_array(handle, data, data_product, component, description)
+    write_array(handle, data, data_product, component, description;
+                supersede = false)
 
 Write `data` as `component` of an HDF5 `write:` data product of the working
 config, recording it as an output, and return `(data_product, component)`.
 The file records no times, so that the same arrays give the same bytes and
-are found to be registered already.
+are found to be registered already. `supersede` is as for
+[`link_write!`](@ref): the data product's new version supersedes the one
+before it.
 
 See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
 """
 function write_array(handle::DataRegistryHandle, data::Array,
                      data_product::String,
-                     component::String, description::String)
+                     component::String, description::String;
+                     supersede::Bool = false)
     key = (data_product, component)
-    haskey(handle.outputs, key) && return key
+    if haskey(handle.outputs, key)
+        supersede && (handle.outputs[key]["supersede"] = true)
+        return key
+    end
     metadata = _resolvewrite(handle, data_product, component, "h5",
                              description)
+    metadata["supersede"] = supersede
     path = metadata["path"]
     if isfile(path)
         HDF5.h5open(path, "r+") do file
@@ -634,39 +669,52 @@ function write_table(handle::DataRegistryHandle, data, data_product::String,
 end
 
 """
-    write_estimate(handle, value, data_product, component, description)
+    write_estimate(handle, value, data_product, component, description;
+                   supersede = false)
 
 Write `value` as the point estimate `component` of a TOML `write:` data
 product of the working config, recording it as an output, and return
-`(data_product, component)`.
+`(data_product, component)`. `supersede` is as for [`link_write!`](@ref):
+the data product's new version supersedes the one before it.
 """
 function write_estimate(handle::DataRegistryHandle, value, data_product::String,
-                        component::String, description::String)
+                        component::String, description::String;
+                        supersede::Bool = false)
     key = (data_product, component)
-    haskey(handle.outputs, key) && return key
+    if haskey(handle.outputs, key)
+        supersede && (handle.outputs[key]["supersede"] = true)
+        return key
+    end
     data = Dict{String, Any}("value" => value, "type" => "point-estimate")
-    _writekeyval(handle, data, data_product, component, description)
+    _writekeyval(handle, data, data_product, component, description,
+                 supersede)
     return key
 end
 
 """
     write_distribution(handle, distribution, parameters, data_product,
-                       component, description)
+                       component, description; supersede = false)
 
 Write a `distribution` (its name, and a `Dict` of `parameters`) as
 `component` of a TOML `write:` data product of the working config, recording
-it as an output, and return `(data_product, component)`.
+it as an output, and return `(data_product, component)`. `supersede` is as
+for [`link_write!`](@ref): the data product's new version supersedes the one
+before it.
 """
 function write_distribution(handle::DataRegistryHandle, distribution::String,
                             parameters,
                             data_product::String, component::String,
-                            description::String)
+                            description::String; supersede::Bool = false)
     key = (data_product, component)
-    haskey(handle.outputs, key) && return key
+    if haskey(handle.outputs, key)
+        supersede && (handle.outputs[key]["supersede"] = true)
+        return key
+    end
     data = Dict{String, Any}("distribution" => distribution,
                              "parameters" => parameters,
                              "type" => "distribution")
-    _writekeyval(handle, data, data_product, component, description)
+    _writekeyval(handle, data, data_product, component, description,
+                 supersede)
     return key
 end
 
@@ -677,8 +725,11 @@ end
 Raise an issue with one thing, or with several at once as one registry issue.
 A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
 [`SubmissionScript`](@ref), [`CodeRepository`](@ref),
-[`ConfigDataProduct`](@ref) or [`ExistingDataProduct`](@ref) - or a `String`,
-which names a data product of this run as [`ConfigDataProduct`](@ref) does.
+[`ConfigDataProduct`](@ref) or [`ExistingDataProduct`](@ref) - or a `String`:
+a data product of this run by its config name, as
+[`ConfigDataProduct`](@ref) names one, or a registered data product as
+`namespace:name@version` (`namespace:name` for its newest version), as
+[`ExistingDataProduct`](@ref) names one.
 `severity` is an integer, larger for worse, by default the registry's own
 default. Issues are queued in the handle
 and registered by [`finalise`](@ref), so an output can be named before it
@@ -701,9 +752,13 @@ function raise_issue(handle::DataRegistryHandle,
     return raise_issue(handle, [target], description, severity = severity)
 end
 
-# A bare string names a data product of this run
+# A bare string names a data product: of this run by its config name, or a
+# registered one as `namespace:name@version`, which no config name looks like
 _astarget(target::AbstractIssueTarget) = target
-_astarget(data_product::AbstractString) = ConfigDataProduct(data_product)
+function _astarget(data_product::AbstractString)
+    return occursin(':', data_product) ? ExistingDataProduct(data_product) :
+           ConfigDataProduct(data_product)
+end
 
 # A data product named by its config name must be in the working config
 function _checktarget(handle::DataRegistryHandle, target::ConfigDataProduct)
