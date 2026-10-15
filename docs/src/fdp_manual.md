@@ -205,6 +205,7 @@ DataPipeline.identify(repo = "https://github.com/FAIRDataPipeline/DataPipeline.j
 
 ```@docs
 DataPipeline.provenance
+DataPipeline.downstream
 DataPipeline.Trace
 DataPipeline.TraceProduct
 DataPipeline.TraceRun

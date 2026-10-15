@@ -71,7 +71,9 @@
     file or `namespace:name@version` - as a `Trace`, which prints as a tree:
     each run with its commit, what it read, each input's source and issues,
     and the version that has superseded it, back to the data registered from
-    elsewhere.
+    elsewhere. `DataPipeline.downstream(x)` traces the other way, to everything
+    made from a data product, or from the runs of a repository with
+    `repo = `, so that what a problem in it affects can be made again.
   - `identify` of a file also reports the issues raised on anything behind it,
     each with the run it reaches the file through, and with `superseded = true`
     the inputs behind it that a newer version of has been registered since.

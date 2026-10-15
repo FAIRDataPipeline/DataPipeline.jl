@@ -23,8 +23,8 @@ struct Upstream <: AbstractTraceDirection end
 """
     Downstream()
 
-The direction of a [`Trace`](@ref) made forward from a data product, to what
-was made from it.
+The direction of the [`Trace`](@ref) that [`downstream`](@ref) makes: forward
+from a data product to what was made from it.
 """
 struct Downstream <: AbstractTraceDirection end
 
@@ -71,8 +71,9 @@ One version of a data product in a [`Trace`](@ref).
   that is a newer one, else `nothing`
 - `made_by`: the registry URL of the run in the trace that made it, or
   `nothing` when the trace holds none
-- `beyond`: `true` when a run made it that the trace does not hold, because
-  the trace was cut at its `depth`
+- `beyond`: `true` when the trace was cut at this data product by its
+  `depth`: a run that made it, going upstream, or that read it, going
+  downstream, is not held
 - `issues`: the registry URLs of the issues raised on it or its components
 """
 struct TraceProduct
@@ -173,9 +174,9 @@ end
 """
     Trace{D <: AbstractTraceDirection}
 
-What [`provenance`](@ref) returns: the data products, runs and issues reached
-from one or more data products in one direction, `D`, each kept once by its
-registry URL. Printed as a tree from the roots.
+What [`provenance`](@ref) and [`downstream`](@ref) return: the data products,
+runs and issues reached from one or more data products in one direction, `D`,
+each kept once by its registry URL. Printed as a tree from the roots.
 
 # Fields
 - `registry`: the [`RegistryEndpoint`](@ref) it was read from
@@ -237,6 +238,23 @@ function _productlabel(product::TraceProduct)
     return _dataproductname(product.namespace, product.name, product.version)
 end
 
+# What a data product's line of a tree says after its name: its file, whether
+# a newer version exists, and its source, ending the line
+function _printproductdetails(io::IO, product::TraceProduct)
+    print(io, "  ",
+          isnothing(product.hash) ? "no file" :
+          "sha1 " * first(product.hash, 8))
+    isnothing(product.superseded_by) ||
+        print(io, "  superseded by v", product.superseded_by)
+    source = product.source
+    if !isnothing(source)
+        print(io, "  from ",
+              something(source.identifier, source.title, source.url),
+              " (", source.primary ? "primary" : "supplement", ")")
+    end
+    return println(io)
+end
+
 # A data product's line of the tree: its name, its file, whether a newer
 # version exists, and its source; then its issues, its run and what the run
 # read, each data product expanded once
@@ -249,18 +267,7 @@ function _printupstream(io::IO, trace::Trace, url::String, indent::Int,
         return nothing
     end
     push!(seen, url)
-    print(io, "  ",
-          isnothing(product.hash) ? "no file" :
-          "sha1 " * first(product.hash, 8))
-    isnothing(product.superseded_by) ||
-        print(io, "  superseded by v", product.superseded_by)
-    source = product.source
-    if !isnothing(source)
-        print(io, "  from ",
-              something(source.identifier, source.title, source.url),
-              " (", source.primary ? "primary" : "supplement", ")")
-    end
-    println(io)
+    _printproductdetails(io, product)
     for issue in product.issues
         _printissue(io, trace.issues[issue], indent + 4)
     end
@@ -327,8 +334,7 @@ things is one issue, with each of them among its targets.
 """
 function provenance(registry::RegistryEndpoint, x::AbstractString;
                     depth::Union{Nothing, Integer} = nothing)
-    isnothing(depth) || depth >= 1 ||
-        throw(ArgumentError("`depth` is a number of runs, 1 or more"))
+    _checkdepth(depth)
     roots = _traceroots(registry, String(x))
     return _upstream(registry, roots, depth)
 end
@@ -340,6 +346,13 @@ function provenance(x::AbstractString;
                     remote::Union{Nothing, AbstractString} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
     return provenance(RegistryEndpoint(remote = remote), x; depth)
+end
+
+# `depth` is a number of runs, 1 or more, when given
+function _checkdepth(depth::Union{Nothing, Integer})
+    isnothing(depth) || depth >= 1 ||
+        throw(ArgumentError("`depth` is a number of runs, 1 or more"))
+    return nothing
 end
 
 # The data products a trace starts from: those a file is registered as, or
