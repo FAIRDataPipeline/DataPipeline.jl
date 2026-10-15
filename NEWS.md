@@ -65,6 +65,8 @@
     written more than once 0.10.1, and reading a data product pulled from a
     remote, or pushing or pulling a deposit with no file, 0.10.2.
   - New dependencies: BibParser and BibInternal.
+  - The abstract supertypes `AbstractIssueTarget` and `AbstractCommitSelection`
+    are no longer `public`: they annotate arguments and are not for extending.
 - v0.54.1
   - `link_write!`, and the component writers, accept a data product name that a
     wildcard `write:` entry of the working config stands for, registering the

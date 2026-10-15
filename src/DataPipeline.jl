@@ -57,10 +57,10 @@ export register_authors!, register_citations!
 public initialise, finalise, rehearse, discard, install_cli, install_cli!,
        set_cli!
 public @fair_str
-public DataRegistryHandle, AbstractRunMode, RecordedRun, Rehearsal
+public DataRegistryHandle, RecordedRun, Rehearsal
 public RegistryEndpoint
 public ReadWriteException, ConfigFileException
-public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
+public WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
 # Asking what the working config lets a run read and write
 public canread, canwrite
@@ -68,7 +68,11 @@ public canread, canwrite
 public identify
 public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
 public RepositoryIdentification, RegisteredCommit, CodeRunRecord
-public AbstractCommitSelection, AncestorCommits, CheckedOutCommit, AllCommits
+# Tracing where a data product came from
+public provenance
+public Trace
+public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
+public AncestorCommits, CheckedOutCommit, AllCommits
 
 include("fdp_i.jl")
 include("citations.jl")
@@ -80,6 +84,7 @@ include("rehearse.jl")
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits
+include("provenance.jl")
 
 include("testing.jl")
 include("deprecated.jl")

@@ -200,6 +200,13 @@ DataPipeline.identify(".", commits = DataPipeline.AllCommits(dirty = true))
 ```
 
 ```@docs
+DataPipeline.provenance
+DataPipeline.Trace
+DataPipeline.TraceProduct
+DataPipeline.TraceRun
+DataPipeline.TraceIssue
+DataPipeline.TraceSource
+DataPipeline.TraceTarget
 DataPipeline.identify
 DataPipeline.FileIdentification
 DataPipeline.RegisteredObject
