@@ -108,6 +108,18 @@ jobs:
         source .venv/${ACTIVATE_DIR}/activate
         fair registry install
         fair registry start
+        # The registry's Windows start script gives up after fifteen seconds
+        # with no token, leaving its server still coming up: wait for the
+        # server, and write the token as the script would have
+        if [ ! -f ~/.fair/registry/token ]; then
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8000/api/ > /dev/null && break
+            sleep 1
+          done
+          DJANGO_SETTINGS_MODULE=drams.local-settings \
+            ~/.fair/registry/venv/${ACTIVATE_DIR}/python ~/.fair/registry/manage.py get_token \
+            > ~/.fair/registry/token
+        fi
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         # --dirty: a pull_request checkout is a detached merge commit on no
