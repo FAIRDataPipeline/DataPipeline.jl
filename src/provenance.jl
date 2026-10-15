@@ -65,7 +65,7 @@ One version of a data product in a [`Trace`](@ref).
 - `hash`: the SHA-1 of its file, or `nothing` for a data product with no file
 - `location`: where the registry says the file is, or `nothing`
 - `description`: its description, or `nothing`
-- `format`: its file type, or `nothing`
+- `format`: the extension of its file type, as `txt`, or `nothing`
 - `source`: its [`TraceSource`](@ref), or `nothing` when it has none
 - `superseded_by`: the highest version of its name in its namespace, when
   that is a newer one, else `nothing`
@@ -703,7 +703,9 @@ function _buildtrace(::Type{D}, registry::RegistryEndpoint,
     for (url, part) in parts.products
         products[url] = TraceProduct(url, part.namespace, part.name,
                                      part.version, part.hash, part.location,
-                                     part.description, part.format,
+                                     part.description,
+                                     _formatextension(registry, parts,
+                                                      part.format),
                                      part.source,
                                      _supersedingversion(registry, part),
                                      part.made_by, part.beyond, part.issues)
@@ -718,6 +720,20 @@ function _buildtrace(::Type{D}, registry::RegistryEndpoint,
     end
     return Trace{D}(registry, roots, products, runs, issues,
                     isnothing(depth) ? nothing : Int(depth))
+end
+
+# A file type's extension: the report names a file type by its name, which
+# the registry's own catalogue writes in words (a CSV file is "Comma-Separated
+# Values File"), so a name the registry has a file type for becomes that
+# type's extension, and anything else - an extension already - stays
+function _formatextension(registry::RegistryEndpoint, parts::_TraceParts,
+                          format::Union{Nothing, String})
+    isnothing(format) && return nothing
+    key = "file_type name: " * format
+    return get!(parts.cache, key) do
+        types = _getentries(registry, "file_type", Dict("name" => format))
+        return isempty(types) ? format : String(first(types)["extension"])
+    end
 end
 
 # The highest version of the data product's name in its namespace, when it

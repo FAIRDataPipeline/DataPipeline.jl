@@ -281,6 +281,21 @@ Test.@testset "provenance() of a chain" begin
     @test sprint(show, trace) ==
           "Provenance of $namespace:$final@v0.0.1: 3 runs, 4 data products, $(length(trace.issues)) issues"
 
+    # The report names a file type by its name, which a registry's own
+    # catalogue writes in words; the trace gives the extension
+    DataPipeline._postentry(registry, "file_type",
+                            Dict("name" => "Provenance text file $uid",
+                                 "extension" => "ptx"))
+    worded = "provenance/worded/$uid"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, worded, "provenance description",
+                           file_type = "ptx", use_version = "0.0.1")
+    wording = DataPipeline.initialise(config, config)
+    write(link_write!(wording, worded), "provenance worded $uid\n")
+    DataPipeline.finalise(wording)
+    in_words = DataPipeline.provenance(registry, "$namespace:$worded")
+    @test only(values(in_words.products)).format == "ptx"
+
     # Named by its file, through a handle, and by its newest version
     stored = joinpath(datastore, namespace, final, root.hash * ".txt")
     @test isfile(stored)
