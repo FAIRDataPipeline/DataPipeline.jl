@@ -278,7 +278,8 @@ function _externalfile(path::AbstractString)
 end
 
 """
-    _linkregister!(handle, data_product, namespace, version, file, source)
+    _linkregister!(handle, data_product, namespace, version, file, source,
+                   supersede)
 
 Register what `link_register!` describes - `file`, or `nothing` for a data
 product with no file, and its source - as a version of `data_product` in
@@ -288,10 +289,14 @@ store, or `nothing`. `version` is the one asked for, or `nothing`.
 """
 function _linkregister!(handle::DataRegistryHandle, data_product::String,
                         namespace::String, version::Union{Nothing, String},
-                        file::Union{Nothing, NamedTuple}, source::SourceRecord)
+                        file::Union{Nothing, NamedTuple}, source::SourceRecord,
+                        supersede::Bool)
     registry = handle.registry
     hash = isnothing(file) ? nothing : file.hash
     isnothing(file) || _checkonefile(handle, source, hash, data_product)
+    previous = supersede ?
+               _latestdataproduct(registry, namespace, data_product) :
+               nothing
     target = _registrationversion(registry, namespace, data_product, version,
                                   hash, source)
     key = (data_product, nothing)
@@ -307,6 +312,8 @@ function _linkregister!(handle::DataRegistryHandle, data_product::String,
         println("data product unchanged: ", data_product, " (",
                 target.version, ")")
     end
+    supersede && _supersede!(handle, namespace, data_product, target.version,
+                previous, !isnothing(target.held))
 
     if isnothing(product)
         # A rehearsal registered nothing: the input is the file as given

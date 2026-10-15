@@ -86,6 +86,10 @@
     `link_register!` takes the form in place of its `namespace` and `version`
     keywords, `ExistingDataProduct` takes it (the three-part constructor is
     deprecated), `raise_issue` takes it bare, and `identify` prints it.
+  - `supersede = true` on `link_write!`, `link_register!` and the component
+    writers raises an issue on the version a new version supersedes, at
+    severity 0, so that what was made from the old version reports it; where
+    there is nothing to supersede an info message says so.
   - Names are held to the pipeline's convention wherever the package registers
     one: a namespace of ASCII letters, digits, `_` and `-`, a data product or
     component name of such parts joined by `/`; any other is an `ArgumentError`.

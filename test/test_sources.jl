@@ -794,6 +794,39 @@ Test.@testset "link_register!() with a file" begin
     @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
 end
 
+Test.@testset "link_register!() with supersede = true" begin
+    name = "sources/register/supersede/$uid"
+    of(; keywords...) = (; bibtex = "deposit", primary = true,
+                         supersede = true, keywords...)
+
+    # The first version supersedes nothing; the next patch supersedes it,
+    # with an issue queued for finalise; the same again is unchanged
+    handle = offering()
+    @test_logs (:info, r"first version of its name") match_mode=:any link_register!(handle,
+                                                                                    name;
+                                                                                    of()...)
+    @test isempty(handle.issues)
+    DataPipeline.finalise(handle)
+    handle = offering()
+    link_register!(handle, name; of(licence = "CC0-1.0")...)
+    issue = only(handle.issues)
+    @test issue.severity == 0
+    @test issue.description == "Superseded by $inputs_namespace:$name@v0.0.2"
+    @test issue.targets ==
+          [DataPipeline.ExistingDataProduct("$inputs_namespace:$name@v0.0.1")]
+    DataPipeline.finalise(handle)
+    posted = DataPipeline._getentry(registry, "issue",
+                                    Dict("description" =>
+                                             issue.description))
+    @test posted["component_issues"] == [whole(registered(name, "0.0.1"))]
+    handle = offering()
+    @test_logs (:info, r"highest version already, unchanged") match_mode=:any link_register!(handle,
+                                                                                             name;
+                                                                                             of(licence = "CC0-1.0")...)
+    @test isempty(handle.issues)
+    DataPipeline.finalise(handle)
+end
+
 Test.@testset "what link_register!() refuses" begin
     handle = offering()
     name = "sources/register/refused/$uid"

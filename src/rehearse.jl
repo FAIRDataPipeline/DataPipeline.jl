@@ -235,6 +235,7 @@ function finalise(handle::DataRegistryHandle{Rehearsal})
     _sessionsopen(handle) ||
         throw(ReadWriteException("this handle's rehearsal has ended: rehearse again for another"))
     _checksources(handle)
+    previous = _previousversions(handle)
     for (data_product, component) in sort(collect(keys(handle.outputs)),
                                           by = string)
         _placeoutput(handle, data_product, component)
@@ -244,6 +245,7 @@ function finalise(handle::DataRegistryHandle{Rehearsal})
         metadata["unchanged"] || continue
         handle.unchanged[key] = pop!(handle.outputs, key)
     end
+    _supersedeoutputs!(handle, previous)
     _copyjobfiles(handle)
     _printrehearsal(handle)
     _closerehearsal(handle)

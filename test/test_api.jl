@@ -452,6 +452,96 @@ Test.@testset "names outside the convention are refused at a write" begin
     DataPipeline.finalise(handle)
 end
 
+Test.@testset "supersede = true" begin
+    registry = handle.registry
+    name = "data_product/supersede/$uid"
+    estimates = "data_product/supersede_estimate/$uid"
+    writing(name, version) = begin
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, name, "supersede description",
+                               file_type = "txt", use_version = version)
+        DataPipeline.initialise(config, config)
+    end
+    superseding(version) = "Superseded by $namespace:$name@v$version"
+
+    # The first version of a name supersedes nothing, and says so at finalise
+    first_handle = writing(name, "0.0.1")
+    write(link_write!(first_handle, name, supersede = true),
+          "supersede first $uid\n")
+    @test_logs (:info, r"first version of its name") match_mode=:any DataPipeline.finalise(first_handle)
+    @test isempty(first_handle.issues)
+    first_file = first_handle.outputs[(name, nothing)]["path"]
+
+    # A second version supersedes the first: an issue on the first, at the
+    # lowest severity, registered at finalise and reported by identify
+    second = writing(name, "0.0.2")
+    write(link_write!(second, name, supersede = true),
+          "supersede second $uid\n")
+    DataPipeline.finalise(second)
+    issue = only(second.issues)
+    @test issue.severity == 0
+    @test issue.description == superseding("0.0.2")
+    @test issue.targets ==
+          [DataPipeline.ExistingDataProduct("$namespace:$name@v0.0.1")]
+    registered = DataPipeline._getentry(registry, "issue",
+                                        Dict("description" =>
+                                                 superseding("0.0.2")))
+    @test registered["severity"] == 0
+    first_product = DataPipeline._finddataproduct(registry, namespace, name,
+                                                  "0.0.1")
+    @test registered["component_issues"] ==
+          [DataPipeline._wholeobjectcomponent(registry,
+                                              first_product["object"])]
+    found = only(DataPipeline.identify(registry, first_file).objects)
+    @test any(issue.severity == 0 && issue.description == superseding("0.0.2")
+              for issue in found.issues)
+
+    # The same bytes again make no version: nothing to supersede, said at
+    # finalise, and at the call where a path is given
+    third = writing(name, "0.0.3")
+    write(link_write!(third, name, supersede = true),
+          "supersede second $uid\n")
+    @test_logs (:info, r"highest version already, unchanged") match_mode=:any DataPipeline.finalise(third)
+    @test isempty(third.issues)
+    same = joinpath(mktempdir(), "same.txt")
+    write(same, "supersede second $uid\n")
+    by_path = writing(name, "0.0.3")
+    @test_logs (:info, r"highest version already, unchanged") match_mode=:any link_write!(by_path,
+                                                                                          name,
+                                                                                          path = same,
+                                                                                          supersede = true)
+    DataPipeline._resetsession!()
+    # A version above the highest supersedes it; one below does not
+    above = writing(name, "0.1.0")
+    write(link_write!(above, name, supersede = true), "supersede above $uid\n")
+    DataPipeline.finalise(above)
+    @test only(above.issues).targets ==
+          [DataPipeline.ExistingDataProduct("$namespace:$name@v0.0.2")]
+    below = writing(name, "0.0.5")
+    write(link_write!(below, name, supersede = true), "supersede below $uid\n")
+    @test_logs (:info, r"not above the highest version, 0.1.0") match_mode=:any DataPipeline.finalise(below)
+    @test isempty(below.issues)
+    # Without the keyword nothing is said or raised
+    plain = writing(name, "0.2.0")
+    write(link_write!(plain, name), "supersede plain $uid\n")
+    @test_logs DataPipeline.finalise(plain)
+    @test isempty(plain.issues)
+
+    # A component writer supersedes the same way, once for the data product
+    estimating = writing(estimates, "0.0.1")
+    write_estimate(estimating, 1.0, estimates, "point", "first estimate")
+    DataPipeline.finalise(estimating)
+    again = writing(estimates, "0.0.2")
+    write_estimate(again, 2.0, estimates, "point", "second estimate",
+                   supersede = true)
+    write_estimate(again, 3.0, estimates, "other", "second estimate")
+    DataPipeline.finalise(again)
+    @test only(again.issues).description ==
+          "Superseded by $namespace:$estimates@v0.0.2"
+    @test only(again.issues).targets ==
+          [DataPipeline.ExistingDataProduct("$namespace:$estimates@v0.0.1")]
+end
+
 Test.@testset "raise_issue()" begin
     written = "data_product/link_write/$uid"
     estimates = "data_product/write_estimate/$uid"
