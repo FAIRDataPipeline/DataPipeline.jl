@@ -266,11 +266,20 @@ Test.@testset "a data product named namespace:name@version" begin
         err = @test_throws ArgumentError parse(text)
         @test occursin("is not a namespace", err.value.msg)
     end
-    for text in ("PSU:a b", "PSU:a.csv", "PSU:a:b", "PSU:a@b@1.0.0", "PSU:",
-        "PSU:/a", "PSU:a//b", "PSU:a/")
+    for text in ("PSU:a b", "PSU:a:b", "PSU:a@b@1.0.0", "PSU:", "PSU:/a",
+        "PSU:a//b", "PSU:a/", "PSU:.hidden", "PSU:a/.b", "PSU:a.", "PSU:a/b.",
+        "PSU:.", "PSU:a/..", "PSU:a/../b")
         err = @test_throws ArgumentError parse(text)
         @test occursin("is not a data product name", err.value.msg)
     end
+    # A period inside a part of a name, as a repository's name has one
+    @test parse("FAIRDataPipeline:DataPipeline.jl@v0.55.0") ==
+          (namespace = "FAIRDataPipeline", name = "DataPipeline.jl",
+           version = "0.55.0")
+    @test parse("PSU:a.b.c/d.e").name == "a.b.c/d.e"
+    @test parse("PSU:a..b").name == "a..b"
+    @test_throws ArgumentError DataPipeline._checkcomponent("a.b")
+    @test_throws ArgumentError DataPipeline._checknamespace("a.b")
     err = @test_throws ArgumentError parse("PSU:a@061")
     @test occursin("`version`", err.value.msg)
     @test_throws ArgumentError parse("PSU:a@")

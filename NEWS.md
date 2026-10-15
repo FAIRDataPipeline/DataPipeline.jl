@@ -98,8 +98,9 @@
     severity 0, so that what was made from the old version reports it; where
     there is nothing to supersede an info message says so.
   - Names are held to the pipeline's convention wherever the package registers
-    one: a namespace of ASCII letters, digits, `_` and `-`, a data product or
-    component name of such parts joined by `/`; any other is an `ArgumentError`.
+    one: a namespace of ASCII letters, digits, `_` and `-`, a component name of
+    such parts joined by `/`, a data product name the same with `.` allowed
+    inside a part; any other is an `ArgumentError`.
 - v0.54.1
   - `link_write!`, and the component writers, accept a data product name that a
     wildcard `write:` entry of the working config stands for, registering the

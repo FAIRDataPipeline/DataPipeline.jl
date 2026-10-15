@@ -855,7 +855,7 @@ Test.@testset "what link_register!() refuses" begin
     # A name outside the convention, in the name or the namespace
     @test occursin("is not a data product name",
                    message_of(ArgumentError) do
-                       return link_register!(handle, "$name.csv",
+                       return link_register!(handle, "$name/.csv",
                                              bibtex = "deposit",
                                              primary = true)
                    end)

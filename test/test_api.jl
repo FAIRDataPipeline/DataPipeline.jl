@@ -428,7 +428,7 @@ Test.@testset "names outside the convention are refused at a write" begin
                            file_type = "txt", use_version = version)
     DataPipeline._addwrite(config, dotted, "refused description",
                            file_type = "txt", use_version = version,
-                           use_data_product = "$dotted.txt")
+                           use_data_product = "$dotted/.txt")
     DataPipeline._addwrite(config, spaced_namespace, "refused description",
                            file_type = "toml", use_version = version,
                            use_namespace = "no such namespace")
@@ -438,7 +438,7 @@ Test.@testset "names outside the convention are refused at a write" begin
     err = @test_throws ArgumentError link_write!(handle, spaced)
     @test occursin("is not a data product name", err.value.msg)
     err = @test_throws ArgumentError link_write!(handle, dotted)
-    @test occursin("'$dotted.txt' is not a data product name", err.value.msg)
+    @test occursin("'$dotted/.txt' is not a data product name", err.value.msg)
     err = @test_throws ArgumentError write_estimate(handle, 1.0,
                                                     spaced_namespace, "point",
                                                     "refused")
