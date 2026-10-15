@@ -29,13 +29,16 @@ end
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
-# The working config of the run this script is in: the session's rehearsal's,
-# else the one `fair run` launched this script for, in the folder it names in
-# FDP_CONFIG_DIR; with neither, no run was prepared
-function _launchedconfig()
+# The working config and the submission script of the run this script is in,
+# as `(config, script)`: the session's rehearsal's, else those `fair run`
+# launched this script with, in the folder it names in FDP_CONFIG_DIR; with
+# neither, no run was prepared
+function _launchedfiles()
     job = _sessionjob()
-    isnothing(job) || return joinpath(job, "config.yaml")
-    haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_CONFIG()
+    isnothing(job) && haskey(ENV, "FDP_CONFIG_DIR") && (job = FDP_CONFIG_DIR())
+    isnothing(job) ||
+        return (config = joinpath(job, "config.yaml"),
+                script = joinpath(job, FDP_SUBMISSION_SCRIPT))
     return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
                                             "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
                                             "run the script with `fair run`, prepare a rehearsal with ",
@@ -51,20 +54,16 @@ function _sessionjob()
 end
 
 # The mode a run opens in, or the error that it cannot: a session's one run
-# is opened once, by the script's `initialise()`, and a run opened with files
-# given is the caller's own. `explicit` says whether files were given.
-_runmode(::Nothing, explicit::Bool) = RecordedRun()
-function _runmode(session::SessionRun, explicit::Bool)
-    return _runmode(session.mode, session, explicit)
-end
-function _runmode(mode::Rehearsal, session::SessionRun, ::Bool)
+# is opened once, however `initialise` is given its files
+_runmode(::Nothing) = RecordedRun()
+_runmode(session::SessionRun) = _runmode(session.mode, session)
+function _runmode(mode::Rehearsal, session::SessionRun)
     isnothing(session.handle) && return mode
     session.ended &&
         throw(ReadWriteException("the rehearsal has ended: call DataPipeline.rehearse again to prepare another"))
     return throw(ReadWriteException("the rehearsal's handle is open: finalise or discard it, or call rehearse again with restart = true"))
 end
-function _runmode(::RecordedRun, session::SessionRun, explicit::Bool)
-    explicit && return RecordedRun()
+function _runmode(::RecordedRun, session::SessionRun)
     session.ended &&
         throw(ReadWriteException("a code run was recorded in this session already: a script making several runs is not supported, and whether it should be is undecided"))
     return throw(ReadWriteException("code run $(session.handle.code_run_uuid) is open: finalise it before another initialise"))
@@ -75,18 +74,22 @@ end
 _runtoken(::RecordedRun, token::Union{Nothing, AbstractString}) = token
 _runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
 
-# The session's run once `initialise` has opened one: a rehearsal's handle,
-# or the script's recorded run, a run opened with files given being no
-# business of the session's
-function _opened(handle::DataRegistryHandle{Rehearsal}, ::Bool)
+# The session's run once `initialise` has opened one: the rehearsal's handle,
+# or the recorded run, in the folder its files are in
+function _opened(handle::DataRegistryHandle{Rehearsal})
     session = SESSION[]
     SESSION[] = SessionRun(session.mode, session.job, handle, false)
     return nothing
 end
-function _opened(handle::DataRegistryHandle{RecordedRun}, explicit::Bool)
-    explicit || (SESSION[] = SessionRun(RecordedRun(), nothing, handle, false))
+function _opened(handle::DataRegistryHandle{RecordedRun})
+    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false)
     return nothing
 end
+
+# Forget the session's run, so that `initialise` opens another: for the
+# tests, which open many runs in one process, and for whoever else knows
+# what that means - a run left open is not ended by it
+_resetsession!() = (SESSION[] = nothing; nothing)
 
 # ... and ended, where it was the session's
 function _ended(handle::DataRegistryHandle)
@@ -97,11 +100,9 @@ function _ended(handle::DataRegistryHandle)
     return nothing
 end
 
-# ... and the submission script beside it, wanted when a working config was
-# given alone
+# The submission script `fair run` launched this script with, wanted when a
+# working config was given alone
 function _launchedscript()
-    job = _sessionjob()
-    isnothing(job) || return joinpath(job, FDP_SUBMISSION_SCRIPT)
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_SUBMISSION()
     return throw(ConfigFileException(string("initialise was given a working config and no submission script, ",
                                             "and FDP_CONFIG_DIR is not set to find one beside it: give both")))

@@ -20,11 +20,11 @@ saying so. After [`rehearse`](@ref) the same call opens a
 [`Rehearsal`](@ref) instead, from the job folder it prepared: nothing is
 registered, and the handle holds no token, whatever is given or set.
 
-A session has one run, opened once by that call: a second call while the run
-is open, or after `finalise` or [`discard`](@ref) has ended it, is a
-[`ReadWriteException`](@ref) - for a rehearsal, to `rehearse` again; for a
-recorded run, since a script making several runs is not supported. A call
-with the files given opens a run of its own, which the session does not keep.
+A session has one run, opened once, however the files are given: a second
+call while the run is open, or after `finalise` or [`discard`](@ref) has
+ended it, is a [`ReadWriteException`](@ref) - for a rehearsal, to `rehearse`
+again; for a recorded run, since a script making several runs is not
+supported.
 
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
@@ -33,10 +33,12 @@ that ran cannot be recovered from its commit.
 function initialise(config_file::Union{Nothing, String} = nothing,
                     submission_script::Union{Nothing, String} = nothing;
                     token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
-    explicit = !isnothing(config_file)
-    mode = _runmode(SESSION[], explicit)
-    isnothing(config_file) && (config_file = _launchedconfig())
-    isnothing(submission_script) && (submission_script = _launchedscript())
+    mode = _runmode(SESSION[])
+    if isnothing(config_file)
+        config_file, submission_script = _launchedfiles()
+    elseif isnothing(submission_script)
+        submission_script = _launchedscript()
+    end
     println("processing config file: ", config_file)
     config = _workingconfig(config_file)
     run_metadata = config["run_metadata"]
@@ -46,7 +48,7 @@ function initialise(config_file::Union{Nothing, String} = nothing,
                                     DEFAULT_API_VERSION),
                                 token = _runtoken(mode, token))
     handle = _openrun(mode, config, config_file, submission_script, registry)
-    _opened(handle, explicit)
+    _opened(handle)
     return handle
 end
 

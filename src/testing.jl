@@ -18,11 +18,14 @@ end
     _createconfig(path; kwargs...)
 
 Write a working config holding only a `run_metadata` section at `path` under
-the data store, and return its full path. The metadata is that of the working
+the data store, and return its full path, having forgotten the session's run,
+since the config is for the next one. The metadata is that of the working
 config the tests were launched with (`\$FDP_CONFIG_DIR/config.yaml`) when
 there is one, else a fixed stand-in; any keyword overrides one key of it.
 """
 function _createconfig(path; kwargs...)
+    # The run this config is for is the session's next: the tests open many
+    _resetsession!()
     launch_config = FDP_PATH_CONFIG()
     if isfile(launch_config)
         run_metadata = YAML.load_file(launch_config)["run_metadata"]

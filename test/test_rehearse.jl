@@ -274,6 +274,9 @@ Test.@testset "initialise() once per rehearsal" begin
 end
 
 Test.@testset "what rehearse() accepts" begin
+    # A refused call leaves the session's run, ended by the test before, as
+    # it is
+    before = current()
     @test_throws ArgumentError DataPipeline.rehearse(joinpath(outside,
                                                               "nowhere"))
     # A folder with no config.yaml
@@ -286,7 +289,7 @@ Test.@testset "what rehearse() accepts" begin
                                                "script" => "julia script.jl")))
     err = @test_throws ArgumentError DataPipeline.rehearse(user)
     @test occursin("fair init", err.value.msg)
-    @test isnothing(current())
+    @test current() === before
     # A working config is taken as its folder, and the default outputs folder
     # is a new temporary one. That it outlives the session (made with
     # `cleanup = false`) is not tested here: it would take a second process
@@ -483,7 +486,7 @@ end
 Test.@testset "a token in the environment is not a rehearsal's" begin
     @test haskey(ENV, "FDP_LOCAL_TOKEN")
     DataPipeline.rehearse(job_folder("token"))
-    handle = DataPipeline.initialise(config, config, token = "not used")
+    handle = DataPipeline.initialise(token = "not used")
     @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
     @test isnothing(handle.registry.token)
     DataPipeline.discard(handle)

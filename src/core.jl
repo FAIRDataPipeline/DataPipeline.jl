@@ -336,11 +336,11 @@ end
 
 The run this session is in, kept in `SESSION`: a recorded run opened by the
 script's `initialise()`, or a rehearsal from [`rehearse`](@ref) on. `mode` is
-its [`AbstractRunMode`](@ref); `job` the job folder a rehearsal was prepared
-in, `nothing` for a recorded run, whose folder `FDP_CONFIG_DIR` names;
-`handle` the [`DataRegistryHandle`](@ref) once `initialise` has opened one;
-`ended` whether `finalise` or `discard` has ended it. A session has one run,
-opened once: `initialise()` refuses while it is open and after it has ended.
+its [`AbstractRunMode`](@ref); `job` the folder its files are in - the job
+folder a rehearsal was prepared in, known before its handle is; `handle` the
+[`DataRegistryHandle`](@ref) once `initialise` has opened one; `ended`
+whether `finalise` or `discard` has ended it. A session has one run, opened
+once: `initialise` refuses while it is open and after it has ended.
 """
 struct SessionRun
     mode::AbstractRunMode
