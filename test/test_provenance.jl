@@ -288,6 +288,56 @@ Test.@testset "provenance() of a chain" begin
     @test DataPipeline.provenance(registry, "$namespace:$final@0.0.1").roots ==
           trace.roots
 
+    # identify of the file reports what the trace finds behind it: each issue
+    # once per run it reaches the file through, nearest first, and the diamond
+    # reaches the fetched file's issue through both runs that read it
+    found = DataPipeline.identify(registry, stored)
+    @test found.provenance isa DataPipeline.Trace{DataPipeline.Upstream}
+    @test found.provenance.roots == trace.roots
+    @test isnothing(found.outdated)
+    @test only(found.objects).data_products[1].url == root.url
+    reported = [(f.issue.description, f.on.label, f.through.uuid,
+                 f.making.name, f.input) for f in found.upstream]
+    @test ("fetched issue $uid", "$namespace:$fetched@v0.0.1",
+           summarising.code_run_uuid, final, true) in reported
+    @test ("fetched issue $uid", "$namespace:$fetched@v0.0.1",
+           modelling.code_run_uuid, result, true) in reported
+    @test ("pair issue $uid", "$namespace:$result@v0.0.1",
+           summarising.code_run_uuid, final, true) in reported
+    @test ("pair issue $uid", "$namespace:$fetched@v0.0.1",
+           modelling.code_run_uuid, result, true) in reported
+    @test any(description == "repository issue $uid" && !input &&
+                  uuid == modelling.code_run_uuid && made == result
+              for (description, label, uuid, made, input) in reported)
+    @test found.upstream[1].through.uuid == summarising.code_run_uuid
+    @test allunique(reported)
+    @test Set(third.objects) ==
+          Set([summarising.repo_obj, summarising.config_obj,
+                  summarising.script_obj])
+    text = sprint(show, MIME("text/plain"), found)
+    @test occursin("  upstream: $(length(found.upstream)) issues\n", text)
+    @test occursin("    severity 2 on $namespace:$fetched@v0.0.1: fetched issue $uid\n      used by run $(first(modelling.code_run_uuid, 8)) on ",
+                   text)
+    @test occursin(", which made $namespace:$result@v0.0.1\n", text)
+    @test occursin("severity 4 on Remote code repository.", text)
+    @test occursin("\n      in run $(first(modelling.code_run_uuid, 8)) on ",
+                   text)
+    @test !occursin("outdated", text)
+    @test endswith(sprint(show, found),
+                   "; $(length(found.upstream)) upstream issues")
+    # Asked for, outdated inputs are reported, and here there are none yet;
+    # a file the registry does not know has nothing behind it
+    none = DataPipeline.identify(summarising, stored, superseded = true)
+    @test isempty(none.outdated)
+    @test occursin("  outdated inputs: none\n",
+                   sprint(show, MIME("text/plain"), none))
+    unknown = DataPipeline.identify(registry,
+                                    file_of("provenance unknown $uid\n"),
+                                    superseded = true)
+    @test isnothing(unknown.provenance) && isempty(unknown.upstream)
+    @test isempty(unknown.outdated)
+    @test !occursin("upstream", sprint(show, MIME("text/plain"), unknown))
+
     # Cut at a depth: what a run beyond it made is marked, not fetched
     cut = DataPipeline.provenance(registry, "$namespace:$final", depth = 1)
     @test cut.depth == 1
@@ -318,6 +368,20 @@ Test.@testset "provenance() of a chain" begin
                    sprint(show, MIME("text/plain"), later))
     newest = DataPipeline.provenance(registry, "$namespace:$fetched")
     @test only(values(newest.products)).version == v"0.0.2"
+    # ... and identify reports it as an outdated input, through each run that
+    # read it, only when asked
+    @test isnothing(DataPipeline.identify(registry, stored).outdated)
+    with = DataPipeline.identify(registry, stored, superseded = true)
+    @test length(with.outdated) == 2
+    @test all(outdated.input.url == by_name[fetched].url &&
+                  outdated.input.superseded_by == v"0.0.2"
+              for outdated in with.outdated)
+    @test Set((outdated.through.uuid, outdated.making.name)
+              for outdated in with.outdated) ==
+          Set([(summarising.code_run_uuid, final),
+                  (modelling.code_run_uuid, result)])
+    @test occursin("  outdated inputs: 2\n    $namespace:$fetched@v0.0.1, superseded by v0.0.2\n      used by run $(first(summarising.code_run_uuid, 8)) on ",
+                   sprint(show, MIME("text/plain"), with))
 
     # What cannot be traced
     @test_throws ReadWriteException DataPipeline.provenance(registry,

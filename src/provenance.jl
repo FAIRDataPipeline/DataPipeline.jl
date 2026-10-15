@@ -110,6 +110,8 @@ A code run in a [`Trace`](@ref).
   holds
 - `outputs`: the registry URLs of the data products it wrote that the trace
   holds
+- `objects`: the registry URLs of the objects that stand for its repository,
+  config and script, those it has, which an issue on any of them names
 - `issues`: the registry URLs of the issues raised on its repository, config
   or script
 """
@@ -124,6 +126,7 @@ struct TraceRun
     script::Union{Nothing, String}
     inputs::Vector{String}
     outputs::Vector{String}
+    objects::Vector{String}
     issues::Vector{String}
 end
 
@@ -343,9 +346,8 @@ end
 # the one a `namespace:name@version` names
 function _traceroots(registry::RegistryEndpoint, x::String)
     if isfile(x)
-        identification = _identifyfile(registry, x)
         roots = [product.url
-                 for object in identification.objects
+                 for object in _registeredobjects(registry, _getfilehash(x))
                  for product in object.data_products]
         isempty(roots) &&
             throw(ReadWriteException("$x is not registered as a data product in this registry"))
@@ -664,9 +666,10 @@ function _buildtrace(::Type{D}, registry::RegistryEndpoint,
     runs = Dict{String, TraceRun}()
     for (url, part) in parts.runs
         entry = _cached(registry, parts, url)
-        files = [parts.files[file]
-                 for file in (part.repository, part.config, part.script)
-                 if !isnothing(file)]
+        objects = [file
+                   for file in (part.repository, part.config, part.script)
+                   if !isnothing(file)]
+        files = [parts.files[file] for file in objects]
         repository = isnothing(part.repository) ? nothing :
                      parts.files[part.repository]
         runs[url] = TraceRun(url, entry["uuid"], part.date, part.description,
@@ -678,7 +681,7 @@ function _buildtrace(::Type{D}, registry::RegistryEndpoint,
                              parts.files[part.config].location,
                              isnothing(part.script) ? nothing :
                              parts.files[part.script].location,
-                             sort(part.inputs), sort(part.outputs),
+                             sort(part.inputs), sort(part.outputs), objects,
                              unique(reduce(vcat,
                                            (file.issues for file in files),
                                            init = String[])))

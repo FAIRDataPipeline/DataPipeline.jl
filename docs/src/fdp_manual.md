@@ -186,17 +186,18 @@ link_register!
 
 ## Asking what the registry knows about a file or a repository
 
-`DataPipeline.identify` takes a file or the top-level folder of a git
-repository, and asks the registry the FAIR CLI is configured to use, or any
-other, what it knows about it. No token is needed, so it works outside
+`DataPipeline.identify` takes a file, or a git repository by the path of its
+top-level folder, and asks the registry the FAIR CLI is configured to use, or
+any other, what it knows about it. No token is needed, so it works outside
 `fair run`:
 
 ```julia
 DataPipeline.identify("results.csv")                     # the local registry
 DataPipeline.identify("results.csv", remote = "origin")  # a remote of this project
-DataPipeline.identify(".")                               # this checkout's commit and its ancestors
+DataPipeline.identify("results.csv", superseded = true)  # and the inputs behind it since superseded
+DataPipeline.identify(repo = ".")                        # this checkout's commit and its ancestors
 # every run of this repository, including those made with uncommitted changes
-DataPipeline.identify(".", commits = DataPipeline.AllCommits(dirty = true))
+DataPipeline.identify(repo = ".", commits = DataPipeline.AllCommits(dirty = true))
 ```
 
 ```@docs
@@ -211,6 +212,8 @@ DataPipeline.identify
 DataPipeline.FileIdentification
 DataPipeline.RegisteredObject
 DataPipeline.DataProductRecord
+DataPipeline.UpstreamIssue
+DataPipeline.OutdatedInput
 DataPipeline.IssueRecord
 DataPipeline.RepositoryIdentification
 DataPipeline.RegisteredCommit

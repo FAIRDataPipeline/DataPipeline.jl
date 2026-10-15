@@ -93,6 +93,66 @@ function Base.show(io::IO, obj::RegisteredObject)
 end
 
 """
+    UpstreamIssue
+
+An issue [`identify`](@ref) found behind a file: raised on something a run on
+the way to the file read, at the version it read, or on a run's own code
+repository, working config or submission script.
+
+# Fields
+- `issue`: the [`TraceIssue`](@ref)
+- `on`: the [`TraceTarget`](@ref) of the issue that lies upstream of the file
+- `through`: the [`TraceRun`](@ref) it reaches the file through - the run
+  that read the thing, or whose own file it is
+- `making`: the [`TraceProduct`](@ref) that run made on the way to the file
+- `input`: `true` when the thing is a data product the run read, `false`
+  when it is the run's repository, config or script
+"""
+struct UpstreamIssue
+    issue::TraceIssue
+    on::TraceTarget
+    through::TraceRun
+    making::TraceProduct
+    input::Bool
+end
+
+function Base.show(io::IO, found::UpstreamIssue)
+    print(io, "severity ", found.issue.severity, " on ", found.on.label)
+    isnothing(found.on.component) || print(io, " (", found.on.component, ")")
+    return print(io, ": ", found.issue.description)
+end
+
+"""
+    OutdatedInput
+
+A data product read on the way to a file, as [`identify`](@ref) finds with
+`superseded = true`, that a newer version of has been registered since.
+
+# Fields
+- `input`: the [`TraceProduct`](@ref) read, with `superseded_by` the newer
+  version
+- `through`: the [`TraceRun`](@ref) that read it
+- `making`: the [`TraceProduct`](@ref) that run made on the way to the file
+"""
+struct OutdatedInput
+    input::TraceProduct
+    through::TraceRun
+    making::TraceProduct
+end
+
+function Base.show(io::IO, outdated::OutdatedInput)
+    return print(io, _productlabel(outdated.input), ", superseded by v",
+                 outdated.input.superseded_by)
+end
+
+# How an upstream thing reaches the file: the run, and what it made on the way
+function _throughline(through::TraceRun, making::TraceProduct, input::Bool)
+    return string(input ? "used by " : "in ", "run ", first(through.uuid, 8),
+                  " on ", Dates.format(through.date, "yyyy-mm-dd HH:MM"),
+                  ", which made ", _productlabel(making))
+end
+
+"""
     FileIdentification
 
 What a registry knows about one file on disk, as returned by
@@ -103,17 +163,28 @@ about a file with these contents.
 - `path`: the file asked about
 - `hash`: its SHA-1, which is how the registry identifies it
 - `objects`: the [`RegisteredObject`](@ref)s registered with that hash
+- `provenance`: the [`Trace`](@ref) back from every data product the file is
+  registered as, or `nothing` for a file the registry does not know
+- `upstream`: every [`UpstreamIssue`](@ref) the trace finds, nearest the
+  file first
+- `outdated`: every [`OutdatedInput`](@ref) the trace finds, when asked for
+  with `superseded = true`, else `nothing`
 """
 struct FileIdentification
     path::String
     hash::String
     objects::Vector{RegisteredObject}
+    provenance::Union{Nothing, Trace{Upstream}}
+    upstream::Vector{UpstreamIssue}
+    outdated::Union{Nothing, Vector{OutdatedInput}}
 end
 
 function Base.show(io::IO, id::FileIdentification)
     isempty(id.objects) && return print(io, basename(id.path), ": unknown")
-    return print(io, basename(id.path), ": ",
-                 join(sprint.(show, id.objects), "; "))
+    print(io, basename(id.path), ": ", join(sprint.(show, id.objects), "; "))
+    isempty(id.upstream) ||
+        print(io, "; ", _counted(length(id.upstream), "upstream issue"))
+    return nothing
 end
 
 function Base.show(io::IO, ::MIME"text/plain", id::FileIdentification)
@@ -137,6 +208,28 @@ function Base.show(io::IO, ::MIME"text/plain", id::FileIdentification)
         end
         for issue in obj.issues
             println(io, "    ", issue)
+        end
+    end
+    if isempty(id.upstream)
+        println(io, "  upstream: no issues")
+    else
+        println(io, "  upstream: ", _counted(length(id.upstream), "issue"))
+        for found in id.upstream
+            println(io, "    ", found)
+            println(io, "      ",
+                    _throughline(found.through, found.making, found.input))
+        end
+    end
+    if !isnothing(id.outdated)
+        if isempty(id.outdated)
+            println(io, "  outdated inputs: none")
+        else
+            println(io, "  outdated inputs: ", length(id.outdated))
+            for outdated in id.outdated
+                println(io, "    ", outdated)
+                println(io, "      ",
+                        _throughline(outdated.through, outdated.making, true))
+            end
         end
     end
     return nothing
@@ -353,69 +446,180 @@ function _dataproductrecord(registry::RegistryEndpoint, url::String)
 end
 
 """
-    identify(path; remote = nothing, commits = AncestorCommits())
-    identify(registry, path; commits = AncestorCommits())
-    identify(handle, path; commits = AncestorCommits())
+    identify(path; remote = nothing, superseded = false)
+    identify(registry, path; superseded = false)
+    identify(handle, path; superseded = false)
+    identify(; repo, remote = nothing, commits = AncestorCommits())
+    identify(registry; repo, commits = AncestorCommits())
+    identify(handle; repo, commits = AncestorCommits())
 
-Ask a registry what it knows about a file or a git repository on disk.
+Ask a registry what it knows about a file, or about a git repository, on
+disk.
 
 For a **file**, return a [`FileIdentification`](@ref): the data products it is
 registered as, where the registry expects to find it, whether a newer version
-of any of those data products exists, and any issues raised against it.
-`isempty(result.objects)` means the registry has no record of a file with these
-contents. The file is identified by the SHA-1 of its contents, as everything in
-the pipeline is, so a copy under another name is recognised and an edited file
-is not.
+of any of those data products exists, the issues raised against it, and the
+issues raised on anything behind it - the inputs read on the way to it, at
+the versions read, and the code, config and script of the runs on the way -
+each with the run it reaches the file through. With `superseded = true`, the
+inputs read on the way that a newer version of has been registered since are
+reported too, as outdated rather than wrong. `isempty(result.objects)` means
+the registry has no record of a file with these contents. The file is
+identified by the SHA-1 of its contents, as everything in the pipeline is, so
+a copy under another name is recognised and an edited file is not.
 
-For the **top-level folder of a git repository**, return a
-[`RepositoryIdentification`](@ref): the code runs made from its commits, with
-their outputs, and any issues raised against those commits. The repository is
-known to the registry by the URL of its git remote - the one named by
-`git.remote` in its `.fair/cli-config.yaml`, else `origin` - and `commits`
-chooses which of its commits to report. Runs made with uncommitted changes are
-included only when `commits` is given `dirty = true`. When the checkout itself
-has uncommitted changes, `AncestorCommits` and `CheckedOutCommit` warn and use
-its commit as committed.
+For a **git repository**, named by the path of its top-level folder as
+`repo`, return a [`RepositoryIdentification`](@ref): the code runs made from
+its commits, with their outputs, and any issues raised against those commits.
+The repository is known to the registry by the URL of its git remote - the
+one named by `git.remote` in its `.fair/cli-config.yaml`, else `origin` - and
+`commits` chooses which of its commits to report. Runs made with uncommitted
+changes are included only when `commits` is given `dirty = true`. When the
+checkout itself has uncommitted changes, `AncestorCommits` and
+`CheckedOutCommit` warn and use its commit as committed.
 
 # Arguments
-- `path::String`: the file, or the repository's top-level folder, to ask about.
-  Any other folder is an `ArgumentError`, including one inside a repository.
+- `path::String`: the file to ask about.
+- `repo`: the top-level folder of the git repository to ask about. Any other
+  folder is an `ArgumentError`, including one inside a repository.
 - `registry::RegistryEndpoint`: the registry to ask, which needs no token,
   e.g. `RegistryEndpoint("http://127.0.0.1:8000/api/")`; a
   `DataRegistryHandle` may be given instead, and its registry is used.
-- `remote`: with `path` alone, the registry is the CLI's local registry, or the
-  remote registry of that name in the current project's CLI configuration; see
-  [`RegistryEndpoint`](@ref).
-- `commits::AbstractCommitSelection`: for a repository,
-  [`AncestorCommits()`](@ref AncestorCommits) (the default),
-  [`CheckedOutCommit()`](@ref CheckedOutCommit) or
-  [`AllCommits()`](@ref AllCommits), each optionally with `dirty = true`; for a
-  file, an `ArgumentError`.
+- `remote`: with no registry given, the registry is the CLI's local registry,
+  or the remote registry of that name in the current project's CLI
+  configuration; see [`RegistryEndpoint`](@ref).
+- `superseded`: for a file, whether to report the inputs behind it that have
+  been superseded.
+- `commits`: for a repository, [`AncestorCommits()`](@ref AncestorCommits)
+  (the default), [`CheckedOutCommit()`](@ref CheckedOutCommit) or
+  [`AllCommits()`](@ref AllCommits), each optionally with `dirty = true`.
 """
 function identify(registry::RegistryEndpoint, path::String;
-                  commits::Union{Nothing, AbstractCommitSelection} = nothing)
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing,
+                  superseded::Bool = false)
     if isfile(path)
         isnothing(commits) ||
             throw(ArgumentError("`commits` selects commits of a git repository, and $path is a file"))
-        return _identifyfile(registry, path)
+        return _identifyfile(registry, path; superseded)
     end
     isdir(path) || throw(ReadWriteException("no file or folder at $path"))
-    return _identifyrepository(registry, path,
-                               something(commits, AncestorCommits()))
+    # A repository named by position: deprecated in 0.55.0, named by `repo`
+    Base.depwarn("`identify(folder)` is deprecated: name a git repository by `identify(repo = folder)`",
+                 :identify)
+    return identify(registry; repo = path,
+                    commits = something(commits, AncestorCommits()))
 end
 function identify(handle::DataRegistryHandle, path::String;
-                  commits::Union{Nothing, AbstractCommitSelection} = nothing)
-    return identify(handle.registry, path, commits = commits)
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing,
+                  superseded::Bool = false)
+    return identify(handle.registry, path; commits, superseded)
 end
 function identify(path::String;
                   remote::Union{Nothing, AbstractString} = nothing,
-                  commits::Union{Nothing, AbstractCommitSelection} = nothing)
-    return identify(RegistryEndpoint(remote = remote), path, commits = commits)
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing,
+                  superseded::Bool = false)
+    return identify(RegistryEndpoint(remote = remote), path; commits,
+                    superseded)
+end
+function identify(registry::RegistryEndpoint; repo::AbstractString,
+                  commits::AbstractCommitSelection = AncestorCommits())
+    return _identifyrepository(registry, String(repo), commits)
+end
+function identify(handle::DataRegistryHandle; repo::AbstractString,
+                  commits::AbstractCommitSelection = AncestorCommits())
+    return identify(handle.registry; repo, commits)
+end
+function identify(; repo::AbstractString,
+                  remote::Union{Nothing, AbstractString} = nothing,
+                  commits::AbstractCommitSelection = AncestorCommits())
+    return identify(RegistryEndpoint(remote = remote); repo, commits)
 end
 
-# What a registry knows about the file at `path`, by its hash
-function _identifyfile(registry::RegistryEndpoint, path::String)
+# What a registry knows about the file at `path`, by its hash: what it is
+# registered as, and what lies behind it
+function _identifyfile(registry::RegistryEndpoint, path::String;
+                       superseded::Bool = false)
     hash = _getfilehash(path)
+    objects = _registeredobjects(registry, hash)
+    roots = [product.url
+             for object in objects for product in object.data_products]
+    trace = isempty(roots) ? nothing : _upstream(registry, roots, nothing)
+    upstream = isnothing(trace) ? UpstreamIssue[] : _upstreamissues(trace)
+    outdated = !superseded ? nothing :
+               isnothing(trace) ? OutdatedInput[] : _outdatedinputs(trace)
+    return FileIdentification(path, hash, objects, trace, upstream, outdated)
+end
+
+# Walk a trace back from its roots, calling `f(run, made, nothing)` once for
+# each run on the way, with the data product it made on the way, and then
+# `f(run, made, input)` for each data product the run read; each data product
+# is expanded once, nearest the roots first
+function _walkupstream(f::Function, trace::Trace{Upstream})
+    queue = copy(trace.roots)
+    expanded = Set{String}()
+    while !isempty(queue)
+        url = popfirst!(queue)
+        url in expanded && continue
+        push!(expanded, url)
+        made = trace.products[url]
+        isnothing(made.made_by) && continue
+        run = trace.runs[made.made_by]
+        f(run, made, nothing)
+        for input in run.inputs
+            f(run, made, trace.products[input])
+            push!(queue, input)
+        end
+    end
+    return nothing
+end
+
+# The issues behind a trace's roots: on a run's own files, or on what it
+# read, each once per run it reaches a root through
+function _upstreamissues(trace::Trace{Upstream})
+    found = UpstreamIssue[]
+    seen = Set{Tuple{String, String, Union{Nothing, String}, String}}()
+    _walkupstream(trace) do run, made, input
+        urls = isnothing(input) ? run.issues : input.issues
+        for url in urls
+            issue = trace.issues[url]
+            for target in issue.targets
+                if isnothing(input)
+                    target.url in run.objects || continue
+                else
+                    target.url == input.url || continue
+                end
+                key = (url, target.url, target.component, run.url)
+                key in seen && continue
+                push!(seen, key)
+                push!(found,
+                      UpstreamIssue(issue, target, run, made,
+                                    !isnothing(input)))
+            end
+        end
+    end
+    return found
+end
+
+# The data products read on the way to a trace's roots that a newer version
+# of exists, each once per run that read them
+function _outdatedinputs(trace::Trace{Upstream})
+    found = OutdatedInput[]
+    seen = Set{Tuple{String, String}}()
+    _walkupstream(trace) do run, made, input
+        isnothing(input) && return nothing
+        isnothing(input.superseded_by) && return nothing
+        key = (input.url, run.url)
+        key in seen && return nothing
+        push!(seen, key)
+        push!(found, OutdatedInput(input, run, made))
+        return nothing
+    end
+    return found
+end
+
+# What a registry has registered with this hash, as objects with their data
+# products and issues
+function _registeredobjects(registry::RegistryEndpoint, hash::String)
     objects = RegisteredObject[]
     for location in _getentries(registry, "storage_location",
                                 Dict("hash" => hash))
@@ -432,7 +636,7 @@ function _identifyfile(registry::RegistryEndpoint, path::String)
                                    _objectissues(registry, object)))
         end
     end
-    return FileIdentification(path, hash, objects)
+    return objects
 end
 
 # What a registry knows about the git repository whose top-level folder is
@@ -441,7 +645,7 @@ function _identifyrepository(registry::RegistryEndpoint, path::String,
                              selection::AbstractCommitSelection)
     top = _gittoplevel(path)
     isnothing(top) &&
-        throw(ArgumentError("$path is neither a file nor the top level of a git repository"))
+        throw(ArgumentError("$path is not the top level of a git repository"))
     samefile(top, path) ||
         throw(ArgumentError("$path is inside the git repository at $top - identify that folder instead"))
     return LibGit2.with(LibGit2.GitRepo(top)) do repo

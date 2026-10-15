@@ -67,6 +67,24 @@
   - New dependencies: BibParser and BibInternal.
   - The abstract supertypes `AbstractIssueTarget` and `AbstractCommitSelection`
     are no longer `public`: they annotate arguments and are not for extending.
+  - `DataPipeline.provenance(x)` traces where a data product came from - `x` a
+    file or `namespace:name@version` - as a `Trace`, which prints as a tree:
+    each run with its commit, what it read, each input's source and issues,
+    and the version that has superseded it, back to the data registered from
+    elsewhere.
+  - `identify` of a file also reports the issues raised on anything behind it,
+    each with the run it reaches the file through, and with `superseded = true`
+    the inputs behind it that a newer version of has been registered since.
+  - A git repository is named to `identify` by `repo = folder`; the folder by
+    position is deprecated.
+  - A registered data product is named `namespace:name@version` everywhere, as
+    the CLI names one, with `namespace:name` for its newest version:
+    `link_register!` takes the form in place of its `namespace` and `version`
+    keywords, `ExistingDataProduct` takes it (the three-part constructor is
+    deprecated), `raise_issue` takes it bare, and `identify` prints it.
+  - Names are held to the pipeline's convention wherever the package registers
+    one: a namespace of ASCII letters, digits, `_` and `-`, a data product or
+    component name of such parts joined by `/`; any other is an `ArgumentError`.
 - v0.54.1
   - `link_write!`, and the component writers, accept a data product name that a
     wildcard `write:` entry of the working config stands for, registering the

@@ -868,7 +868,7 @@ Test.@testset "identify() a git repository" begin
 
     # By default the checked-out commit and its ancestors, newest first,
     # whichever way their paths were registered
-    found = DataPipeline.identify(registry, dir)
+    found = DataPipeline.identify(registry; repo = dir)
     @test found isa DataPipeline.RepositoryIdentification
     @test samefile(found.path, dir)
     @test found.remote == remote
@@ -888,17 +888,17 @@ Test.@testset "identify() a git repository" begin
     @test occursin(second_output, text)
     # A handle may be given instead of a registry
     @test [commit.sha
-           for commit in DataPipeline.identify(handle, dir).commits] ==
+           for commit in DataPipeline.identify(handle; repo = dir).commits] ==
           [head_sha, parent_sha]
 
     # Only the checked-out commit
-    only_head = DataPipeline.identify(registry, dir,
+    only_head = DataPipeline.identify(registry; repo = dir,
                                       commits = DataPipeline.CheckedOutCommit())
     @test [commit.sha for commit in only_head.commits] == [head_sha]
 
     # Every commit: those in the clone by commit date, then those the clone
     # lacks, newest first by their earliest run
-    every = DataPipeline.identify(registry, dir,
+    every = DataPipeline.identify(registry; repo = dir,
                                   commits = DataPipeline.AllCommits()).commits
     @test [(commit.sha, commit.dirty) for commit in every] ==
           [(head_sha, false), (side_sha, false), (parent_sha, false),
@@ -908,7 +908,7 @@ Test.@testset "identify() a git repository" begin
     # Runs with uncommitted changes only when asked for, each beside its commit,
     # whichever commits are selected
     shas(selection) = [(commit.sha, commit.dirty)
-                       for commit in DataPipeline.identify(registry, dir,
+                       for commit in DataPipeline.identify(registry; repo = dir,
                                                            commits = selection).commits]
     @test shas(DataPipeline.AncestorCommits(dirty = true)) ==
           [(head_sha, false), (head_sha, true), (parent_sha, false)]
@@ -919,7 +919,7 @@ Test.@testset "identify() a git repository" begin
         (parent_sha, false), (later_absent_sha, false), (absent_sha, false)]
     @test occursin("with runs made with uncommitted changes",
                    sprint(show, MIME("text/plain"),
-                          DataPipeline.identify(registry, dir,
+                          DataPipeline.identify(registry; repo = dir,
                                                 commits = DataPipeline.AllCommits(dirty = true))))
 
     # A selection is made with the keyword, and prints as it is written
@@ -932,32 +932,32 @@ Test.@testset "identify() a git repository" begin
     # Uncommitted changes in the checkout: a warning, and its commit taken as
     # committed
     write(joinpath(dir, "a.txt"), "edited")
-    edited = @test_logs (:warn, r"uncommitted changes") DataPipeline.identify(registry,
-                                                                              dir)
+    edited = @test_logs (:warn, r"uncommitted changes") DataPipeline.identify(registry;
+                                                                              repo = dir)
     @test edited.dirty
     @test [commit.sha for commit in edited.commits] == [head_sha, parent_sha]
     write(joinpath(dir, "a.txt"), committed("second"))
-    @test !DataPipeline.identify(registry, dir).dirty
+    @test !DataPipeline.identify(registry; repo = dir).dirty
 
     # A commit nothing was run from
     commit!("third", t = t0 + 20)
-    unrun = DataPipeline.identify(registry, dir,
+    unrun = DataPipeline.identify(registry; repo = dir,
                                   commits = DataPipeline.CheckedOutCommit())
     @test isempty(unrun.commits)
     @test occursin("no run registered", sprint(show, MIME("text/plain"), unrun))
     @test [commit.sha
-           for commit in DataPipeline.identify(registry, dir).commits] ==
+           for commit in DataPipeline.identify(registry; repo = dir).commits] ==
           [head_sha, parent_sha]
 
     # The repository is known by the remote its CLI configuration names, as
     # `fair run` records it, and by `origin` only when there is none
     LibGit2.set_remote_url(repo, "origin", "https://github.com/elsewhere/$uid")
     close(LibGit2.GitRemote(repo, "upstream", remote))
-    @test isempty(DataPipeline.identify(registry, dir).commits)
+    @test isempty(DataPipeline.identify(registry; repo = dir).commits)
     mkpath(joinpath(dir, ".fair"))
     DataPipeline.YAML.write_file(joinpath(dir, ".fair", "cli-config.yaml"),
                                  Dict("git" => Dict("remote" => "upstream")))
-    by_upstream = DataPipeline.identify(registry, dir)
+    by_upstream = DataPipeline.identify(registry; repo = dir)
     @test by_upstream.remote == remote
     @test [commit.sha for commit in by_upstream.commits] ==
           [head_sha, parent_sha]
@@ -965,12 +965,16 @@ Test.@testset "identify() a git repository" begin
     # A folder inside the repository, a folder that is no repository, and
     # `commits` for a file are all mistakes
     mkdir(joinpath(dir, "sub"))
-    @test_throws ArgumentError DataPipeline.identify(registry,
-                                                     joinpath(dir, "sub"))
-    @test_throws ArgumentError DataPipeline.identify(registry, mktempdir())
+    @test_throws ArgumentError DataPipeline.identify(registry;
+                                                     repo = joinpath(dir,
+                                                                     "sub"))
+    @test_throws ArgumentError DataPipeline.identify(registry;
+                                                     repo = mktempdir())
     @test_throws ArgumentError DataPipeline.identify(registry,
                                                      joinpath(dir, "a.txt"),
                                                      commits = DataPipeline.AllCommits())
+    # A repository named by position still works, as a deprecation
+    @test DataPipeline.identify(registry, dir).remote == remote
     close(repo)
 end
 

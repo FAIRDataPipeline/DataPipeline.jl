@@ -5,6 +5,10 @@
 
 # == Deprecated in 0.55.0 ==
 
+# `identify(folder)`, a git repository named by position, is replaced by
+# `identify(repo = folder)`; the method serves files too, so the warning is in
+# `identify` itself
+
 # A registered data product named by its three parts, before the one form
 # `namespace:name@version`
 function ExistingDataProduct(namespace::AbstractString,
