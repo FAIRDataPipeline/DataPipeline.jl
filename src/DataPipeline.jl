@@ -73,7 +73,7 @@ public RepositoryIdentification, RegisteredCommit, CodeRunRecord
 public provenance
 public Trace
 public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
-public AncestorCommits, CheckedOutCommit, AllCommits
+public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
 
 include("fdp_i.jl")
 include("citations.jl")

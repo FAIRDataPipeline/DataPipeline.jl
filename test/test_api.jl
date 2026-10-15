@@ -962,6 +962,79 @@ Test.@testset "identify() a git repository" begin
     @test [commit.sha for commit in by_upstream.commits] ==
           [head_sha, parent_sha]
 
+    # A commit by name - a full hash, a short hash, a tag, a branch - resolved
+    # by the clone, with the runs made from it with uncommitted changes when
+    # asked; the selection printed as written
+    LibGit2.tag_create(repo, "v1.0", head_sha, sig = signature(t0 + 20))
+    by_hash = DataPipeline.identify(registry; repo = dir, commits = head_sha)
+    @test [commit.sha for commit in by_hash.commits] == [head_sha]
+    @test by_hash.selection == DataPipeline.NamedCommit(head_sha)
+    @test [commit.sha
+           for commit in DataPipeline.identify(registry; repo = dir,
+                                               commits = first(head_sha, 7)).commits] ==
+          [head_sha]
+    @test [commit.sha
+           for commit in DataPipeline.identify(registry; repo = dir,
+                                               commits = "v1.0").commits] ==
+          [head_sha]
+    @test [commit.sha
+           for commit in DataPipeline.identify(registry; repo = dir,
+                                               commits = "side").commits] ==
+          [side_sha]
+    tagged = DataPipeline.identify(registry; repo = dir,
+                                   commits = DataPipeline.NamedCommit("v1.0",
+                                                                      dirty = true))
+    @test [(commit.sha, commit.dirty) for commit in tagged.commits] ==
+          [(head_sha, false), (head_sha, true)]
+    @test sprint(show, DataPipeline.NamedCommit("v1.0")) ==
+          "NamedCommit(\"v1.0\")"
+    @test sprint(show, DataPipeline.NamedCommit("v1.0", dirty = true)) ==
+          "NamedCommit(\"v1.0\", dirty = true)"
+    @test occursin("selected:    the commit named \"v1.0\", with runs made",
+                   sprint(show, MIME("text/plain"), tagged))
+    err = @test_throws ArgumentError DataPipeline.identify(registry; repo = dir,
+                                                           commits = "no-such-ref-$uid")
+    @test occursin("no such tag, branch or commit", err.value.msg)
+
+    # By the URL of its remote, with no clone: every commit the registry
+    # holds, by default, with no dates; a full hash; what needs the clone is
+    # refused, a tag among it
+    by_url = DataPipeline.identify(registry; repo = remote)
+    @test by_url.selection == DataPipeline.AllCommits()
+    @test by_url.path == remote && by_url.remote == remote
+    @test isnothing(by_url.head) && !by_url.dirty
+    @test Set(commit.sha for commit in by_url.commits) ==
+          Set([head_sha, side_sha, parent_sha, absent_sha, later_absent_sha])
+    @test all(isnothing(commit.date) for commit in by_url.commits)
+    @test occursin("  no clone: the registry's record alone\n",
+                   sprint(show, MIME("text/plain"), by_url))
+    @test [commit.sha
+           for commit in DataPipeline.identify(registry; repo = remote,
+                                               commits = head_sha).commits] ==
+          [head_sha]
+    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
+                                                     commits = DataPipeline.AncestorCommits())
+    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
+                                                     commits = DataPipeline.CheckedOutCommit())
+    err = @test_throws ArgumentError DataPipeline.identify(registry;
+                                                           repo = remote,
+                                                           commits = "v1.0")
+    @test occursin("no clone to resolve it with", err.value.msg)
+    # A release the registry holds resolves its version with no clone, and
+    # with a clone that has no such tag
+    DataPipeline._postentry(registry, "code_repo_release",
+                            Dict("name" => "identify fixture $uid",
+                                 "version" => "3.1.4",
+                                 "object" => object_url))
+    @test [commit.sha
+           for commit in DataPipeline.identify(registry; repo = remote,
+                                               commits = "v3.1.4").commits] ==
+          [parent_sha]
+    @test [commit.sha
+           for commit in DataPipeline.identify(registry; repo = dir,
+                                               commits = "3.1.4").commits] ==
+          [parent_sha]
+
     # A folder inside the repository, a folder that is no repository, and
     # `commits` for a file are all mistakes
     mkdir(joinpath(dir, "sub"))

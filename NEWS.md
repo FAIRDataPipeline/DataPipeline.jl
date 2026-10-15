@@ -75,8 +75,10 @@
   - `identify` of a file also reports the issues raised on anything behind it,
     each with the run it reaches the file through, and with `superseded = true`
     the inputs behind it that a newer version of has been registered since.
-  - A git repository is named to `identify` by `repo = folder`; the folder by
-    position is deprecated.
+  - A git repository is named to `identify` by `repo = folder`, or by the URL
+    of its remote with no clone; the folder by position is deprecated. `commits`
+    takes a commit by name - a tag, a branch, a hash or a registered release's
+    version - as a string or `NamedCommit`.
   - A registered data product is named `namespace:name@version` everywhere, as
     the CLI names one, with `namespace:name` for its newest version:
     `link_register!` takes the form in place of its `namespace` and `version`

@@ -196,8 +196,11 @@ DataPipeline.identify("results.csv")                     # the local registry
 DataPipeline.identify("results.csv", remote = "origin")  # a remote of this project
 DataPipeline.identify("results.csv", superseded = true)  # and the inputs behind it since superseded
 DataPipeline.identify(repo = ".")                        # this checkout's commit and its ancestors
+DataPipeline.identify(repo = ".", commits = "v0.55.0")   # one commit, by tag, branch, hash or release
 # every run of this repository, including those made with uncommitted changes
 DataPipeline.identify(repo = ".", commits = DataPipeline.AllCommits(dirty = true))
+# a repository with no clone, by the registry's record of it alone
+DataPipeline.identify(repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl")
 ```
 
 ```@docs
@@ -222,6 +225,7 @@ DataPipeline.AbstractCommitSelection
 DataPipeline.AncestorCommits
 DataPipeline.CheckedOutCommit
 DataPipeline.AllCommits
+DataPipeline.NamedCommit
 ```
 
 ## Raising issues
