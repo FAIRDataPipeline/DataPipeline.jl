@@ -56,6 +56,16 @@ function _printdownstream(io::IO, trace::Trace,
     for issue in product.issues
         _printissue(io, trace.issues[issue], indent + 4)
     end
+    # A root the trace holds the maker of, as a start from an issue on a run's
+    # own files gives, says so
+    if indent == 0 && !isnothing(product.made_by) &&
+       haskey(trace.runs, product.made_by)
+        maker = trace.runs[product.made_by]
+        println(io, "   made by ", _runline(maker))
+        for issue in maker.issues
+            _printissue(io, trace.issues[issue], indent + 8)
+        end
+    end
     for run in get(readers, url, TraceRun[])
         print(io, " "^indent, "-> ", _runline(run))
         if run.url in seen_runs
@@ -85,6 +95,9 @@ end
     downstream(; repo, remote = nothing, commits = nothing, depth = nothing)
     downstream(registry; repo, commits = nothing, depth = nothing)
     downstream(handle; repo, commits = nothing, depth = nothing)
+    downstream(; issue, remote = nothing, depth = nothing)
+    downstream(registry; issue, depth = nothing)
+    downstream(handle; issue, depth = nothing)
 
 Trace what was made from a data product: the runs that read it, what they
 wrote, the runs that read those, and so on to the end of every path. Return
@@ -98,10 +111,16 @@ does, every data product it is registered as being a root; or
 `namespace:name@version`, as the pipeline names one, with `namespace:name`
 meaning its newest version. With `repo`, the start is everything the runs of
 a git repository wrote: the repository and `commits` are as `identify` takes
-them, by the folder of a clone or the URL of its remote. The registry is the
-one the FAIR CLI is configured to use, or the project's remote named by
-`remote`, or `registry`, or the one `handle` was opened on; no token is
-needed.
+them, by the folder of a clone or the URL of its remote. With `issue`, the
+start is everything the issue is raised on - each data product, at the
+version it is on, and everything the runs made whose code repository,
+working config or submission script it is on - so that what the problem
+affects is what the trace holds. The issue is a [`TraceIssue`](@ref) or an
+[`IssueRecord`](@ref) from a trace or [`identify`](@ref), its uuid, its
+registry URL, or the number the registry's own pages show it by. The
+registry is the one the FAIR CLI is configured to use, or the project's
+remote named by `remote`, or `registry`, or the one `handle` was opened on;
+no token is needed.
 
 `depth` is how many runs forward along any path to go. By default the trace
 goes to the end of every path; with `depth` given, a data product at that
@@ -123,11 +142,21 @@ function downstream(x::AbstractString;
                     depth::Union{Nothing, Integer} = nothing)
     return downstream(RegistryEndpoint(remote = remote), x; depth)
 end
-function downstream(registry::RegistryEndpoint; repo::AbstractString,
+function downstream(registry::RegistryEndpoint;
+                    repo::Union{Nothing, AbstractString} = nothing,
+                    issue::Union{Nothing, Integer, AbstractString, TraceIssue,
+                                 IssueRecord} = nothing,
                     commits::Union{Nothing, AbstractString,
                                    AbstractCommitSelection} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
     _checkdepth(depth)
+    count(!isnothing, (repo, issue)) == 1 ||
+        throw(ArgumentError("name one start: a data product, or `repo`, or `issue`"))
+    if isnothing(repo)
+        isnothing(commits) ||
+            throw(ArgumentError("`commits` selects the commits of `repo`, and no `repo` is named"))
+        return _issuedownstream(registry, _issueurl(registry, issue), depth)
+    end
     identification = identify(registry; repo, commits)
     roots = unique(product.url
                    for commit in identification.commits
@@ -136,18 +165,92 @@ function downstream(registry::RegistryEndpoint; repo::AbstractString,
         throw(ReadWriteException("no registered run of $(identification.remote) from $(_describe(identification.selection)) wrote a data product"))
     return _downstream(registry, roots, depth)
 end
-function downstream(handle::DataRegistryHandle; repo::AbstractString,
+function downstream(handle::DataRegistryHandle;
+                    repo::Union{Nothing, AbstractString} = nothing,
+                    issue::Union{Nothing, Integer, AbstractString, TraceIssue,
+                                 IssueRecord} = nothing,
                     commits::Union{Nothing, AbstractString,
                                    AbstractCommitSelection} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
-    return downstream(handle.registry; repo, commits, depth)
+    return downstream(handle.registry; repo, issue, commits, depth)
 end
-function downstream(; repo::AbstractString,
+function downstream(; repo::Union{Nothing, AbstractString} = nothing,
+                    issue::Union{Nothing, Integer, AbstractString, TraceIssue,
+                                 IssueRecord} = nothing,
                     remote::Union{Nothing, AbstractString} = nothing,
                     commits::Union{Nothing, AbstractString,
                                    AbstractCommitSelection} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
-    return downstream(RegistryEndpoint(remote = remote); repo, commits, depth)
+    return downstream(RegistryEndpoint(remote = remote); repo, issue, commits,
+                      depth)
+end
+
+# The registry URL of the issue named: by a record from a trace or identify,
+# by its uuid, by its URL, or by the number the registry's pages show
+_issueurl(::RegistryEndpoint, issue::Union{TraceIssue, IssueRecord}) = issue.url
+function _issueurl(registry::RegistryEndpoint, issue::Integer)
+    return string(registry.url, "issue/", issue, "/")
+end
+function _issueurl(registry::RegistryEndpoint, issue::AbstractString)
+    occursin(r"^[a-z][a-z0-9+.-]*://", issue) && return String(issue)
+    if occursin(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                issue)
+        entry = _getentry(registry, "issue", Dict("uuid" => issue))
+        isnothing(entry) &&
+            throw(ReadWriteException("no issue with uuid $issue is registered in this registry"))
+        return entry["url"]
+    end
+    return throw(ArgumentError("'$issue' names no issue: give its uuid, its registry URL or its number, or the issue as a trace or identify found it"))
+end
+
+# The trace forward from everything an issue is raised on: the data products
+# it is on, and what the runs made whose repository, config or script it is on
+function _issuedownstream(registry::RegistryEndpoint, url::String,
+                          depth::Union{Nothing, Integer})
+    parts = _TraceParts()
+    issue = try
+        _cached(registry, parts, url)
+    catch err
+        err isa HTTP.StatusError && err.status == 404 &&
+            throw(ReadWriteException("no issue at $url in this registry"))
+        rethrow()
+    end
+    roots = String[]
+    for component_url in issue["component_issues"]
+        component = _cached(registry, parts, component_url)
+        object = _cached(registry, parts, component["object"])
+        if !isempty(object["data_products"])
+            append!(roots, object["data_products"])
+            continue
+        end
+        for run_url in _runsfromobject(registry, object["url"])
+            haskey(parts.runs, run_url) || _runpart!(parts, registry, run_url)
+            run = parts.runs[run_url]
+            for output in _writtenproducts(registry, parts, run_url)
+                _productpart!(parts, registry, output)
+                parts.products[output].made_by = run_url
+                output in run.outputs || push!(run.outputs, output)
+                push!(roots, output)
+            end
+        end
+    end
+    roots = unique(roots)
+    isempty(roots) &&
+        throw(ReadWriteException("nothing was made from what the issue at $url is raised on"))
+    return _downstream(registry, roots, depth, parts)
+end
+
+# The runs made with an object as their code repository, working config or
+# submission script
+function _runsfromobject(registry::RegistryEndpoint, object_url::String)
+    runs = String[]
+    for field in ("code_repo", "model_config", "submission_script")
+        for run in _getentries(registry, "code_run",
+                               Dict(field => _extractid(object_url)))
+            run["url"] in runs || push!(runs, run["url"])
+        end
+    end
+    return runs
 end
 
 # == The walk ==
@@ -156,8 +259,8 @@ end
 # each reader's outputs, each data product once; a data product `depth` runs
 # on is not walked, and is marked beyond when a run read it
 function _downstream(registry::RegistryEndpoint, roots::Vector{String},
-                     depth::Union{Nothing, Integer})
-    parts = _TraceParts()
+                     depth::Union{Nothing, Integer},
+                     parts::_TraceParts = _TraceParts())
     for root in roots
         _productpart!(parts, registry, root)
     end

@@ -13,11 +13,17 @@ A problem recorded against something a file is registered as.
 - `description`: what the problem is
 - `component`: the name of the object component it was raised against, or
   `nothing` when raised against the file as a whole
+- `url`: its registry URL
+- `uuid`: its uuid
+
+An `IssueRecord` names the issue to [`downstream`](@ref), as its `issue`.
 """
 struct IssueRecord
     severity::Int
     description::String
     component::Union{Nothing, String}
+    url::String
+    uuid::String
 end
 
 function Base.show(io::IO, issue::IssueRecord)
@@ -458,7 +464,8 @@ function _objectissues(registry::RegistryEndpoint, object::AbstractDict)
         for issue_url in component["issues"]
             issue = _getentry(registry, URIs.URI(issue_url))
             push!(issues,
-                  IssueRecord(issue["severity"], issue["description"], name))
+                  IssueRecord(issue["severity"], issue["description"], name,
+                              issue["url"], issue["uuid"]))
         end
     end
     return issues

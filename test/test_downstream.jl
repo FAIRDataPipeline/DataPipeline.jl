@@ -196,6 +196,82 @@ Test.@testset "downstream() of a chain" begin
     @test length(DataPipeline.downstream(registry, "$namespace:$root",
                                          depth = 2).runs) == 4
 
+    # From an issue: everything the issue is raised on, by the issue as a
+    # trace found it, as identify found it, by its uuid, its URL or its
+    # number; the second product's readers and what they made, the issue
+    # itself in the trace
+    second_file = joinpath(datastore, namespace, second,
+                           first_second.hash * ".txt")
+    recorded = only(only(DataPipeline.identify(registry, second_file).objects).issues)
+    @test recorded.uuid == found.uuid && recorded.url == found.url
+    for named in (found, recorded, found.uuid, found.url,
+                  parse(Int, DataPipeline._extractid(found.url)))
+        from_issue = DataPipeline.downstream(registry; issue = named)
+        @test from_issue.roots == [first_second.url]
+        @test Set(run.uuid for run in values(from_issue.runs)) ==
+              Set([joining.code_run_uuid, using_second.code_run_uuid])
+        @test Set(keys(from_issue.products)) ==
+              Set([first_second.url, made_third.url, made_fourth.url])
+        @test haskey(from_issue.issues, found.url)
+    end
+    @test DataPipeline.downstream(remaking; issue = found).roots ==
+          [first_second.url]
+    @test startswith(sprint(show, MIME("text/plain"),
+                            DataPipeline.downstream(registry; issue = found)),
+                     "Downstream of $namespace:$second@v0.0.1  sha1 ")
+
+    # An issue on a run's code or config starts from everything the runs
+    # made that ran from it: another run of the fixture repository, so that
+    # its root and the new run's output both start the trace, each with the
+    # run that made it
+    fifth = "downstream/fifth/$uid"
+    coding = run_with(fifth => "0.0.1", from = fixture_sha,
+                      remote = fixture_remote)
+    run!(coding, String[], [fifth])
+    raise_issue(coding, DataPipeline.CodeRepository(),
+                "downstream code issue $uid", severity = 5)
+    raise_issue(coding, DataPipeline.WorkingConfig(),
+                "downstream config issue $uid", severity = 6)
+    DataPipeline.finalise(coding)
+    code_issue = DataPipeline._getentry(registry, "issue",
+                                        Dict("description" => "downstream code issue $uid"))
+    from_code = DataPipeline.downstream(registry; issue = code_issue["uuid"])
+    fifth_url = only(url
+                     for (url, product) in from_code.products
+                     if product.name == fifth)
+    @test Set(from_code.roots) == Set([start.url, fifth_url])
+    @test from_code.products[start.url].made_by ==
+          Dict(run.uuid => run.url for run in values(from_code.runs))[starting.code_run_uuid]
+    @test from_code.products[fifth_url].made_by ==
+          Dict(run.uuid => run.url for run in values(from_code.runs))[coding.code_run_uuid]
+    @test length(from_code.runs) == 6
+    @test haskey(from_code.issues, code_issue["url"])
+    code_text = sprint(show, MIME("text/plain"), from_code)
+    @test occursin("\n   made by run $(first(coding.code_run_uuid, 8)) on ",
+                   code_text)
+    @test occursin("issue, severity 5: downstream code issue $uid\n",
+                   code_text)
+    config_issue = DataPipeline._getentry(registry, "issue",
+                                          Dict("description" => "downstream config issue $uid"))
+    from_config = DataPipeline.downstream(registry; issue = config_issue["url"])
+    @test from_config.roots == [fifth_url]
+    @test length(from_config.runs) == 1
+
+    # One start at a time, an issue that is not there, and a name that is
+    # not an issue's
+    @test_throws ArgumentError DataPipeline.downstream(registry;
+                                                       repo = fixture_remote,
+                                                       issue = found)
+    @test_throws ArgumentError DataPipeline.downstream(registry; issue = found,
+                                                       commits = fixture_sha)
+    @test_throws ArgumentError DataPipeline.downstream(registry)
+    @test_throws ReadWriteException DataPipeline.downstream(registry;
+                                                            issue = 0)
+    @test_throws ReadWriteException DataPipeline.downstream(registry;
+                                                            issue = "00000000-0000-0000-0000-000000000000")
+    @test_throws ArgumentError DataPipeline.downstream(registry;
+                                                       issue = "not an issue")
+
     # What cannot be traced
     @test_throws ReadWriteException DataPipeline.downstream(registry,
                                                             "$namespace:downstream/absent/$uid")

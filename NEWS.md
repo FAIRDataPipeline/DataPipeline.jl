@@ -73,7 +73,8 @@
     and the version that has superseded it, back to the data registered from
     elsewhere. `DataPipeline.downstream(x)` traces the other way, to everything
     made from a data product, or from the runs of a repository with
-    `repo = `, so that what a problem in it affects can be made again.
+    `repo = `, or from everything an issue is raised on with `issue = `, so
+    that what a problem affects can be made again.
     `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
     files, folders and data products named, as its metadata or saved as a
     zip with `to = "paper.zip"`.
