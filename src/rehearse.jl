@@ -357,10 +357,13 @@ function _deletejob(job::AbstractString, datastore::AbstractString)
     return nothing
 end
 
-# Whether `path` lies under the folder `root`, both resolved where they exist
+# Whether `path` lies under the folder `root`, both resolved where they exist.
+# On Windows, `relpath` across drives gives the path back absolute, which is
+# not under anything.
 function _within(path::AbstractString, root::AbstractString)
     isdir(root) || return false
     resolved = isdir(path) ? realpath(path) : abspath(path)
     relative = relpath(resolved, realpath(root))
-    return relative != "." && !startswith(relative, "..")
+    return relative != "." && !startswith(relative, "..") &&
+           !isabspath(relative)
 end
