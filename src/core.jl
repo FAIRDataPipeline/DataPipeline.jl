@@ -207,21 +207,58 @@ struct SourceRecord
 end
 
 """
-    DataRegistryHandle
+    AbstractRunMode
+
+The way a code run is being made, which decides what the API registers. A
+[`DataRegistryHandle`](@ref) carries its run's mode as its type parameter.
+A [`RecordedRun`](@ref) registers everything; a [`Rehearsal`](@ref) nothing.
+"""
+abstract type AbstractRunMode end
+
+"""
+    RecordedRun()
+
+The mode of a code run made under `fair run`: its working config, script,
+repository and code run are registered at [`initialise`](@ref), and its
+outputs, issues, inputs and outputs at [`finalise`](@ref).
+"""
+struct RecordedRun <: AbstractRunMode end
+
+"""
+    Rehearsal(outputs)
+
+The mode of a run that registers nothing, prepared by [`rehearse`](@ref): the
+script runs as `fair run` would run it, reading what the registry holds and
+writing to the data store, and [`finalise`](@ref) collects what it wrote in
+the folder `outputs`, as `<namespace>/<data product>/<version>.<extension>`,
+beside the working config it ran under. The handle holds no registry token.
+"""
+struct Rehearsal <: AbstractRunMode
+    outputs::String
+end
+
+"""
+    DataRegistryHandle{M <: AbstractRunMode}
 
 The state of one code run, created by [`initialise`](@ref) and completed by
-[`finalise`](@ref). Every other function in the API takes one.
+[`finalise`](@ref). Every other function in the API takes one. `M` is the
+run's [`AbstractRunMode`](@ref), which decides what the run registers.
 
 # Fields
+- `mode`: the run's mode, an `M`
 - `config`: the working config, as read from `config.yaml`
 - `config_dir`: the directory the working config was read from, where
   `coderuns.txt` is appended to at `finalise`
 - `registry`: the [`RegistryEndpoint`](@ref) every request goes to
-- `config_obj`: registry URL of the object for the working config file
-- `script_obj`: registry URL of the object for the submission script
-- `repo_obj`: registry URL of the object for the remote code repository
-- `datastore_obj_url`: registry URL of the storage root for the data store
-- `code_run_obj`: registry URL of the code run
+- `config_obj`: registry URL of the object for the working config file, or
+  `nothing` in a run that registers none
+- `script_obj`: registry URL of the object for the submission script, or
+  `nothing`
+- `repo_obj`: registry URL of the object for the remote code repository, or
+  `nothing`
+- `datastore_obj_url`: registry URL of the storage root for the data store,
+  or `nothing`
+- `code_run_obj`: registry URL of the code run, or `nothing`
 - `code_run_uuid`: the code run's uuid, as the CLI's staging refers to it
 - `inputs`, `outputs`: metadata of what has been read and written so far,
   keyed by `(data_product, component)`, with `component` `nothing` for a whole
@@ -235,15 +272,16 @@ The state of one code run, created by [`initialise`](@ref) and completed by
 - `authors`: the identifiers that [`register_authors!`](@ref) has been given
   for each author's name
 """
-struct DataRegistryHandle
+struct DataRegistryHandle{M <: AbstractRunMode}
+    mode::M
     config::Dict
     config_dir::String
     registry::RegistryEndpoint
-    config_obj::String
-    script_obj::String
-    repo_obj::String
-    datastore_obj_url::String
-    code_run_obj::String
+    config_obj::Union{Nothing, String}
+    script_obj::Union{Nothing, String}
+    repo_obj::Union{Nothing, String}
+    datastore_obj_url::Union{Nothing, String}
+    code_run_obj::Union{Nothing, String}
     code_run_uuid::String
     inputs::Dict
     outputs::Dict
@@ -255,16 +293,14 @@ struct DataRegistryHandle
 end
 
 function Base.show(io::IO, handle::DataRegistryHandle)
-    return print(io, "DataRegistryHandle(", handle.code_run_uuid, ", ",
+    return print(io, "DataRegistryHandle(", _runlabel(handle), ", ",
                  length(handle.inputs), " inputs, ",
                  length(handle.outputs), " outputs, ",
                  length(handle.issues), " issues)")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
-    println(io, "DataRegistryHandle for code run ", handle.code_run_uuid)
-    println(io, "  registry: ", handle.registry.url)
-    println(io, "  code run: ", handle.code_run_obj)
+    _showrun(io, handle)
     for (label, table) in (("inputs", handle.inputs),
         ("outputs", handle.outputs), ("unchanged", handle.unchanged))
         println(io, "  ", label, ": ", length(table))
@@ -278,6 +314,41 @@ function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
     println(io, "  citations: ", length(handle.citations))
     return print(io, "  authors: ", length(handle.authors))
 end
+
+# What the compact display names a run by
+_runlabel(handle::DataRegistryHandle{RecordedRun}) = handle.code_run_uuid
+_runlabel(::DataRegistryHandle{Rehearsal}) = "rehearsal"
+
+# The first lines of the full display: what run this is, and where it goes
+function _showrun(io::IO, handle::DataRegistryHandle{RecordedRun})
+    println(io, "DataRegistryHandle for code run ", handle.code_run_uuid)
+    println(io, "  registry: ", handle.registry.url)
+    return println(io, "  code run: ", handle.code_run_obj)
+end
+function _showrun(io::IO, handle::DataRegistryHandle{Rehearsal})
+    println(io, "DataRegistryHandle for a rehearsal, registering nothing")
+    println(io, "  registry: ", handle.registry.url)
+    return println(io, "  outputs: ", handle.mode.outputs)
+end
+
+"""
+    SessionRun(mode, job, handle, ended)
+
+The run this session is in, kept in `SESSION`: a recorded run opened by the
+script's `initialise()`, or a rehearsal from [`rehearse`](@ref) on. `mode` is
+its [`AbstractRunMode`](@ref); `job` the folder its files are in - the job
+folder a rehearsal was prepared in, known before its handle is; `handle` the
+[`DataRegistryHandle`](@ref) once `initialise` has opened one; `ended`
+whether `finalise` or `discard` has ended it. A session has one run, opened
+once: `initialise` refuses while it is open and after it has ended.
+"""
+struct SessionRun
+    mode::AbstractRunMode
+    job::Union{Nothing, String}
+    handle::Union{Nothing, DataRegistryHandle}
+    ended::Bool
+end
+const SESSION = Ref{Union{Nothing, SessionRun}}(nothing)
 
 # == Functions ==
 

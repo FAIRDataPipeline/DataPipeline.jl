@@ -13,21 +13,51 @@ works on. The registry is `run_metadata.local_data_registry_url` (default
 (default `$DEFAULT_API_VERSION`). `token` is the registry's access token, which
 registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 
+With no arguments, the files are those in the folder `fair run` names in
+`FDP_CONFIG_DIR` when it launches a script: a call with that unset, or with a
+file that is not a working config, throws a [`ConfigFileException`](@ref)
+saying so. After [`rehearse`](@ref) the same call opens a
+[`Rehearsal`](@ref) instead, from the job folder it prepared: nothing is
+registered, and the handle holds no token, whatever is given or set.
+
+A session has one run, opened once, however the files are given: a second
+call while the run is open, or after `finalise` or [`discard`](@ref) has
+ended it, is a [`ReadWriteException`](@ref) - for a rehearsal, to `rehearse`
+again; for a recorded run, since a script making several runs is not
+supported.
+
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
 that ran cannot be recovered from its commit.
 """
-function initialise(config_file::String = FDP_PATH_CONFIG(),
-                    submission_script::String = FDP_PATH_SUBMISSION();
+function initialise(config_file::Union{Nothing, String} = nothing,
+                    submission_script::Union{Nothing, String} = nothing;
                     token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
-    print("processing config file: ", config_file)
-    config = YAML.load_file(config_file)
+    mode = _runmode(SESSION[])
+    if isnothing(config_file)
+        config_file, submission_script = _launchedfiles()
+    elseif isnothing(submission_script)
+        submission_script = _launchedscript()
+    end
+    println("processing config file: ", config_file)
+    config = _workingconfig(config_file)
     run_metadata = config["run_metadata"]
     registry = RegistryEndpoint(get(run_metadata, "local_data_registry_url",
                                     DEFAULT_REGISTRY_URL),
                                 get(run_metadata, "api_version",
                                     DEFAULT_API_VERSION),
-                                token = token)
+                                token = _runtoken(mode, token))
+    handle = _openrun(mode, config, config_file, submission_script, registry)
+    _opened(handle)
+    return handle
+end
+
+# Open a recorded code run: register the data store, the config, the script
+# and the repository, raise the issue on a repository with uncommitted
+# changes, and post the code run
+function _openrun(mode::RecordedRun, config::Dict, config_file::String,
+                  submission_script::String, registry::RegistryEndpoint)
+    run_metadata = config["run_metadata"]
     datastore = run_metadata["write_data_store"]
 
     datastore_url = _postentry(registry, "storage_root",
@@ -53,11 +83,25 @@ function initialise(config_file::String = FDP_PATH_CONFIG(),
                                "code_repo" => repo_url,
                                "model_config" => config_url,
                                "submission_script" => script_url))
-    println(" - pipeline initialised.")
+    println("pipeline initialised.")
 
-    return DataRegistryHandle(config, dirname(abspath(config_file)), registry,
-                              config_url, script_url, repo_url, datastore_url,
-                              code_run["url"], code_run["uuid"],
+    return _newhandle(mode, config, config_file, registry,
+                      (config = config_url, script = script_url,
+                       repository = repo_url, datastore = datastore_url,
+                       code_run = code_run["url"]), code_run["uuid"])
+end
+
+# A handle at the start of a run: the mode, the config and where it was read
+# from, the registry, the URLs of what `initialise` registered - `config`,
+# `script`, `repository`, `datastore` and `code_run`, each `nothing` where it
+# registered nothing - and the run's uuid, with nothing read or written yet
+function _newhandle(mode::AbstractRunMode, config::Dict, config_file::String,
+                    registry::RegistryEndpoint, registered::NamedTuple,
+                    uuid::String)
+    return DataRegistryHandle(mode, config, dirname(abspath(config_file)),
+                              registry, registered.config, registered.script,
+                              registered.repository, registered.datastore,
+                              registered.code_run, uuid,
                               Dict(), Dict(), Dict(), PendingIssue[],
                               Dict{String, SourceCitation}(),
                               Dict{String, SourceCitation}(),
@@ -70,7 +114,10 @@ end
 Complete the code run: name every output file by its hash and register it,
 register the issues raised, attach the inputs and outputs to the code run,
 and append the code run's uuid to `coderuns.txt` beside the working config,
-where the CLI's `fair add` and `fair push` find it.
+where the CLI's `fair add` and `fair push` find it. Return the data store's
+root, the folder under which the output files now sit, by namespace and data
+product. In a [`Rehearsal`](@ref) nothing is registered and the outputs are
+collected in its folder instead, which is returned.
 
 A file whose bytes are those of the highest version of its data product
 already registered is not registered again: no version is made, the file
@@ -78,7 +125,7 @@ written is removed, and it is not an output of the code run. Where a link
 call named its source, the source, authors and licence registered with that
 version must be the same as well.
 """
-function finalise(handle::DataRegistryHandle)
+function finalise(handle::DataRegistryHandle{RecordedRun})
     _checksources(handle)
     # In name order, so which of two identical outputs keeps its file, and the
     # order of the code run's inputs and outputs, are the same on every machine
@@ -103,7 +150,8 @@ function finalise(handle::DataRegistryHandle)
         return println(io, handle.code_run_uuid)
     end
     println("finished - code run locally registered as: ", url, "\n")
-    return nothing
+    _ended(handle)
+    return handle.config["run_metadata"]["write_data_store"]
 end
 
 """

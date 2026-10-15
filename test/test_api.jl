@@ -67,8 +67,8 @@ Test.@testset "link_write()" begin
         println(file, "$uid/2")
     end
 
-    # Finalise Code Run
-    DataPipeline.finalise(handle)
+    # Finalise Code Run, which returns the data store the outputs are under
+    @test DataPipeline.finalise(handle) == datastore
 
     # Check path: a temporary name in the data product's directory
     @test dirname(path1) == joinpath(datastore, namespace, data_product)
@@ -486,6 +486,7 @@ Test.@testset "raise_issue()" begin
           issues_of(registry, whole(handle.repo_obj))
 
     # Several targets at once take the same default severity as one
+    DataPipeline._resetsession!()
     several = DataPipeline.initialise(config, config)
     raise_issue(several, [DataPipeline.WorkingConfig()], "default $uid")
     @test only(several.issues).severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
@@ -493,6 +494,7 @@ Test.@testset "raise_issue()" begin
 
     # Raised again on exactly the same components, an issue is the one already
     # there; on other components, even overlapping ones, it is another
+    DataPipeline._resetsession!()
     shared = DataPipeline.initialise(config, config)
     raise_issue(shared,
                 [DataPipeline.WorkingConfig(), DataPipeline.SubmissionScript()],
@@ -701,6 +703,7 @@ Test.@testset "a run from uncommitted changes" begin
     DataPipeline.finalise(dirty)
 
     # Another run from the same state shares the one issue
+    DataPipeline._resetsession!()
     again = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(config,
                                                                                config)
     @test again.repo_obj == dirty.repo_obj
@@ -1594,6 +1597,7 @@ Test.@testset "canread() and canwrite()" begin
                            file_type = "txt", use_version = version)
     DataPipeline._addwrite(config, pattern, "description", file_type = "txt",
                            use_version = version, use_data_product = pattern)
+    DataPipeline._resetsession!()
     handle = DataPipeline.initialise(config, config)
 
     # A read entry is found by its name, or by a pattern that matches it
@@ -1616,6 +1620,7 @@ Test.@testset "canread() and canwrite()" begin
     # A name two patterns match is not covered, as link_write! refuses it
     DataPipeline._addwrite(config, "$root/*/covered", "description",
                            file_type = "txt", use_version = version)
+    DataPipeline._resetsession!()
     handle = DataPipeline.initialise(config, config)
     @test !DataPipeline.canwrite(handle, "$root/wild/covered")
     @test DataPipeline.canwrite(handle, "$root/wild/other")
@@ -1683,6 +1688,67 @@ Test.@testset "the registry token" begin
     @test_throws DataPipeline.ReadWriteException DataPipeline._patchcoderun(DataPipeline.DataRegistryHandle(fields...),
                                                                             String[],
                                                                             String[])
+end
+
+@testset "initialise() once per fair run" begin
+    # A session has one run, opened once, however the files are given: not
+    # again while it is open, nor after it has ended. The tests open many in
+    # one process by forgetting the session's run, as the helper that makes
+    # each test's config does.
+    DataPipeline._resetsession!()
+    @test isnothing(DataPipeline.SESSION[])
+    launched = DataPipeline.initialise()
+    @test launched isa DataPipeline.DataRegistryHandle{DataPipeline.RecordedRun}
+    @test DataPipeline.SESSION[].handle === launched
+    @test DataPipeline.SESSION[].job == launched.config_dir
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise()
+    @test occursin("is open", err.value.msg)
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
+                                                                               config)
+    @test occursin("is open", err.value.msg)
+    DataPipeline.finalise(launched)
+    @test DataPipeline.SESSION[].ended
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise()
+    @test occursin("recorded in this session already", err.value.msg)
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
+                                                                               config)
+    @test occursin("recorded in this session already", err.value.msg)
+    @test_throws DataPipeline.ReadWriteException DataPipeline.rehearse(dirname(config))
+    # Forgotten, the session opens another
+    DataPipeline._resetsession!()
+    another = DataPipeline.initialise(config, config)
+    @test DataPipeline.SESSION[].handle === another
+    DataPipeline.finalise(another)
+end
+
+@testset "initialise outside fair run" begin
+    DataPipeline._resetsession!()
+    withenv("FDP_CONFIG_DIR" => nothing, "FDP_LOCAL_TOKEN" => nothing) do
+        # With nothing set, the call says what `fair run` would have set
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise()
+        @test occursin("fair run", err.value.msg)
+        @test occursin("FDP_CONFIG_DIR", err.value.msg)
+
+        # A working config given alone has no script to go with it
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config)
+        @test occursin("submission script", err.value.msg)
+
+        # A job folder that is gone
+        withenv("FDP_CONFIG_DIR" => mktempdir()) do
+            err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise()
+            @test occursin("gone", err.value.msg)
+        end
+
+        # A user config, which no `fair run` has made a working config from
+        user = joinpath(mktempdir(), "config.yaml")
+        DataPipeline.YAML.write_file(user,
+                                     Dict("run_metadata" =>
+                                              Dict("description" => "A user config",
+                                                   "script" => "julia script.jl")))
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(user,
+                                                                                    user)
+        @test occursin("not a working config", err.value.msg)
+    end
 end
 
 end

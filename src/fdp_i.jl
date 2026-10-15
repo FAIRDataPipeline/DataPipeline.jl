@@ -29,6 +29,114 @@ end
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
+# The working config and the submission script of the run this script is in,
+# as `(config, script)`: the session's rehearsal's, else those `fair run`
+# launched this script with, in the folder it names in FDP_CONFIG_DIR; with
+# neither, no run was prepared
+function _launchedfiles()
+    job = _sessionjob()
+    isnothing(job) && haskey(ENV, "FDP_CONFIG_DIR") && (job = FDP_CONFIG_DIR())
+    isnothing(job) ||
+        return (config = joinpath(job, "config.yaml"),
+                script = joinpath(job, FDP_SUBMISSION_SCRIPT))
+    return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
+                                            "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
+                                            "run the script with `fair run`, prepare a rehearsal with ",
+                                            "DataPipeline.rehearse, or give initialise the working config ",
+                                            "and the submission script")))
+end
+
+# The job folder of the session's rehearsal, if one is prepared and not ended
+function _sessionjob()
+    session = SESSION[]
+    (isnothing(session) || session.ended) && return nothing
+    return session.job
+end
+
+# The mode a run opens in, or the error that it cannot: a session's one run
+# is opened once, however `initialise` is given its files
+_runmode(::Nothing) = RecordedRun()
+_runmode(session::SessionRun) = _runmode(session.mode, session)
+function _runmode(mode::Rehearsal, session::SessionRun)
+    isnothing(session.handle) && return mode
+    session.ended &&
+        throw(ReadWriteException("the rehearsal has ended: call DataPipeline.rehearse again to prepare another"))
+    return throw(ReadWriteException("the rehearsal's handle is open: finalise or discard it, or call rehearse again with restart = true"))
+end
+function _runmode(::RecordedRun, session::SessionRun)
+    session.ended &&
+        throw(ReadWriteException("a code run was recorded in this session already: a script making several runs is not supported, and whether it should be is undecided"))
+    return throw(ReadWriteException("code run $(session.handle.code_run_uuid) is open: finalise it before another initialise"))
+end
+
+# The token the run's registry holds, which a rehearsal never has, whatever
+# the environment holds
+_runtoken(::RecordedRun, token::Union{Nothing, AbstractString}) = token
+_runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
+
+# The session's run once `initialise` has opened one: the rehearsal's handle,
+# or the recorded run, in the folder its files are in
+function _opened(handle::DataRegistryHandle{Rehearsal})
+    session = SESSION[]
+    SESSION[] = SessionRun(session.mode, session.job, handle, false)
+    return nothing
+end
+function _opened(handle::DataRegistryHandle{RecordedRun})
+    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false)
+    return nothing
+end
+
+# Forget the session's run, so that `initialise` opens another: for the
+# tests, which open many runs in one process, and for whoever else knows
+# what that means - a run left open is not ended by it
+_resetsession!() = (SESSION[] = nothing; nothing)
+
+# ... and ended, where it was the session's
+function _ended(handle::DataRegistryHandle)
+    session = SESSION[]
+    (!isnothing(session) && session.handle === handle) ||
+        return nothing
+    SESSION[] = SessionRun(session.mode, session.job, handle, true)
+    return nothing
+end
+
+# The submission script `fair run` launched this script with, wanted when a
+# working config was given alone
+function _launchedscript()
+    haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_SUBMISSION()
+    return throw(ConfigFileException(string("initialise was given a working config and no submission script, ",
+                                            "and FDP_CONFIG_DIR is not set to find one beside it: give both")))
+end
+
+# The working config at `path`, the one `fair run` writes. A file that is not
+# there is a job folder that is gone; one without the data store and the commit
+# that `fair run` fills in is a user config, and no run was launched from it.
+function _workingconfig(path::AbstractString)
+    isfile(path) ||
+        throw(ConfigFileException(string("no working config at ", path,
+                                         " - a job folder that is gone, or a place `fair run` wrote none: ",
+                                         "run the script with `fair run`")))
+    config = YAML.load_file(path)
+    if !_isworkingconfig(config)
+        throw(ConfigFileException(string(path,
+                                         " is not a working config: it lacks the data store and the commit ",
+                                         "that `fair run` fills in when it writes the working config it ",
+                                         "launches a script with - run the script with `fair run`")))
+    end
+    return config
+end
+
+# Whether a config read from YAML is a working config: one with the data store
+# and the commit that `fair run` fills in
+function _isworkingconfig(config)
+    run_metadata = config isa AbstractDict ?
+                   get(config, "run_metadata", nothing) :
+                   nothing
+    return run_metadata isa AbstractDict &&
+           haskey(run_metadata, "write_data_store") &&
+           haskey(run_metadata, "latest_commit")
+end
+
 """
     _registerobject(registry, path, root, description;
                     hash, local_root, public, file_type, new_object, authors)

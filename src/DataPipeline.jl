@@ -11,6 +11,9 @@ module DataPipeline
 
 import BibInternal
 import BibParser
+import MicroMamba
+using Preferences: Preferences, @load_preference, @set_preferences!,
+                   @delete_preferences!
 using CSV
 using DataFrames
 using Dates
@@ -20,8 +23,10 @@ using JSON
 using LibGit2
 using Plots
 using SHA
+using Scratch: @get_scratch!
 using YAML
 using URIs
+using UUIDs: uuid4
 
 # The registry the CLI writes into a working config when the user has not set one
 const DEFAULT_REGISTRY_URL = "http://127.0.0.1:8000/api/"
@@ -48,8 +53,11 @@ export raise_issue
 export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
-public initialise, finalise
-public DataRegistryHandle, RegistryEndpoint
+public initialise, finalise, rehearse, discard, install_cli, install_cli!,
+       set_cli!
+public @fair_str
+public DataRegistryHandle, AbstractRunMode, RecordedRun, Rehearsal
+public RegistryEndpoint
 public ReadWriteException, ConfigFileException
 public AbstractIssueTarget, WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
@@ -66,6 +74,8 @@ include("citations.jl")
 include("authors.jl")
 include("licences.jl")
 include("sources.jl")
+include("cli.jl")
+include("rehearse.jl")
 
 include("data_prod_proc.jl")    # dp file handling
 include("api_audit.jl")         # DR audits

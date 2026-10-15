@@ -107,7 +107,23 @@ jobs:
       run: |
         source .venv/${ACTIVATE_DIR}/activate
         fair registry install
-        fair registry start
+        # On Windows the registry's start script does not wait for its server:
+        # its timeout command exits at once on a runner with no console, so it
+        # gives up within a second with no token, while the server goes on
+        # starting, and fair registry start then fails at the token. So the
+        # start's status is not trusted: the server is waited for, and the
+        # token written as the script would have, when it is missing.
+        fair registry start || echo "fair registry start failed: waiting for the server"
+        for i in $(seq 1 60); do
+          curl -sf http://127.0.0.1:8000/api/ > /dev/null && break
+          sleep 1
+        done
+        curl -sf http://127.0.0.1:8000/api/ > /dev/null || { echo "the registry is not answering"; exit 1; }
+        if [ ! -f ~/.fair/registry/token ]; then
+          DJANGO_SETTINGS_MODULE=drams.local-settings \
+            ~/.fair/registry/venv/${ACTIVATE_DIR}/python ~/.fair/registry/manage.py get_token \
+            > ~/.fair/registry/token
+        fi
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
         # --dirty: a pull_request checkout is a detached merge commit on no
@@ -137,7 +153,7 @@ jobs:
     - name: Process coverage
       uses: julia-actions/julia-processcoverage@v1
     - name: Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v7
       with:
         files: lcov.info
         token: ${{ secrets.CODECOV_TOKEN }}

@@ -5,3 +5,4 @@
 /.venv
 /.registry
 Manifest.toml
+LocalPreferences.toml
