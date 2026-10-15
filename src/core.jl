@@ -70,33 +70,33 @@ abstract type AbstractIssueTarget end
 """
     WorkingConfig()
 
-Target for [`raise_issue`](@ref): this code run's working config file.
+Target for [`raise_issue!`](@ref): this code run's working config file.
 """
 struct WorkingConfig <: AbstractIssueTarget end
 
 """
     SubmissionScript()
 
-Target for [`raise_issue`](@ref): this code run's submission script.
+Target for [`raise_issue!`](@ref): this code run's submission script.
 """
 struct SubmissionScript <: AbstractIssueTarget end
 
 """
     CodeRepository()
 
-Target for [`raise_issue`](@ref): the code repository this run was made from.
+Target for [`raise_issue!`](@ref): the code repository this run was made from.
 """
 struct CodeRepository <: AbstractIssueTarget end
 
 """
     ConfigDataProduct(data_product; component = nothing)
 
-Target for [`raise_issue`](@ref): a data product of this code run, named as it
+Target for [`raise_issue!`](@ref): a data product of this code run, named as it
 is in the working config's `read:` or `write:` section (the name passed to
 [`link_read!`](@ref), [`link_write!`](@ref) and the `read_*`/`write_*`
 functions), and optionally one named `component` of it. Resolved at
 [`finalise`](@ref), so it may name an output that is not yet written. A bare
-`String` given to `raise_issue` means this target.
+`String` given to `raise_issue!` means this target.
 """
 struct ConfigDataProduct <: AbstractIssueTarget
     data_product::String
@@ -112,11 +112,11 @@ end
 """
     ExistingDataProduct(data_product; component = nothing)
 
-Target for [`raise_issue`](@ref): a data product already in the registry,
+Target for [`raise_issue!`](@ref): a data product already in the registry,
 whether or not this code run uses it, named as the pipeline names one -
 `namespace:name@version`, or `namespace:name` for its newest version - and
 optionally one named `component` of it. A `String` of that form given to
-`raise_issue` means this target.
+`raise_issue!` means this target.
 """
 struct ExistingDataProduct <: AbstractIssueTarget
     namespace::String
@@ -137,6 +137,7 @@ struct PendingIssue
     targets::Vector{AbstractIssueTarget}
     description::String
     severity::Int
+    all_versions::Bool
 end
 
 """

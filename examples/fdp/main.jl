@@ -14,17 +14,18 @@ function pre_example()
     wc = "examples/fdp/working_config0.yaml"
     handle = DataPipeline.initialise(wc)
     ## write some data to read in later
-    DataPipeline.write_estimate(handle, 0.003,
-                                "example/estimate/contact-parameter",
-                                "contact-parameter")
-    DataPipeline.write_estimate(handle, 5.0,
-                                "example/estimate/asymptomatic-period",
-                                "asymptomatic-period")
-    DataPipeline.write_estimate(handle, 8.0, "example/estimate/recovery-period",
-                                "recovery-period")
-    DataPipeline.write_estimate(handle, 0.0004,
-                                "example/estimate/mortality-rate",
-                                "mortality-rate")
+    DataPipeline.write_estimate!(handle, 0.003,
+                                 "example/estimate/contact-parameter",
+                                 "contact-parameter")
+    DataPipeline.write_estimate!(handle, 5.0,
+                                 "example/estimate/asymptomatic-period",
+                                 "asymptomatic-period")
+    DataPipeline.write_estimate!(handle, 8.0,
+                                 "example/estimate/recovery-period",
+                                 "recovery-period")
+    DataPipeline.write_estimate!(handle, 0.0004,
+                                 "example/estimate/mortality-rate",
+                                 "mortality-rate")
     ## finalise code run
     return DataPipeline.finalise(handle)
 end
@@ -92,18 +93,18 @@ function example()
     wc = "examples/fdp/working_config1.yaml"
     handle = DataPipeline.initialise(wc)
     ## read some data:
-    beta = DataPipeline.read_estimate(handle,
-                                      "example/estimate/contact-parameter",
-                                      "contact-parameter")
-    asymp_prd = DataPipeline.read_estimate(handle,
-                                           "example/estimate/asymptomatic-period",
-                                           "asymptomatic-period")
-    recov_prd = DataPipeline.read_estimate(handle,
-                                           "example/estimate/recovery-period",
-                                           "recovery-period")
-    mortality = DataPipeline.read_estimate(handle,
-                                           "example/estimate/mortality-rate",
-                                           "mortality-rate")
+    beta = DataPipeline.read_estimate!(handle,
+                                       "example/estimate/contact-parameter",
+                                       "contact-parameter")
+    asymp_prd = DataPipeline.read_estimate!(handle,
+                                            "example/estimate/asymptomatic-period",
+                                            "asymptomatic-period")
+    recov_prd = DataPipeline.read_estimate!(handle,
+                                            "example/estimate/recovery-period",
+                                            "recovery-period")
+    mortality = DataPipeline.read_estimate!(handle,
+                                            "example/estimate/mortality-rate",
+                                            "mortality-rate")
     ## run simulation:
     parameters = [beta, asymp_prd, recov_prd, mortality]
     model = get_model()

@@ -86,8 +86,8 @@ Test.@testset "downstream() of a chain" begin
     DataPipeline.finalise(joining)
     using_second = run_with(fourth => "0.0.1", reads = [second => "0.0.1"])
     run!(using_second, [second], [fourth])
-    raise_issue(using_second, "$namespace:$second", "downstream issue $uid",
-                severity = 2)
+    raise_issue!(using_second, "$namespace:$second", "downstream issue $uid",
+                 severity = 2)
     DataPipeline.finalise(using_second)
     remaking = run!(run_with(second => "0.0.2", reads = [root => "0.0.1"]),
                     [root], [second])
@@ -228,10 +228,10 @@ Test.@testset "downstream() of a chain" begin
     coding = run_with(fifth => "0.0.1", from = fixture_sha,
                       remote = fixture_remote)
     run!(coding, String[], [fifth])
-    raise_issue(coding, DataPipeline.CodeRepository(),
-                "downstream code issue $uid", severity = 5)
-    raise_issue(coding, DataPipeline.WorkingConfig(),
-                "downstream config issue $uid", severity = 6)
+    raise_issue!(coding, DataPipeline.CodeRepository(),
+                 "downstream code issue $uid", severity = 5)
+    raise_issue!(coding, DataPipeline.WorkingConfig(),
+                 "downstream config issue $uid", severity = 6)
     DataPipeline.finalise(coding)
     code_issue = DataPipeline._getentry(registry, "issue",
                                         Dict("description" => "downstream code issue $uid"))

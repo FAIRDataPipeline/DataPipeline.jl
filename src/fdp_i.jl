@@ -334,7 +334,7 @@ Read a TOML data product and return the table of `component`.
 """
 function _readtoml(handle::DataRegistryHandle, data_product::String,
                    component::String)
-    path = _readdataproduct(handle, data_product, component)
+    path = _inputpath(handle, data_product, component)
     return TOML.parsefile(path)[component]
 end
 
@@ -818,7 +818,7 @@ function _supersede!(handle::DataRegistryHandle, namespace::String,
         push!(handle.issues,
               PendingIssue([ExistingDataProduct(superseded)],
                            "Superseded by " * label,
-                           SUPERSEDED_ISSUE_SEVERITY))
+                           SUPERSEDED_ISSUE_SEVERITY, false))
     end
     return nothing
 end
@@ -914,9 +914,58 @@ function _registerissues(handle::DataRegistryHandle)
                             (_issuecomponents(handle, target)
                              for target in issue.targets),
                             init = String[])
+        for component in copy(components)
+            for (label, other) in _samebytesversions(handle.registry,
+                                                     component)
+                if issue.all_versions
+                    other in components || push!(components, other)
+                else
+                    @warn "$label has the same bytes as the data product the issue is on: raise the issue on every such version too with `all_versions = true`"
+                end
+            end
+        end
         entry = _postissue(handle.registry, issue.severity, issue.description,
                            components)
         println("issue registered as ", entry["url"])
     end
     return nothing
+end
+
+# The other versions of the data product a component belongs to that hold
+# the same bytes, each as its name and the matching component's URL; none for
+# a component of anything but a data product with a file
+function _samebytesversions(registry::RegistryEndpoint, component_url::String)
+    component = _getentry(registry, URIs.URI(component_url))
+    object = _getentry(registry, URIs.URI(component["object"]))
+    isempty(object["data_products"]) && return Tuple{String, String}[]
+    isnothing(object["storage_location"]) && return Tuple{String, String}[]
+    hash = _getentry(registry, URIs.URI(object["storage_location"]))["hash"]
+    name = component["whole_object"] ? nothing : String(component["name"])
+    found = Tuple{String, String}[]
+    for product_url in object["data_products"]
+        product = _getentry(registry, URIs.URI(product_url))
+        namespace = _getentry(registry, URIs.URI(product["namespace"]))["name"]
+        for other in _getentries(registry, "data_product",
+                                 Dict("name" => product["name"],
+                                      "namespace" =>
+                                          _extractid(product["namespace"])))
+            other["name"] == product["name"] || continue
+            other["version"] == product["version"] && continue
+            other_object = _getentry(registry, URIs.URI(other["object"]))
+            isnothing(other_object["storage_location"]) && continue
+            _getentry(registry, URIs.URI(other_object["storage_location"]))["hash"] ==
+            hash ||
+                continue
+            matching = isnothing(name) ?
+                       _wholeobjectcomponent(registry, other["object"]) :
+                       _geturl(registry, "object_component",
+                               Dict("name" => name,
+                                    "object" => _extractid(other["object"])))
+            isnothing(matching) && continue
+            push!(found,
+                  (_dataproductname(namespace, other["name"], other["version"]),
+                   matching))
+        end
+    end
+    return found
 end

@@ -95,10 +95,10 @@ DataPipeline.install_cli!
 ## Reading data
 
 ```@docs
-read_array
-read_table
-read_estimate
-read_distribution
+read_array!
+read_table!
+read_estimate!
+read_distribution!
 link_read!
 link_read_files!
 DataPipeline.canread
@@ -107,10 +107,10 @@ DataPipeline.canread
 ## Writing data
 
 ```@docs
-write_array
-write_table
-write_estimate
-write_distribution
+write_array!
+write_table!
+write_estimate!
+write_distribution!
 link_write!
 DataPipeline.canwrite
 ```
@@ -187,7 +187,7 @@ link_register!
 ## Raising issues
 
 ```@docs
-raise_issue
+raise_issue!
 DataPipeline.AbstractIssueTarget
 DataPipeline.WorkingConfig
 DataPipeline.SubmissionScript

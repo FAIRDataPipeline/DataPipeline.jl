@@ -5,6 +5,18 @@
 
 # == Deprecated in 0.55.0 ==
 
+# The calls that change what a run registers, before they took the `!` every
+# such call carries; each is exported here, in place
+@deprecate raise_issue raise_issue!
+@deprecate read_array read_array!
+@deprecate read_table read_table!
+@deprecate read_estimate read_estimate!
+@deprecate read_distribution read_distribution!
+@deprecate write_array write_array!
+@deprecate write_table write_table!
+@deprecate write_estimate write_estimate!
+@deprecate write_distribution write_distribution!
+
 # `identify(folder)`, a git repository named by position, is replaced by
 # `identify(repo = folder)`; the method serves files too, so the warning is in
 # `identify` itself

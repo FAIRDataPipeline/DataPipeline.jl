@@ -124,7 +124,7 @@ Test.@testset "link_read()" begin
     @test handle.inputs[(data_product, nothing)]["path"] == should_be_here
 end
 
-Test.@testset "write_array()" begin
+Test.@testset "write_array!()" begin
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
@@ -135,12 +135,12 @@ Test.@testset "write_array()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_array(handle, data1, data_product, component1, "description1")
+    write_array!(handle, data1, data_product, component1, "description1")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_array(handle, data1, data_product, component1, "description1")
+    write_array!(handle, data1, data_product, component1, "description1")
     @test length(handle.outputs) == 1
-    write_array(handle, data2, data_product, component2, "description2")
+    write_array!(handle, data2, data_product, component2, "description2")
     @test length(handle.outputs) == 2
 
     path1 = handle.outputs[(data_product, component1)]["path"]
@@ -174,7 +174,7 @@ Test.@testset "write_array()" begin
     @test isfile(joinpath(datastore, should_be_here))
 end
 
-Test.@testset "read_array()" begin
+Test.@testset "read_array!()" begin
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
@@ -184,16 +184,16 @@ Test.@testset "read_array()" begin
     @test handle.outputs == Dict()
 
     # Read components
-    dat1 = read_array(handle, data_product, component1)
-    dat2 = read_array(handle, data_product, component2)
+    dat1 = read_array!(handle, data_product, component1)
+    dat2 = read_array!(handle, data_product, component2)
     @test dat1 == data1
     @test dat2 == data2
     # A second read returns the data again, not the handle key
-    @test read_array(handle, data_product, component1) == data1
+    @test read_array!(handle, data_product, component1) == data1
     @test length(handle.inputs) == 2
 
     # A component is compulsory
-    @test_throws MethodError read_array(handle, data_product)
+    @test_throws MethodError read_array!(handle, data_product)
 
     # Finalise Code Run
     DataPipeline.finalise(handle)
@@ -205,7 +205,7 @@ Test.@testset "read_array()" begin
                      handle.registry.url * "object_component/")
 end
 
-Test.@testset "write_estimate()" begin
+Test.@testset "write_estimate!()" begin
     data_product = "data_product/write_estimate/$uid"
 
     # Create working config.yaml
@@ -216,12 +216,12 @@ Test.@testset "write_estimate()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_estimate(handle, estimate1, data_product, component1, "description1")
+    write_estimate!(handle, estimate1, data_product, component1, "description1")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_estimate(handle, estimate1, data_product, component1, "description1")
+    write_estimate!(handle, estimate1, data_product, component1, "description1")
     @test length(handle.outputs) == 1
-    write_estimate(handle, estimate2, data_product, component2, "description2")
+    write_estimate!(handle, estimate2, data_product, component2, "description2")
     @test length(handle.outputs) == 2
 
     # Check data
@@ -248,7 +248,7 @@ Test.@testset "write_estimate()" begin
     @test isfile(joinpath(datastore, should_be_here))
 end
 
-Test.@testset "read_estimate()" begin
+Test.@testset "read_estimate!()" begin
     data_product = "data_product/write_estimate/$uid"
 
     # Create working config.yaml
@@ -258,13 +258,13 @@ Test.@testset "read_estimate()" begin
     @test handle.outputs == Dict()
 
     # Read components
-    dat1 = read_estimate(handle, data_product, component1)
-    dat2 = read_estimate(handle, data_product, component2)
+    dat1 = read_estimate!(handle, data_product, component1)
+    dat2 = read_estimate!(handle, data_product, component2)
     @test dat1 == estimate1
     @test dat2 == estimate2
-    @test read_estimate(handle, data_product, component1) == estimate1
+    @test read_estimate!(handle, data_product, component1) == estimate1
 
-    @test_throws MethodError read_estimate(handle, data_product)
+    @test_throws MethodError read_estimate!(handle, data_product)
 
     # Finalise Code Run
     DataPipeline.finalise(handle)
@@ -274,7 +274,7 @@ Test.@testset "read_estimate()" begin
     @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
-Test.@testset "write_distribution()" begin
+Test.@testset "write_distribution!()" begin
     data_product = "data_product/write_distribution/$uid"
 
     # Create working config.yaml
@@ -285,18 +285,18 @@ Test.@testset "write_distribution()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_distribution(handle, distribution["distribution"],
-                       distribution["parameters"],
-                       data_product, component1, "symptom-delay")
+    write_distribution!(handle, distribution["distribution"],
+                        distribution["parameters"],
+                        data_product, component1, "symptom-delay")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_distribution(handle, distribution["distribution"],
-                       distribution["parameters"],
-                       data_product, component1, "symptom-delay")
+    write_distribution!(handle, distribution["distribution"],
+                        distribution["parameters"],
+                        data_product, component1, "symptom-delay")
     @test length(handle.outputs) == 1
-    write_distribution(handle, distribution["distribution"],
-                       distribution["parameters"],
-                       data_product, component2, "symptom-delay")
+    write_distribution!(handle, distribution["distribution"],
+                        distribution["parameters"],
+                        data_product, component2, "symptom-delay")
     @test length(handle.outputs) == 2
 
     # Check data
@@ -322,7 +322,7 @@ Test.@testset "write_distribution()" begin
     @test isfile(joinpath(datastore, should_be_here))
 end
 
-Test.@testset "read_distribution()" begin
+Test.@testset "read_distribution!()" begin
     data_product = "data_product/write_distribution/$uid"
 
     # Create working config.yaml
@@ -332,8 +332,8 @@ Test.@testset "read_distribution()" begin
     @test handle.outputs == Dict()
 
     # Read components
-    dat1 = read_distribution(handle, data_product, component1)
-    dat2 = read_distribution(handle, data_product, component2)
+    dat1 = read_distribution!(handle, data_product, component1)
+    dat2 = read_distribution!(handle, data_product, component2)
     @test dat1 == distribution
     @test dat2 == distribution
 
@@ -349,7 +349,7 @@ end
 # a previous Code Run, then an error should be thrown.
 Test.@testset "new components aren't added to existing data products" begin
 
-    # write_array() -------------------------------------------------------------------
+    # write_array!() -------------------------------------------------------------------
 
     data_product = "data_product/write_array/$uid"
 
@@ -363,12 +363,13 @@ Test.@testset "new components aren't added to existing data products" begin
     msg = string("data product already exists in registry: ", data_product,
                  " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_array(handle, data1,
-                                                                  data_product,
-                                                                  component3,
-                                                                  "description3")
+    @test_throws DataPipeline.ReadWriteException(msg) write_array!(handle,
+                                                                   data1,
+                                                                   data_product,
+                                                                   component3,
+                                                                   "description3")
 
-    # write_estimate() ----------------------------------------------------------------
+    # write_estimate!() ----------------------------------------------------------------
 
     data_product = "data_product/write_estimate/$uid"
 
@@ -382,13 +383,13 @@ Test.@testset "new components aren't added to existing data products" begin
     msg = string("data product already exists in registry: ", data_product,
                  " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_estimate(handle,
-                                                                     estimate1,
-                                                                     data_product,
-                                                                     component3,
-                                                                     "description3")
+    @test_throws DataPipeline.ReadWriteException(msg) write_estimate!(handle,
+                                                                      estimate1,
+                                                                      data_product,
+                                                                      component3,
+                                                                      "description3")
 
-    # write_distribution() ------------------------------------------------------------
+    # write_distribution!() ------------------------------------------------------------
 
     data_product = "data_product/write_distribution/$uid"
 
@@ -402,12 +403,12 @@ Test.@testset "new components aren't added to existing data products" begin
     msg = string("data product already exists in registry: ", data_product,
                  " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_distribution(handle,
-                                                                         distribution["distribution"],
-                                                                         distribution["parameters"],
-                                                                         data_product,
-                                                                         component3,
-                                                                         "symptom-delay")
+    @test_throws DataPipeline.ReadWriteException(msg) write_distribution!(handle,
+                                                                          distribution["distribution"],
+                                                                          distribution["parameters"],
+                                                                          data_product,
+                                                                          component3,
+                                                                          "symptom-delay")
 end
 
 # The issues of a component, as the registry holds them
@@ -439,15 +440,15 @@ Test.@testset "names outside the convention are refused at a write" begin
     @test occursin("is not a data product name", err.value.msg)
     err = @test_throws ArgumentError link_write!(handle, dotted)
     @test occursin("'$dotted/.txt' is not a data product name", err.value.msg)
-    err = @test_throws ArgumentError write_estimate(handle, 1.0,
-                                                    spaced_namespace, "point",
-                                                    "refused")
+    err = @test_throws ArgumentError write_estimate!(handle, 1.0,
+                                                     spaced_namespace, "point",
+                                                     "refused")
     @test occursin("is not a namespace", err.value.msg)
-    err = @test_throws ArgumentError write_estimate(handle, 1.0, accepted,
-                                                    "a point", "refused")
+    err = @test_throws ArgumentError write_estimate!(handle, 1.0, accepted,
+                                                     "a point", "refused")
     @test occursin("'a point' is not a component name", err.value.msg)
     @test isempty(handle.outputs)
-    write_estimate(handle, 1.0, accepted, "a/point-1_2", "accepted")
+    write_estimate!(handle, 1.0, accepted, "a/point-1_2", "accepted")
     @test haskey(handle.outputs, (accepted, "a/point-1_2"))
     DataPipeline.finalise(handle)
 end
@@ -529,12 +530,12 @@ Test.@testset "supersede = true" begin
 
     # A component writer supersedes the same way, once for the data product
     estimating = writing(estimates, "0.0.1")
-    write_estimate(estimating, 1.0, estimates, "point", "first estimate")
+    write_estimate!(estimating, 1.0, estimates, "point", "first estimate")
     DataPipeline.finalise(estimating)
     again = writing(estimates, "0.0.2")
-    write_estimate(again, 2.0, estimates, "point", "second estimate",
-                   supersede = true)
-    write_estimate(again, 3.0, estimates, "other", "second estimate")
+    write_estimate!(again, 2.0, estimates, "point", "second estimate",
+                    supersede = true)
+    write_estimate!(again, 3.0, estimates, "other", "second estimate")
     DataPipeline.finalise(again)
     @test only(again.issues).description ==
           "Superseded by $namespace:$estimates@v0.0.2"
@@ -542,7 +543,68 @@ Test.@testset "supersede = true" begin
           [DataPipeline.ExistingDataProduct("$namespace:$estimates@v0.0.1")]
 end
 
-Test.@testset "raise_issue()" begin
+Test.@testset "the released names, deprecated, and a repeated read" begin
+    estimates = "data_product/deprecated/$uid"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, estimates, "deprecated description",
+                           file_type = "toml", use_version = version)
+    writing = DataPipeline.initialise(config, config)
+    @test write_estimate(writing, 1.5, estimates, "point", "d") ==
+          (estimates, "point")
+    @test write_distribution(writing, "Gaussian", Dict("mean" => 1.0),
+                             estimates, "spread", "d") == (estimates, "spread")
+    @test isnothing(write_table(writing, nothing, estimates, "table"))
+    raise_issue(writing, DataPipeline.WorkingConfig(), "deprecated $uid")
+    @test length(writing.issues) == 1
+    DataPipeline.finalise(writing)
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addread(config, estimates, use_version = version)
+    reading = DataPipeline.initialise(config, config)
+    @test read_estimate(reading, estimates, "point") == 1.5
+    @test read_distribution(reading, estimates, "spread")["distribution"] ==
+          "Gaussian"
+    @test isnothing(read_table(reading, estimates, "table"))
+    # A repeated read leaves the recorded input as it was
+    recorded = reading.inputs[(estimates, "point")]
+    @test read_estimate!(reading, estimates, "point") == 1.5
+    @test reading.inputs[(estimates, "point")] === recorded
+    DataPipeline.finalise(reading)
+end
+
+Test.@testset "raise_issue!() on bytes other versions share" begin
+    registry = handle.registry
+    name = "data_product/same_bytes/$uid"
+    function writing(text, use_version)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, name, "same bytes description",
+                               file_type = "txt", use_version = use_version)
+        run = DataPipeline.initialise(config, config)
+        write(link_write!(run, name), text)
+        return run
+    end
+    whole(run) = run.outputs[(name, nothing)]["component_url"]
+    first_x = writing("same bytes x $uid\n", "0.0.1")
+    DataPipeline.finalise(first_x)
+    first_y = writing("same bytes y $uid\n", "0.0.2")
+    DataPipeline.finalise(first_y)
+    # The bytes of 0.0.1 again at 0.0.3: the issue is on 0.0.3 alone, with a
+    # warning naming the keyword and 0.0.1
+    second_x = writing("same bytes x $uid\n", "0.0.3")
+    raise_issue!(second_x, name, "same bytes $uid")
+    @test_logs (:warn, r"@v0.0.1 has the same bytes.*all_versions = true") match_mode=:any DataPipeline.finalise(second_x)
+    @test DataPipeline._getentry(registry, "issue",
+                                 Dict("description" => "same bytes $uid"))["component_issues"] ==
+          [whole(second_x)]
+    # Asked for, the issue reaches every version with those bytes
+    second_y = writing("same bytes y $uid\n", "0.0.4")
+    raise_issue!(second_y, name, "all versions $uid", all_versions = true)
+    @test_logs DataPipeline.finalise(second_y)
+    @test Set(DataPipeline._getentry(registry, "issue",
+                                     Dict("description" => "all versions $uid"))["component_issues"]) ==
+          Set([whole(second_y), whole(first_y)])
+end
+
+Test.@testset "raise_issue!()" begin
     written = "data_product/link_write/$uid"
     estimates = "data_product/write_estimate/$uid"
     data_product = "data_product/raise_issue/$uid"
@@ -556,26 +618,26 @@ Test.@testset "raise_issue()" begin
     @test isempty(handle.issues)
 
     # Queued, not registered, until finalise
-    raise_issue(handle, DataPipeline.WorkingConfig(), "config $uid",
-                severity = 3)
-    raise_issue(handle,
-                [
-                    DataPipeline.SubmissionScript(),
-                    DataPipeline.CodeRepository()
-                ], "run $uid",
-                severity = 7)
-    raise_issue(handle, written, "input $uid")
-    raise_issue(handle,
-                DataPipeline.ConfigDataProduct(data_product,
-                                               component = component1),
-                "output $uid", severity = 1)
-    raise_issue(handle,
-                DataPipeline.ExistingDataProduct("$namespace:$estimates@v$version",
-                                                 component = component2),
-                "existing $uid", severity = 2)
+    raise_issue!(handle, DataPipeline.WorkingConfig(), "config $uid",
+                 severity = 3)
+    raise_issue!(handle,
+                 [
+                     DataPipeline.SubmissionScript(),
+                     DataPipeline.CodeRepository()
+                 ], "run $uid",
+                 severity = 7)
+    raise_issue!(handle, written, "input $uid")
+    raise_issue!(handle,
+                 DataPipeline.ConfigDataProduct(data_product,
+                                                component = component1),
+                 "output $uid", severity = 1)
+    raise_issue!(handle,
+                 DataPipeline.ExistingDataProduct("$namespace:$estimates@v$version",
+                                                  component = component2),
+                 "existing $uid", severity = 2)
     # A string holding a colon names a registered data product: its newest
     # version, with none given
-    raise_issue(handle, "$namespace:$estimates", "newest $uid")
+    raise_issue!(handle, "$namespace:$estimates", "newest $uid")
     @test length(handle.issues) == 6
     @test handle.issues[6].targets ==
           [DataPipeline.ExistingDataProduct("$namespace:$estimates")]
@@ -585,14 +647,14 @@ Test.@testset "raise_issue()" begin
                                            Dict("description" => "config $uid")))
 
     # A data product not in the config is rejected at once
-    @test_throws DataPipeline.ConfigFileException raise_issue(handle,
-                                                              "not/in/config",
-                                                              "bad")
-    @test_throws ArgumentError raise_issue(handle, "no such:name", "bad")
+    @test_throws DataPipeline.ConfigFileException raise_issue!(handle,
+                                                               "not/in/config",
+                                                               "bad")
+    @test_throws ArgumentError raise_issue!(handle, "no such:name", "bad")
     @test length(handle.issues) == 6
 
     link_read!(handle, written)
-    write_estimate(handle, estimate1, data_product, component1, "description1")
+    write_estimate!(handle, estimate1, data_product, component1, "description1")
     DataPipeline.finalise(handle)
 
     # Each call is one registry issue, on the components of its targets
@@ -624,7 +686,7 @@ Test.@testset "raise_issue()" begin
     # Several targets at once take the same default severity as one
     DataPipeline._resetsession!()
     several = DataPipeline.initialise(config, config)
-    raise_issue(several, [DataPipeline.WorkingConfig()], "default $uid")
+    raise_issue!(several, [DataPipeline.WorkingConfig()], "default $uid")
     @test only(several.issues).severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
     DataPipeline.finalise(several)
 
@@ -632,11 +694,14 @@ Test.@testset "raise_issue()" begin
     # there; on other components, even overlapping ones, it is another
     DataPipeline._resetsession!()
     shared = DataPipeline.initialise(config, config)
-    raise_issue(shared,
-                [DataPipeline.WorkingConfig(), DataPipeline.SubmissionScript()],
-                "shared $uid")
-    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
-    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    raise_issue!(shared,
+                 [
+                     DataPipeline.WorkingConfig(),
+                     DataPipeline.SubmissionScript()
+                 ],
+                 "shared $uid")
+    raise_issue!(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    raise_issue!(shared, DataPipeline.WorkingConfig(), "shared $uid")
     DataPipeline.finalise(shared)
     function shared_on(component_url)
         return [entry
@@ -921,8 +986,8 @@ Test.@testset "identify() a git repository" begin
         run_handle = DataPipeline.initialise(config, config)
         write(link_write!(run_handle, data_product), "$name $uid\n")
         isnothing(issue) ||
-            raise_issue(run_handle, DataPipeline.CodeRepository(), issue,
-                        severity = 4)
+            raise_issue!(run_handle, DataPipeline.CodeRepository(), issue,
+                         severity = 4)
         DataPipeline.finalise(run_handle)
         return data_product
     end
@@ -1239,7 +1304,7 @@ Test.@testset "link_write!() with a wildcard entry" begin
 
     # A component write reaches the same lookup
     estimates = "data_product/wild/$uid/estimates"
-    write_estimate(handle, estimate1, estimates, component1, "description1")
+    write_estimate!(handle, estimate1, estimates, component1, "description1")
     @test handle.outputs[(estimates, component1)]["use_dp"] == estimates
     @test endswith(handle.outputs[(estimates, component1)]["path"], ".toml")
 
@@ -1360,7 +1425,7 @@ Test.@testset "\${{RUN_ID}} in an output name" begin
     # in a directory named with it
     @test occursin("\${{ RUN_ID }}", path)
     write(path, "run id $uid\n")
-    raise_issue(handle, data_product, "run id issue $uid")
+    raise_issue!(handle, data_product, "run id issue $uid")
     DataPipeline.finalise(handle)
 
     registered = replace(use_name, "\${{ RUN_ID }}" => handle.code_run_uuid)
@@ -1645,7 +1710,7 @@ Test.@testset "an output that is registered already" begin
     handle = offering("0.0.2")
     written = link_write!(handle, name)
     write(written, "written $uid\n")
-    raise_issue(handle, name, "written twice $uid")
+    raise_issue!(handle, name, "written twice $uid")
     DataPipeline.finalise(handle)
     @test !isfile(written)
     @test readdir(dirname(registered)) == [basename(registered)]
@@ -1673,7 +1738,7 @@ Test.@testset "an output that is registered already" begin
     stored = link_write!(handle, name, path = given)
     @test isempty(handle.outputs)
     @test handle.unchanged[(name, nothing)]["path"] == stored
-    raise_issue(handle, name, "given again $uid")
+    raise_issue!(handle, name, "given again $uid")
     DataPipeline.finalise(handle)
     @test raised(newer) == ["given again $uid"]
     @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
@@ -1683,7 +1748,7 @@ Test.@testset "an output that is registered already" begin
     estimates = ("a/b" => 1.5, "c/d" => 2.5)
     handle = offering("0.0.1")
     for (part, value) in estimates
-        write_estimate(handle, value, tabled, part, "an estimate")
+        write_estimate!(handle, value, tabled, part, "an estimate")
     end
     DataPipeline.finalise(handle)
     @test length(code_run_of(handle)["outputs"]) == 2
@@ -1691,7 +1756,7 @@ Test.@testset "an output that is registered already" begin
                  for (key, metadata) in handle.outputs)
     handle = offering("0.0.2")
     for (part, value) in estimates
-        write_estimate(handle, value, tabled, part, "an estimate")
+        write_estimate!(handle, value, tabled, part, "an estimate")
     end
     DataPipeline.finalise(handle)
     @test registered_versions(registry, tabled) == ["0.0.1"]
@@ -1701,8 +1766,8 @@ Test.@testset "an output that is registered already" begin
     @test isempty(code_run_of(handle)["outputs"])
     # ... and with one of them changed it is the next version
     handle = offering("0.0.2")
-    write_estimate(handle, 1.5, tabled, "a/b", "an estimate")
-    write_estimate(handle, 3.5, tabled, "c/d", "an estimate")
+    write_estimate!(handle, 1.5, tabled, "a/b", "an estimate")
+    write_estimate!(handle, 3.5, tabled, "c/d", "an estimate")
     DataPipeline.finalise(handle)
     @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2"]
     @test length(code_run_of(handle)["outputs"]) == 2
@@ -1721,7 +1786,7 @@ Test.@testset "an output that is registered already" begin
         # Times are kept to the second: the second run writes in another
         offered == "0.0.2" && sleep(1.5)
         for (part, array) in arrays
-            write_array(handle, array, arrayed, part, "an array")
+            write_array!(handle, array, arrayed, part, "an array")
         end
         DataPipeline.finalise(handle)
         @test registered_versions(registry, arrayed) == versions

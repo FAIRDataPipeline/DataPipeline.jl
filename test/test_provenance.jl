@@ -177,11 +177,11 @@ Test.@testset "provenance() of a chain" begin
     modelling = run_with(result => "0.0.1", reads = [fetched])
     link_read!(modelling, fetched)
     write(link_write!(modelling, result), "provenance result $uid\n")
-    raise_issue(modelling, "$namespace:$fetched", "fetched issue $uid",
-                severity = 2)
-    raise_issue(modelling, DataPipeline.CodeRepository(),
-                "repository issue $uid", severity = 4)
-    raise_issue(modelling, [fetched, result], "pair issue $uid", severity = 3)
+    raise_issue!(modelling, "$namespace:$fetched", "fetched issue $uid",
+                 severity = 2)
+    raise_issue!(modelling, DataPipeline.CodeRepository(),
+                 "repository issue $uid", severity = 4)
+    raise_issue!(modelling, [fetched, result], "pair issue $uid", severity = 3)
     DataPipeline.finalise(modelling)
     # A third run reads the result and the file itself: a diamond
     summarising = run_with(final => "0.0.1", reads = [result, fetched])

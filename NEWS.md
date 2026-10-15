@@ -93,6 +93,14 @@
     `link_register!` takes the form in place of its `namespace` and `version`
     keywords, `ExistingDataProduct` takes it (the three-part constructor is
     deprecated), `raise_issue` takes it bare, and `identify` prints it.
+  - Every call that changes what a run registers ends in `!`: `raise_issue!`,
+    `read_array!`, `read_table!`, `read_estimate!`, `read_distribution!`,
+    `write_array!`, `write_table!`, `write_estimate!` and `write_distribution!`,
+    the old names kept as deprecations.
+  - `raise_issue!` warns at `finalise` when the data product's bytes are
+    registered as other versions of it too, and with `all_versions = true`
+    raises the issue on every such version. A repeated `read_estimate!` or
+    `read_distribution!` no longer looks its input up afresh.
   - `supersede = true` on `link_write!`, `link_register!` and the component
     writers raises an issue on the version a new version supersedes, at
     severity 0, so that what was made from the old version reports it; where

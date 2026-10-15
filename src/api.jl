@@ -302,49 +302,49 @@ function _inputpath(handle::DataRegistryHandle, data_product::String,
 end
 
 """
-    read_array(handle, data_product, component)
+    read_array!(handle, data_product, component)
 
 Read `component` of an HDF5 `read:` data product of the working config as an
 array, recording it as an input.
 """
-function read_array(handle::DataRegistryHandle, data_product::String,
-                    component::String)
+function read_array!(handle::DataRegistryHandle, data_product::String,
+                     component::String)
     path = _inputpath(handle, data_product, component)
     return process_h5_file(path, false)["/$component"]
 end
 
 """
-    read_table(handle, data_product, component)
+    read_table!(handle, data_product, component)
 
 Read a table data product. Not yet implemented: returns `nothing`.
 
-See also: [`write_table`](@ref), [`read_array`](@ref).
+See also: [`write_table!`](@ref), [`read_array!`](@ref).
 """
-function read_table(handle::DataRegistryHandle, data_product::String,
-                    component::String)
+function read_table!(handle::DataRegistryHandle, data_product::String,
+                     component::String)
     return nothing
 end
 
 """
-    read_estimate(handle, data_product, component)
+    read_estimate!(handle, data_product, component)
 
 Read the value of the point estimate `component` of a TOML `read:` data
 product of the working config, recording it as an input.
 """
-function read_estimate(handle::DataRegistryHandle, data_product::String,
-                       component::String)
+function read_estimate!(handle::DataRegistryHandle, data_product::String,
+                        component::String)
     return _readtoml(handle, data_product, component)["value"]
 end
 
 """
-    read_distribution(handle, data_product, component)
+    read_distribution!(handle, data_product, component)
 
 Read the distribution `component` of a TOML `read:` data product of the
 working config as a `Dict` with `distribution`, `parameters` and `type`,
 recording it as an input.
 """
-function read_distribution(handle::DataRegistryHandle, data_product::String,
-                           component::String)
+function read_distribution!(handle::DataRegistryHandle, data_product::String,
+                            component::String)
     return _readtoml(handle, data_product, component)
 end
 
@@ -617,7 +617,7 @@ function link_register!(handle::DataRegistryHandle, data_product::String;
 end
 
 """
-    write_array(handle, data, data_product, component, description;
+    write_array!(handle, data, data_product, component, description;
                 supersede = false)
 
 Write `data` as `component` of an HDF5 `write:` data product of the working
@@ -627,12 +627,12 @@ are found to be registered already. `supersede` is as for
 [`link_write!`](@ref): the data product's new version supersedes the one
 before it.
 
-See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
+See also: [`write_table!`](@ref), [`read_array!`](@ref), [`read_table!`](@ref)
 """
-function write_array(handle::DataRegistryHandle, data::Array,
-                     data_product::String,
-                     component::String, description::String;
-                     supersede::Bool = false)
+function write_array!(handle::DataRegistryHandle, data::Array,
+                      data_product::String,
+                      component::String, description::String;
+                      supersede::Bool = false)
     key = (data_product, component)
     if haskey(handle.outputs, key)
         supersede && (handle.outputs[key]["supersede"] = true)
@@ -657,19 +657,19 @@ function write_array(handle::DataRegistryHandle, data::Array,
 end
 
 """
-    write_table(handle, data, data_product, component)
+    write_table!(handle, data, data_product, component)
 
 Write a table data product. Not yet implemented: returns `nothing`.
 
-See also: [`write_array`](@ref), [`read_array`](@ref), [`read_table`](@ref)
+See also: [`write_array!`](@ref), [`read_array!`](@ref), [`read_table!`](@ref)
 """
-function write_table(handle::DataRegistryHandle, data, data_product::String,
-                     component::String)
+function write_table!(handle::DataRegistryHandle, data, data_product::String,
+                      component::String)
     return nothing
 end
 
 """
-    write_estimate(handle, value, data_product, component, description;
+    write_estimate!(handle, value, data_product, component, description;
                    supersede = false)
 
 Write `value` as the point estimate `component` of a TOML `write:` data
@@ -677,9 +677,10 @@ product of the working config, recording it as an output, and return
 `(data_product, component)`. `supersede` is as for [`link_write!`](@ref):
 the data product's new version supersedes the one before it.
 """
-function write_estimate(handle::DataRegistryHandle, value, data_product::String,
-                        component::String, description::String;
-                        supersede::Bool = false)
+function write_estimate!(handle::DataRegistryHandle, value,
+                         data_product::String,
+                         component::String, description::String;
+                         supersede::Bool = false)
     key = (data_product, component)
     if haskey(handle.outputs, key)
         supersede && (handle.outputs[key]["supersede"] = true)
@@ -692,7 +693,7 @@ function write_estimate(handle::DataRegistryHandle, value, data_product::String,
 end
 
 """
-    write_distribution(handle, distribution, parameters, data_product,
+    write_distribution!(handle, distribution, parameters, data_product,
                        component, description; supersede = false)
 
 Write a `distribution` (its name, and a `Dict` of `parameters`) as
@@ -701,10 +702,10 @@ it as an output, and return `(data_product, component)`. `supersede` is as
 for [`link_write!`](@ref): the data product's new version supersedes the one
 before it.
 """
-function write_distribution(handle::DataRegistryHandle, distribution::String,
-                            parameters,
-                            data_product::String, component::String,
-                            description::String; supersede::Bool = false)
+function write_distribution!(handle::DataRegistryHandle, distribution::String,
+                             parameters,
+                             data_product::String, component::String,
+                             description::String; supersede::Bool = false)
     key = (data_product, component)
     if haskey(handle.outputs, key)
         supersede && (handle.outputs[key]["supersede"] = true)
@@ -719,8 +720,10 @@ function write_distribution(handle::DataRegistryHandle, distribution::String,
 end
 
 """
-    raise_issue(handle, target, description; severity = $DEFAULT_ISSUE_SEVERITY)
-    raise_issue(handle, targets, description; severity = $DEFAULT_ISSUE_SEVERITY)
+    raise_issue!(handle, target, description; severity = $DEFAULT_ISSUE_SEVERITY,
+                 all_versions = false)
+    raise_issue!(handle, targets, description; severity = $DEFAULT_ISSUE_SEVERITY,
+                 all_versions = false)
 
 Raise an issue with one thing, or with several at once as one registry issue.
 A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
@@ -734,22 +737,31 @@ a data product of this run by its config name, as
 default. Issues are queued in the handle
 and registered by [`finalise`](@ref), so an output can be named before it
 is written.
+
+A data product's bytes may be registered as other versions of the same data
+product too, which the issue would then not reach. `finalise` looks for them,
+and warns of any; with `all_versions = true` it raises the issue on every
+such version as well, as one issue over their components. There is no
+prompt, since a script may run where no one can answer.
 """
-function raise_issue(handle::DataRegistryHandle, targets::AbstractVector,
-                     description::String;
-                     severity::Integer = DEFAULT_ISSUE_SEVERITY)
+function raise_issue!(handle::DataRegistryHandle, targets::AbstractVector,
+                      description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
     resolved = AbstractIssueTarget[_astarget(target) for target in targets]
     for target in resolved
         _checktarget(handle, target)
     end
-    push!(handle.issues, PendingIssue(resolved, description, severity))
+    push!(handle.issues,
+          PendingIssue(resolved, description, severity, all_versions))
     return nothing
 end
-function raise_issue(handle::DataRegistryHandle,
-                     target::Union{AbstractIssueTarget, AbstractString},
-                     description::String;
-                     severity::Integer = DEFAULT_ISSUE_SEVERITY)
-    return raise_issue(handle, [target], description, severity = severity)
+function raise_issue!(handle::DataRegistryHandle,
+                      target::Union{AbstractIssueTarget, AbstractString},
+                      description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(handle, [target], description; severity, all_versions)
 end
 
 # A bare string names a data product: of this run by its config name, or a
