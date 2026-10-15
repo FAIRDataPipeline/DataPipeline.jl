@@ -38,6 +38,9 @@
     root, or a rehearsal's folder.
   - `initialise()` outside `fair run` throws a `ConfigFileException` saying
     what sets a run up, rather than a `SystemError` or `KeyError`.
+  - `RegistryEndpoint(; remote)` reads the registry's token from the file the
+    CLI's configuration names beside its address, when none is given and the
+    file exists: the token the CLI holds for that registry, sent to it alone.
   - `DataRegistryHandle` takes a type parameter, the run's mode, `RecordedRun`
     or `Rehearsal`; its registry URL fields are `nothing` in a rehearsal.
   - New dependencies: MicroMamba, Preferences and Scratch. Every standard

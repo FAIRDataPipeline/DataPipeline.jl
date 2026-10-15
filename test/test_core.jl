@@ -56,19 +56,46 @@ Test.@testset "RegistryEndpoint() from the CLI's configuration" begin
         local_registry = DataPipeline.RegistryEndpoint()
         @test local_registry.url == "http://127.0.0.1:8123/api/"
         @test local_registry.api_version == DataPipeline.DEFAULT_API_VERSION
-        @test isnothing(local_registry.token)
+        @test isnothing(local_registry.token)        # no token file named
+        @test DataPipeline.RegistryEndpoint(token = "secret").token == "secret"
+
+        # The token is read from the file the entry names, stripped, when
+        # the file exists and holds one; a token given wins
+        token_file = joinpath(home, ".fair", "registry", "token")
+        mkpath(dirname(token_file))
+        DataPipeline.YAML.write_file(joinpath(home, ".fair", "cli",
+                                              "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("local" =>
+                                                       Dict("uri" => "http://127.0.0.1:8123/api/",
+                                                            "token" =>
+                                                                token_file))))
+        @test isnothing(DataPipeline.RegistryEndpoint().token)   # not yet written
+        write(token_file, "\n")
+        @test isnothing(DataPipeline.RegistryEndpoint().token)   # empty
+        write(token_file, "localsecret\n")
+        @test DataPipeline.RegistryEndpoint().token == "localsecret"
         @test DataPipeline.RegistryEndpoint(token = "secret").token == "secret"
 
         # A remote is looked up in the project's configuration, found by
-        # walking up from the current directory
+        # walking up from the current directory, with a token file of its
+        # own: the local registry's is never sent to it
+        remote_token_file = joinpath(home, ".fair", "cli", "remotetoken.txt")
+        write(remote_token_file, "remotesecret")
         DataPipeline.YAML.write_file(joinpath(project, ".fair",
                                               "cli-config.yaml"),
                                      Dict("registries" =>
                                               Dict("origin" =>
-                                                       Dict("uri" => "https://example.org/api/"))))
+                                                       Dict("uri" => "https://example.org/api/",
+                                                            "token" =>
+                                                                remote_token_file),
+                                                   "tokenless" =>
+                                                       Dict("uri" => "https://example.net/api/"))))
         cd(joinpath(project, "sub", "dir")) do
-            @test DataPipeline.RegistryEndpoint(remote = "origin").url ==
-                  "https://example.org/api/"
+            origin = DataPipeline.RegistryEndpoint(remote = "origin")
+            @test origin.url == "https://example.org/api/"
+            @test origin.token == "remotesecret"
+            @test isnothing(DataPipeline.RegistryEndpoint(remote = "tokenless").token)
             err = try
                 DataPipeline.RegistryEndpoint(remote = "elsewhere")
             catch e

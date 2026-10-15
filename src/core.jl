@@ -35,12 +35,17 @@ local registry, `registries.local.uri` in `~/.fair/cli/cli-config.yaml` (or
 `$DEFAULT_REGISTRY_URL` when there is no such file); or, when `remote` names
 one, that remote registry, `registries.<remote>.uri` in the
 `.fair/cli-config.yaml` of the project found by walking up from the current
-directory. The API version is the default, and the `token` is as for
-[`RegistryEndpoint`](@ref).
+directory. The API version is the default. The `token` is as for
+[`RegistryEndpoint`](@ref); given none, it is read from the file that the same
+entry names as `token` - the local registry's, written as it starts, or the
+file a remote was added with - when there is one and it exists, so that a
+registry is written to with the token the CLI holds for it and no other.
 """
 function RegistryEndpoint(; remote::Union{Nothing, AbstractString} = nothing,
                           token::Union{Nothing, AbstractString} = nothing)
-    return RegistryEndpoint(_cliregistryurl(remote), token = token)
+    entry = _cliregistry(remote)
+    return RegistryEndpoint(entry.uri,
+                            token = isnothing(token) ? entry.token : token)
 end
 
 function Base.show(io::IO, registry::RegistryEndpoint)
@@ -375,38 +380,49 @@ function _requiretoken(registry::RegistryEndpoint)
                                            "FDP_LOCAL_TOKEN, or pass `token`")))
 end
 
-# The URL of the local registry in the CLI's global configuration, or the CLI's
-# default when there is none
-function _cliregistryurl(::Nothing)
+# The local registry in the CLI's global configuration - its URL and the token
+# its file holds - or the CLI's default and no token when there is none
+function _cliregistry(::Nothing)
     path = joinpath(homedir(), ".fair", "cli", "cli-config.yaml")
-    isfile(path) || return DEFAULT_REGISTRY_URL
-    return _registryuri(path, "local")
+    isfile(path) || return (uri = DEFAULT_REGISTRY_URL, token = nothing)
+    return _registryentry(path, "local")
 end
 
-# The URL of the registry called `remote` in the configuration of the project
-# the current directory belongs to
-function _cliregistryurl(remote::AbstractString)
+# The registry called `remote` in the configuration of the project the current
+# directory belongs to
+function _cliregistry(remote::AbstractString)
     project = _fairroot(pwd())
     isnothing(project) &&
         throw(ConfigFileException("no `.fair` folder in $(pwd()) or above it - run `fair init` in the project"))
     path = joinpath(project, ".fair", "cli-config.yaml")
     isfile(path) ||
         throw(ConfigFileException("no CLI configuration at $path - run `fair init` in the project"))
-    return _registryuri(path, remote)
+    return _registryentry(path, remote)
 end
 
-# The `uri` of registry `name` in the CLI configuration file at `path`
-function _registryuri(path::AbstractString, name::AbstractString)
+# The registry `name` in the CLI configuration file at `path`: its `uri`, and
+# the token read from the file its `token` names
+function _registryentry(path::AbstractString, name::AbstractString)
     config = something(YAML.load_file(path), Dict())
     registries = something(get(config, "registries", nothing), Dict())
     entry = get(registries, name, nothing)
     entry isa AbstractDict && haskey(entry, "uri") &&
-        return String(entry["uri"])
+        return (uri = String(entry["uri"]), token = _tokenfromfile(entry))
     return throw(ConfigFileException(string("no registry '", name, "' in the ",
                                             "CLI configuration at ", path,
                                             ", which has: ",
                                             join(sort!(string.(keys(registries))),
                                                  ", "))))
+end
+
+# The token in the file a configuration entry names as `token`, stripped as the
+# CLI reads it, or `nothing` where the entry names none, or the file is missing
+# or empty
+function _tokenfromfile(entry::AbstractDict)
+    file = get(entry, "token", nothing)
+    file isa AbstractString && isfile(file) || return nothing
+    token = strip(read(file, String))
+    return isempty(token) ? nothing : String(token)
 end
 
 # The nearest folder at or above `dir` holding a `.fair` folder, as the CLI
