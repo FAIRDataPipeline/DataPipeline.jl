@@ -74,6 +74,9 @@
     elsewhere. `DataPipeline.downstream(x)` traces the other way, to everything
     made from a data product, or from the runs of a repository with
     `repo = `, so that what a problem in it affects can be made again.
+    `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
+    files, folders and data products named, as its metadata or saved as a
+    zip with `to = "paper.zip"`.
   - `identify` of a file also reports the issues raised on anything behind it,
     each with the run it reaches the file through, and with `superseded = true`
     the inputs behind it that a newer version of has been registered since.

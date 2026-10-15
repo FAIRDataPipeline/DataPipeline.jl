@@ -69,8 +69,9 @@ public identify
 public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
 public UpstreamIssue, OutdatedInput
 public RepositoryIdentification, RegisteredCommit, CodeRunRecord
-# Tracing where a data product came from, and what was made from it
-public provenance, downstream
+# Tracing where a data product came from, what was made from it, and the
+# crate that packs files with their provenance
+public provenance, downstream, crate
 public Trace
 public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
 public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
@@ -87,6 +88,7 @@ include("data_prod_proc.jl")    # dp file handling
 include("provenance.jl")
 include("api_audit.jl")         # DR audits
 include("downstream.jl")
+include("crate.jl")
 
 include("testing.jl")
 include("deprecated.jl")
