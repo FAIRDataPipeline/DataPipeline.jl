@@ -992,4 +992,3 @@ function _commitorder(commit::RegisteredCommit)
     earliest = minimum(run.run_date for run in commit.runs)
     return (1, -Dates.value(earliest), commit.sha, commit.dirty)
 end
-

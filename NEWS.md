@@ -72,14 +72,13 @@
   - The abstract supertypes `AbstractIssueTarget` and `AbstractCommitSelection`
     are no longer `public`: they annotate arguments and are not for extending.
   - `DataPipeline.provenance(x)` traces where a data product came from - `x` a
-    file or `namespace:name@version` - as a `Trace`, which prints as a tree:
-    each run with its commit, what it read, each input's source and issues,
-    and the version that has superseded it, back to the data registered from
-    elsewhere. `DataPipeline.downstream(x)` traces the other way, to everything
-    made from a data product, or from the runs of a repository with
-    `repo = `, or from everything an issue is raised on with `issue = `, so
-    that what a problem affects can be made again.
-    `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
+    file or `namespace:name@version` - as a `Trace`, printed as a tree: each
+    run at its commit, what it read, each input's source, issues and the
+    version that supersedes it, back to the data registered from elsewhere.
+  - `DataPipeline.downstream(x)` traces the other way, to everything made from
+    a data product, from the runs of a repository with `repo = `, or from
+    everything an issue is raised on with `issue = `: what must be made again.
+  - `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
     files, folders and data products named, as its metadata or saved as a
     zip with `to = "paper.zip"`.
   - `identify` of a file also reports the issues raised on anything behind it,
