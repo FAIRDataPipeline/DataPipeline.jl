@@ -11,6 +11,10 @@
     - A source is one file: a second file under one identifier, title and
       release version is refused, at the call or at `finalise`.
     - Registering a source needs `data-registry` v1.4.0 or later.
+    - `registry_audit`, `registry_audit_recursive` and `record_issues!` are
+      removed: written for the registry's 2021 schema, they could not run
+      against any registry since. `provenance` and `downstream` are what they
+      were for.
   - `DataPipeline.rehearse(path)` runs a script through the pipeline without
     recording it: `fair run --ci --dirty` prepares the job for a user config
     (a job folder, or its working config, may be given instead), the script
