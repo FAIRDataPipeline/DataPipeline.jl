@@ -148,7 +148,7 @@ function _preparejob(config::String, local_only::Bool)
     root = _fairroot(dirname(config))
     isnothing(root) &&
         throw(ArgumentError("$config is in no FAIR project: run `fair init` in the repository that holds it"))
-    command = `$(_faircommand(nothing)) run --ci --dirty $(local_only ? ["--local"] : String[]) $config`
+    command = _withenvironment(`$(_faircommand(nothing)) run --ci --dirty $(local_only ? ["--local"] : String[]) $config`)
     output = IOBuffer()
     process = run(pipeline(Cmd(ignorestatus(command), dir = root),
                            stdout = output, stderr = output))

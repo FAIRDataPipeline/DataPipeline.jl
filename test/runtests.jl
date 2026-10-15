@@ -18,8 +18,12 @@ for t in testbase
 end
 println()
 
-@testset "* Testing $t.jl" for t in testbase
-    include("test_$t.jl")
+# One testset over the files, so that a file with a failure does not stop
+# the files after it: a testset at the top level throws at its end
+@testset "DataPipeline" begin
+    @testset "* Testing $t.jl" for t in testbase
+        include("test_$t.jl")
+    end
 end
 
 # Identify tests with no matching file

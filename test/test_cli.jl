@@ -36,8 +36,12 @@ Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
     @test occursin(r"\d+\.\d+\.\d+", version)
     # Run again, the copy is up to date, and the call quick
     @test DataPipeline.install_cli() == executable
-    # The copy runs
+    # The copy runs, with its own git and nothing else on the path
+    @test isfile(DataPipeline._cligit(DataPipeline._clifolder()))
     @test isnothing(DataPipeline._fair("--version", cli = executable))
+    withenv("PATH" => "") do
+        @test isnothing(DataPipeline._fair("--version", cli = executable))
+    end
 
     # With nothing recorded and fair off the path, the copy is the fair run.
     # The path keeps everything but fair, since the CLI needs git on it

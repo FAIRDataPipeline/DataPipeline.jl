@@ -26,8 +26,8 @@
   - `DataPipeline.set_cli!(path)` records the `fair` to use, as a preference
     of the active environment that holds across sessions.
   - `DataPipeline.install_cli()` installs the package's own copy of `fair`, or
-    brings it up to date, in a scratch space, with a Python that MicroMamba
-    fetches: for a Julia with no virtual environment on its path, and to set
+    brings it up to date, in a scratch space, with a Python and a git that
+    MicroMamba fetches: for a Julia with no virtual environment on its path, and to set
     the registry up from Julia with `DataPipeline.fair"registry install"`.
     `install_cli!` records the copy as the `fair` to use as well.
   - `finalise()` returns the folder the outputs are under: the data store's

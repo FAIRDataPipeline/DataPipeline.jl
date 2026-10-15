@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 # The pipeline's command-line tool from Julia: finding `fair`, running it, and
-# installing a copy of the package's own, with a Python of its own, for a
+# installing a copy of the package's own, with a Python and a git of its own, for a
 # Julia that has no virtual environment on its path.
 
 # The Python the package's copy of the CLI runs on: the minor version the CLI's
@@ -31,7 +31,7 @@ end
 # found - and throw on an exit status other than 0
 function _fair(arguments::AbstractString...;
                cli::Union{Nothing, AbstractString, Cmd} = nothing)
-    command = `$(_faircommand(cli)) $arguments`
+    command = _withenvironment(`$(_faircommand(cli)) $arguments`)
     process = run(ignorestatus(command))
     success(process) ||
         throw(ReadWriteException("`fair $(join(arguments, " "))` failed with exit status $(process.exitcode)"))
@@ -54,9 +54,9 @@ function set_cli!(path::AbstractString)
     isfile(executable) ||
         throw(ArgumentError("no file at $executable to record as fair"))
     try
-        read(`$executable --version`, String)
+        read(_withenvironment(`$executable --version`), String)
     catch
-        throw(ArgumentError("$executable does not run as fair: `--version` failed"))
+        throw(ArgumentError("$executable does not run as fair: `--version` failed (the CLI needs git on the path)"))
     end
     @set_preferences!("cli" => executable)
     return executable
@@ -71,10 +71,10 @@ end
 
 Install the package's own copy of `fair`, or bring it up to date, and return
 the path of its executable. The copy lives in a scratch space of the
-package's, with a Python of its own that MicroMamba fetches from conda-forge,
-so it needs no Python on the machine and no virtual environment, and
-[`rehearse`](@ref) and [`@fair_str`](@ref) use it when no `fair` is on the
-path.
+package's, with a Python and a git of its own that MicroMamba fetches from
+conda-forge, so it needs no Python, no git and no virtual environment on the
+machine, and [`rehearse`](@ref) and [`@fair_str`](@ref) use it when no `fair`
+is on the path, running it with its own programs on the path.
 `fair-cli` is installed from PyPI at its newest version, or at `version`; run
 again, the call brings the copy up to date, printing its version before and
 after. The Python is $CLI_PYTHON unless `python` names another minor version;
@@ -99,8 +99,11 @@ function install_cli(;
                     " no longer runs: rebuilding it")
         end
         rm(folder, recursive = true, force = true)
-        run(MicroMamba.cmd(`create --yes --quiet --prefix $folder python=$wanted pip --channel conda-forge --override-channels`))
+        run(MicroMamba.cmd(`create --yes --quiet --prefix $folder python=$wanted pip git --channel conda-forge --override-channels`))
     end
+    # A copy made before git came with it gets it
+    isfile(_cligit(folder)) ||
+        run(MicroMamba.cmd(`install --yes --quiet --prefix $folder git --channel conda-forge --override-channels`))
     before = _cliversion()
     specification = isnothing(version) ? "fair-cli" : "fair-cli==$version"
     run(`$(_clipython(folder)) -m pip install --quiet --upgrade $specification`)
@@ -171,6 +174,34 @@ function _clipython(folder::AbstractString)
     return Sys.iswindows() ? joinpath(folder, "python.exe") :
            joinpath(folder, "bin", "python")
 end
+function _cligit(folder::AbstractString)
+    return Sys.iswindows() ? joinpath(folder, "Library", "bin", "git.exe") :
+           joinpath(folder, "bin", "git")
+end
+
+# The folders of the copy's own programs, git among them, as a path
+function _clibindirs(folder::AbstractString)
+    dirs = Sys.iswindows() ?
+           [
+        folder,
+        joinpath(folder, "Scripts"),
+        joinpath(folder, "Library", "bin")
+    ] :
+           [joinpath(folder, "bin")]
+    return join(dirs, Sys.iswindows() ? ';' : ':')
+end
+
+# A command that runs the package's copy of fair, given its own programs on
+# the path, since the CLI wants git there as it starts; any other command as
+# it is
+function _withenvironment(command::Cmd)
+    folder = _clifolder()
+    first(command.exec) == _cliexecutable(folder) || return command
+    separator = Sys.iswindows() ? ';' : ':'
+    return addenv(command,
+                  "PATH" => string(_clibindirs(folder), separator,
+                         get(ENV, "PATH", "")))
+end
 function _installedcli()
     executable = _cliexecutable(_clifolder())
     return isfile(executable) ? executable : nothing
@@ -193,5 +224,5 @@ end
 function _cliversion()
     executable = _installedcli()
     isnothing(executable) && return nothing
-    return strip(read(`$executable --version`, String))
+    return strip(read(_withenvironment(`$executable --version`), String))
 end
