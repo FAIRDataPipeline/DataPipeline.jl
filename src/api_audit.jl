@@ -51,7 +51,7 @@ struct DataProductRecord
 end
 
 function Base.show(io::IO, dp::DataProductRecord)
-    print(io, dp.namespace, "/", dp.name, " v", dp.version)
+    print(io, _dataproductname(dp.namespace, dp.name, dp.version))
     dp.version < dp.newest && print(io, " (superseded by v", dp.newest, ")")
     return nothing
 end
@@ -128,7 +128,7 @@ function Base.show(io::IO, ::MIME"text/plain", id::FileIdentification)
         println(io, "    stored:      ", obj.root, obj.stored_path,
                 obj.local_root ? "" : " (not on this machine)")
         for dp in obj.data_products
-            println(io, "    data product: ", dp.namespace, "/", dp.name)
+            println(io, "    data product: ", dp.namespace, ":", dp.name)
             println(io, "      version:   ", dp.version,
                     dp.version < dp.newest ?
                     " - SUPERSEDED, newest is $(dp.newest)" : " (newest)")

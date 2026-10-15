@@ -708,23 +708,23 @@ Test.@testset "link_register!() with no file" begin
     # A version asked for: registered so already, it is that one; registered
     # otherwise, an error; not registered, it is registered
     handle = offering()
-    link_register!(handle, deposit; of(version = "0.0.1")...)
+    link_register!(handle, "$deposit@0.0.1"; of()...)
     @test handle.inputs[(deposit, nothing)]["use_version"] == "0.0.1"
     msg = message_of(ReadWriteException) do
-        return link_register!(offering(), deposit; of(version = "0.0.2")...)
+        return link_register!(offering(), "$deposit@v0.0.2"; of()...)
     end
     @test occursin("version 0.0.2 of $inputs_namespace:$deposit", msg)
-    link_register!(offering(), deposit; of(version = v"1.0")...)
+    link_register!(offering(), "$deposit@1.0"; of()...)
     @test registered_versions(deposit) == ["0.0.1", "0.0.2", "1.0.0"]
     # ... and one run reads one version of a name
     msg = message_of(ReadWriteException) do
-        return link_register!(handle, deposit; of(version = "1.0.0")...)
+        return link_register!(handle, "$deposit@1.0.0"; of()...)
     end
     @test occursin("already an input of this code run, as version 0.0.1", msg)
 
-    # In a namespace of its own
+    # In a namespace of its own, named before the colon
     elsewhere = "elsewhere-$(uid[1:8])"
-    link_register!(offering(), deposit; of(namespace = elsewhere)...)
+    link_register!(offering(), "$elsewhere:$deposit"; of()...)
     space = DataPipeline._getid(registry, "namespace",
                                 Dict("name" => elsewhere))
     @test !isnothing(DataPipeline._getentry(registry, "data_product",
@@ -814,8 +814,24 @@ Test.@testset "what link_register!() refuses" begin
                    refused(ArgumentError, bibtex = "deposit", primary = true,
                            original_store = "https://example.org/f.txt"))
     @test occursin("`version`",
-                   refused(ArgumentError, bibtex = "deposit", primary = true,
-                           version = "061"))
+                   message_of(ArgumentError) do
+                       return link_register!(handle, "$name@061",
+                                             bibtex = "deposit",
+                                             primary = true)
+                   end)
+    # A name outside the convention, in the name or the namespace
+    @test occursin("is not a data product name",
+                   message_of(ArgumentError) do
+                       return link_register!(handle, "$name.csv",
+                                             bibtex = "deposit",
+                                             primary = true)
+                   end)
+    @test occursin("is not a namespace",
+                   message_of(ArgumentError) do
+                       return link_register!(handle, "a space:$name",
+                                             bibtex = "deposit",
+                                             primary = true)
+                   end)
     @test occursin("no file to register",
                    refused(ReadWriteException, bibtex = "deposit",
                            primary = true,

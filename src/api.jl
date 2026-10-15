@@ -523,17 +523,18 @@ function canwrite(handle::DataRegistryHandle, data_product::String)
 end
 
 """
-    link_register!(handle, data_product; namespace, version = nothing,
-                   path = nothing, doi = nothing, bibtex = nothing,
-                   title = nothing, primary = nothing, description = nothing,
-                   original_store = nothing, licence = nothing,
-                   license = nothing, release_date = nothing,
+    link_register!(handle, data_product; path = nothing, doi = nothing,
+                   bibtex = nothing, title = nothing, primary = nothing,
+                   description = nothing, original_store = nothing,
+                   licence = nothing, license = nothing, release_date = nothing,
                    release_version = nothing)
 
 Register something that comes from outside the pipeline, with its source, as
 the data product `data_product`, which the working config does not name, and
 record it as an input of the code run. No run made it: it is this run's
-input and no run's output.
+input and no run's output. The data product is named as the pipeline names
+one, `namespace:name@version`, and may leave out the namespace, the version
+or both: `name`, `name@1.2.3`, `namespace:name`.
 
 With no `path` it is a data product with no file - the deposit that a
 source's files belong to, which a run that fetches them reads, so that each
@@ -542,14 +543,14 @@ With a `path` it is that file, put in the data store as [`link_write!`](@ref)
 puts one, as a hard link where one can be made and else a copy, and its path
 there is returned.
 
-`namespace` is the data product's, by default the run's default input
-namespace. `version` is its version in the pipeline, as `"1.0.0"` or
-`v"1.0.0"` - the source's own is `release_version`. With none given, a name
-not yet registered is version 0.0.1; a name whose highest version is
-registered with the same file, or with none, and the same source, authors and
-licence is that version, and nothing new is registered; any other is the
-highest version's next patch. A `version` given that is registered already
-must be registered so too, or it is an error.
+The namespace is by default the run's default input namespace. The version
+is the data product's in the pipeline - the source's own is
+`release_version`. With none given, a name not yet registered is version
+0.0.1; a name whose highest version is registered with the same file, or
+with none, and the same source, authors and licence is that version, and
+nothing new is registered; any other is the highest version's next patch. A
+version given that is registered already must be registered so too, or it is
+an error.
 
 The source is named by `doi` or `bibtex`, and must be: `title`, `primary`,
 `description`, `original_store`, `licence` or `license`, `release_date` and
@@ -558,8 +559,6 @@ The source is named by `doi` or `bibtex`, and must be: `title`, `primary`,
 from, needs a `path`. A source is one file, as there.
 """
 function link_register!(handle::DataRegistryHandle, data_product::String;
-                        namespace::AbstractString = handle.config["run_metadata"]["default_input_namespace"],
-                        version::Union{Nothing, VersionNumber, AbstractString} = nothing,
                         path::Union{Nothing, AbstractString} = nothing,
                         doi::Union{Nothing, AbstractString} = nothing,
                         bibtex::Union{Nothing, AbstractString} = nothing,
@@ -577,15 +576,15 @@ function link_register!(handle::DataRegistryHandle, data_product::String;
         throw(ArgumentError("'$data_product' is a pattern: a data product registered has a name of its own"))
     isnothing(path) && !isnothing(original_store) &&
         throw(ArgumentError("`original_store` is where a file was fetched from, and a data product with no `path` has no file"))
-    wanted = isnothing(version) ? nothing :
-             _releaseversion(version, keyword = "version")
+    named = _parsedataproduct(data_product,
+                              default = handle.config["run_metadata"]["default_input_namespace"])
     file = _externalfile(path)
     isnothing(doi) && isnothing(bibtex) &&
         throw(ArgumentError("'$data_product' is registered as coming from elsewhere: name its source, by its `doi` or its `bibtex` key"))
     source = _source(handle; doi, bibtex, title, primary, description,
                      original_store, licence, license, release_date,
                      release_version)
-    return _linkregister!(handle, data_product, String(namespace), wanted,
+    return _linkregister!(handle, named.name, named.namespace, named.version,
                           file, source)
 end
 
@@ -677,8 +676,11 @@ end
 Raise an issue with one thing, or with several at once as one registry issue.
 A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
 [`SubmissionScript`](@ref), [`CodeRepository`](@ref),
-[`ConfigDataProduct`](@ref) or [`ExistingDataProduct`](@ref) - or a `String`,
-which names a data product of this run as [`ConfigDataProduct`](@ref) does.
+[`ConfigDataProduct`](@ref) or [`ExistingDataProduct`](@ref) - or a `String`:
+a data product of this run by its config name, as
+[`ConfigDataProduct`](@ref) names one, or a registered data product as
+`namespace:name@version` (`namespace:name` for its newest version), as
+[`ExistingDataProduct`](@ref) names one.
 `severity` is an integer, larger for worse, by default the registry's own
 default. Issues are queued in the handle
 and registered by [`finalise`](@ref), so an output can be named before it
@@ -701,9 +703,13 @@ function raise_issue(handle::DataRegistryHandle,
     return raise_issue(handle, [target], description, severity = severity)
 end
 
-# A bare string names a data product of this run
+# A bare string names a data product: of this run by its config name, or a
+# registered one as `namespace:name@version`, which no config name looks like
 _astarget(target::AbstractIssueTarget) = target
-_astarget(data_product::AbstractString) = ConfigDataProduct(data_product)
+function _astarget(data_product::AbstractString)
+    return occursin(':', data_product) ? ExistingDataProduct(data_product) :
+           ConfigDataProduct(data_product)
+end
 
 # A data product named by its config name must be in the working config
 function _checktarget(handle::DataRegistryHandle, target::ConfigDataProduct)

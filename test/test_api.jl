@@ -415,6 +415,43 @@ function issues_of(registry, component_url)
     return DataPipeline._getentry(registry, URIs.URI(component_url))["issues"]
 end
 
+Test.@testset "names outside the convention are refused at a write" begin
+    # The convention: a namespace of ASCII letters, digits, '_' and '-'; a
+    # data product name of parts of the same joined by '/'; a component the
+    # same. Checked where a name is registered, not where one is read.
+    config = DataPipeline._createconfig(cpath)
+    spaced = "data_product/refused name/$uid"
+    dotted = "data_product/refused/$uid"
+    spaced_namespace = "data_product/refused_namespace/$uid"
+    accepted = "data_product/refused_accepted/$uid"
+    DataPipeline._addwrite(config, spaced, "refused description",
+                           file_type = "txt", use_version = version)
+    DataPipeline._addwrite(config, dotted, "refused description",
+                           file_type = "txt", use_version = version,
+                           use_data_product = "$dotted.txt")
+    DataPipeline._addwrite(config, spaced_namespace, "refused description",
+                           file_type = "toml", use_version = version,
+                           use_namespace = "no such namespace")
+    DataPipeline._addwrite(config, accepted, "refused description",
+                           file_type = "toml", use_version = version)
+    handle = DataPipeline.initialise(config, config)
+    err = @test_throws ArgumentError link_write!(handle, spaced)
+    @test occursin("is not a data product name", err.value.msg)
+    err = @test_throws ArgumentError link_write!(handle, dotted)
+    @test occursin("'$dotted.txt' is not a data product name", err.value.msg)
+    err = @test_throws ArgumentError write_estimate(handle, 1.0,
+                                                    spaced_namespace, "point",
+                                                    "refused")
+    @test occursin("is not a namespace", err.value.msg)
+    err = @test_throws ArgumentError write_estimate(handle, 1.0, accepted,
+                                                    "a point", "refused")
+    @test occursin("'a point' is not a component name", err.value.msg)
+    @test isempty(handle.outputs)
+    write_estimate(handle, 1.0, accepted, "a/point-1_2", "accepted")
+    @test haskey(handle.outputs, (accepted, "a/point-1_2"))
+    DataPipeline.finalise(handle)
+end
+
 Test.@testset "raise_issue()" begin
     written = "data_product/link_write/$uid"
     estimates = "data_product/write_estimate/$uid"
@@ -443,10 +480,15 @@ Test.@testset "raise_issue()" begin
                                                component = component1),
                 "output $uid", severity = 1)
     raise_issue(handle,
-                DataPipeline.ExistingDataProduct(namespace, estimates, version,
+                DataPipeline.ExistingDataProduct("$namespace:$estimates@v$version",
                                                  component = component2),
                 "existing $uid", severity = 2)
-    @test length(handle.issues) == 5
+    # A string holding a colon names a registered data product: its newest
+    # version, with none given
+    raise_issue(handle, "$namespace:$estimates", "newest $uid")
+    @test length(handle.issues) == 6
+    @test handle.issues[6].targets ==
+          [DataPipeline.ExistingDataProduct("$namespace:$estimates")]
     @test handle.issues[3].targets == [DataPipeline.ConfigDataProduct(written)]
     @test handle.issues[3].severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
     @test isnothing(DataPipeline._getentry(registry, "issue",
@@ -456,7 +498,8 @@ Test.@testset "raise_issue()" begin
     @test_throws DataPipeline.ConfigFileException raise_issue(handle,
                                                               "not/in/config",
                                                               "bad")
-    @test length(handle.issues) == 5
+    @test_throws ArgumentError raise_issue(handle, "no such:name", "bad")
+    @test length(handle.issues) == 6
 
     link_read!(handle, written)
     write_estimate(handle, estimate1, data_product, component1, "description1")
@@ -482,6 +525,9 @@ Test.@testset "raise_issue()" begin
     @test length(existing) == 1
     @test DataPipeline._getentry(registry, URIs.URI(existing[1]))["name"] ==
           component2
+    newest = DataPipeline._latestdataproduct(registry, namespace, estimates)
+    @test issue("newest $uid")["component_issues"] ==
+          [DataPipeline._wholeobjectcomponent(registry, newest["object"])]
     @test issue("run $uid")["url"] in
           issues_of(registry, whole(handle.repo_obj))
 
@@ -628,6 +674,8 @@ Test.@testset "identify()" begin
                                                  stored).objects).data_products)
     @test superseded.version == VersionNumber(version)
     @test superseded.newest == v"0.0.2"
+    @test sprint(show, superseded) ==
+          "$namespace:$data_product@v$version (superseded by v0.0.2)"
     @test occursin("SUPERSEDED",
                    sprint(show, MIME("text/plain"),
                           DataPipeline.identify(registry, stored)))
@@ -793,7 +841,7 @@ Test.@testset "identify() a git repository" begin
     run_from!("$head_sha-dirty", "dirty")
     run_from!(absent_sha, "absent")
     sleep(1)                               # run dates have whole seconds
-    run_from!(later_absent_sha, "later absent")
+    run_from!(later_absent_sha, "later-absent")
     # The parent commit as Python registers a repository: the whole remote URL
     # as the path
     root_url = DataPipeline._postentry(registry, "storage_root",

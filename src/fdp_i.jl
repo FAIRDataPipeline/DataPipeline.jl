@@ -494,10 +494,6 @@ function _pruneempty(directory::AbstractString, stop::AbstractString)
     return nothing
 end
 
-# The placeholder in a `write:` name that stands for the code run's uuid, which
-# the CLI leaves for the API to fill in at `finalise`
-const RUN_ID_PLACEHOLDER = r"\$\{\{\s*RUN_ID\s*\}\}"
-
 """
     _registerdataproduct(handle, data_product, component)
 
@@ -629,8 +625,10 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     wmd, use_data_product = _writemetadata(handle, data_product)
     use = get(wmd, "use", Dict())
     data_store = handle.config["run_metadata"]["write_data_store"]
-    use_namespace = _writenamespace(handle, wmd)
+    use_namespace = _checknamespace(_writenamespace(handle, wmd))
+    _checkdataproduct(use_data_product)
     use_component = get(use, "component", component)
+    isnothing(use_component) || _checkcomponent(use_component)
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])
 
@@ -771,8 +769,9 @@ function _issuecomponents(handle::DataRegistryHandle,
     if any(entry["data_product"] == target.data_product
            for entry in get(handle.config, "read", []))
         rmd = _readmetadata(handle, target.data_product)
-        existing = ExistingDataProduct(rmd.namespace, rmd.data_product,
-                                       rmd.version,
+        existing = ExistingDataProduct(_dataproductname(rmd.namespace,
+                                                        rmd.data_product,
+                                                        rmd.version),
                                        component = target.component)
         return _issuecomponents(handle, existing)
     end
@@ -780,10 +779,17 @@ function _issuecomponents(handle::DataRegistryHandle,
 end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ExistingDataProduct)
-    dp_entry = _finddataproduct(handle.registry, target.namespace,
-                                target.data_product, target.version)
-    return [_componenturl(handle.registry, dp_entry["object"],
-                          target.component)]
+    registry = handle.registry
+    if isnothing(target.version)
+        dp_entry = _latestdataproduct(registry, target.namespace,
+                                      target.data_product)
+        isnothing(dp_entry) &&
+            throw(ReadWriteException("no data product $(_dataproductname(target.namespace, target.data_product)) is registered"))
+    else
+        dp_entry = _finddataproduct(registry, target.namespace,
+                                    target.data_product, target.version)
+    end
+    return [_componenturl(registry, dp_entry["object"], target.component)]
 end
 
 # The issue raised against a code repository registered with uncommitted
