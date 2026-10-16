@@ -1393,7 +1393,8 @@ Test.@testset "identify() a git repository" begin
 
     # By the URL of its remote, with no clone: every commit the registry
     # holds, with no dates, or a full hash; a selection that needs the clone
-    # cannot be made, and a tag does not resolve
+    # cannot be made, and a tag is asked of the remote, which this one, on no
+    # host that answers for it, cannot be: a warning, and no commit
     by_url = DataPipeline.identify(registry,
                                    DataPipeline.AllCommits(repo = remote))
     @test by_url.selection == DataPipeline.AllCommits(repo = remote)
@@ -1411,10 +1412,12 @@ Test.@testset "identify() a git repository" begin
         err = @test_throws ArgumentError make()
         @test occursin("needs a clone", err.value.msg)
     end
-    err = @test_throws ArgumentError DataPipeline.identify(registry,
-                                                           DataPipeline.NamedCommit("v1.0",
-                                                                                    repo = remote))
-    @test occursin("no clone to resolve it with", err.value.msg)
+    err = @test_logs((:warn, r"^cannot list the tags and branches of "),
+                     @test_throws ArgumentError DataPipeline.identify(registry,
+                                                                      DataPipeline.NamedCommit("v1.0",
+                                                                                               repo = remote)))
+    @test occursin("the remote at $remote has no such tag or branch",
+                   err.value.msg)
     # A release the registry holds resolves its version with no clone, and
     # with a clone that has no such tag
     DataPipeline._postentry(registry, "code_repo_release",

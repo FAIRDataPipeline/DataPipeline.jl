@@ -88,6 +88,7 @@ include("rehearse.jl")
 include("data_prod_proc.jl")    # dp file handling
 include("provenance.jl")
 include("api_audit.jl")         # DR audits
+include("releases.jl")
 include("downstream.jl")
 include("crate.jl")
 

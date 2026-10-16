@@ -158,8 +158,9 @@ abbreviated hash, resolved by the local clone; or the version of a release of
 the code that the registry holds, with or without a leading `v`, which
 resolves with no clone at all. If `dirty`, the runs made from the commit with
 uncommitted changes too. `repo` is a clone or the URL of its remote, as for
-every [`AbstractCommitSelection`](@ref); by URL, only a full hash and a
-release resolve.
+every [`AbstractCommitSelection`](@ref); by URL, a tag or a branch is
+resolved by asking the remote, which needs the network and a remote that
+asks for no credentials, and an abbreviated hash does not resolve.
 """
 struct NamedCommit <: AbstractCommitSelection
     name::String

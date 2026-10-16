@@ -682,7 +682,8 @@ function _resolvename(selection::AncestorCommits, clone::LibGit2.GitRepo,
 end
 
 # The commit a name names: a full hash as it is, then what the clone makes of
-# the name, then a registered release of the repository at that version
+# the name, then a registered release of the repository at that version, and
+# with no clone, last, a tag or a branch the remote advertises
 function _resolvecommit(name::String, clone::Union{Nothing, LibGit2.GitRepo},
                         path::String, registry::RegistryEndpoint,
                         root_id::Union{Nothing, AbstractString},
@@ -694,8 +695,12 @@ function _resolvecommit(name::String, clone::Union{Nothing, LibGit2.GitRepo},
     end
     sha = _releasecommit(registry, root_id, paths, name)
     isnothing(sha) || return sha
+    if isnothing(clone)
+        sha = _remotecommit(path, name)
+        isnothing(sha) || return sha
+    end
     where = isnothing(clone) ?
-            "there is no clone to resolve it with, $path being a URL" :
+            "the remote at $path has no such tag or branch (an abbreviated hash needs a clone)" :
             "the clone at $path has no such tag, branch or commit"
     return throw(ArgumentError("'$name' names no commit of the repository: it is not a full commit hash, $where, and the registry holds no release of the repository at that version"))
 end

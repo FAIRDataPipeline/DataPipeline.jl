@@ -102,6 +102,8 @@
   - `NamedCommit("v1.0")` selects a commit by tag, branch, hash or registered
     release's version; `AncestorCommits(of = "v1.0", including = false)` the
     commits before it.
+  - A `NamedCommit` of a repository named by its remote's URL resolves a tag or
+    a branch by asking the remote, with no clone; it needs the network.
   - `raise_issue!(target, description)` outside a run, with a registry or the
     CLI's, registers the issue at once and returns its URL, for an
     `ExistingDataProduct` or a commit selection: so
