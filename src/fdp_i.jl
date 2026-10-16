@@ -876,6 +876,150 @@ function _supersedeoutputs!(handle::DataRegistryHandle,
     return nothing
 end
 
+# The description every API gives a code repository's object
+const REPOSITORY_DESCRIPTION = "Remote code repository."
+
+# The object of the code repository at a run's commit: the one the registry
+# holds there, else one made with the authors the repository's metadata gives;
+# with its licence and keywords added either way
+function _registerrepository(registry::RegistryEndpoint, run_metadata::Dict)
+    metadata = _runrepositorymetadata(run_metadata)
+    held = _heldrepository(registry, run_metadata)
+    object_url = held.object
+    if isnothing(object_url)
+        repo = _repositorylocation(run_metadata["remote_repo"])
+        location_url = held.location
+        if isnothing(location_url)
+            root_url = _postentry(registry, "storage_root",
+                                  Dict("root" => repo.root,
+                                       "local" => false))["url"]
+            location_url = _createentry(registry, "storage_location",
+                                        Dict("path" => repo.path,
+                                             "hash" =>
+                                                 run_metadata["latest_commit"],
+                                             "public" => true,
+                                             "storage_root" => root_url))["url"]
+        end
+        object_url = _createentry(registry, "object",
+                                  Dict("description" => REPOSITORY_DESCRIPTION,
+                                       "storage_location" => location_url,
+                                       "authors" =>
+                                           _repositoryauthors(registry,
+                                                              metadata)))["url"]
+    end
+    _addlicence!(registry, object_url, metadata.licence)
+    _addkeywords!(registry, object_url, metadata.keywords)
+    return object_url
+end
+
+# The storage location the registry holds for a run's commit and the object it
+# keeps there, either `nothing` where there is none: one location for a commit
+# under its host, whatever path it was registered with, and of several objects
+# at it, the one a release is registered on, else the oldest
+function _heldrepository(registry::RegistryEndpoint, run_metadata::Dict)
+    repo = _repositorylocation(run_metadata["remote_repo"])
+    root_id = _getid(registry, "storage_root", Dict("root" => repo.root))
+    isnothing(root_id) && return (location = nothing, object = nothing)
+    location_url = _geturl(registry, "storage_location",
+                           Dict("hash" => run_metadata["latest_commit"],
+                                "public" => true, "storage_root" => root_id))
+    isnothing(location_url) && return (location = nothing, object = nothing)
+    objects = _getentries(registry, "object",
+                          Dict("storage_location" => _extractid(location_url)))
+    isempty(objects) && return (location = location_url, object = nothing)
+    released = filter(objects) do object
+        return !isnothing(get(object, "code_repo_release", nothing))
+    end
+    kept = argmin(isempty(released) ? objects : released) do object
+        return parse(Int, _extractid(object["url"]))
+    end
+    return (location = location_url, object = kept["url"])
+end
+
+# What the run's code repository says of itself: the working tree's files for
+# a run from uncommitted changes, which are what ran, else the commit's; none,
+# with a warning, where there is no clone holding the commit to read
+function _runrepositorymetadata(run_metadata::Dict)
+    folder = get(run_metadata, "local_repo", nothing)
+    commit = run_metadata["latest_commit"]
+    nothing_read = _repositorymetadata(_ -> nothing, "nowhere")
+    top = isnothing(folder) || !isdir(folder) ? nothing : _gittoplevel(folder)
+    if isnothing(top)
+        @warn "the run names no clone of its code repository to read ($(repr(folder))), so its metadata files are not read and a new repository object takes the runner as its author"
+        return nothing_read
+    end
+    endswith(commit, "-dirty") && return _repositorymetadata(top)
+    return LibGit2.with(LibGit2.GitRepo(top)) do clone
+        LibGit2.iscommit(commit, clone) &&
+            return _repositorymetadata(clone, commit)
+        @warn "the clone at $top does not have the run's commit $commit, so its metadata files are not read and a new repository object takes the runner as its author"
+        return nothing_read
+    end
+end
+
+# The registry's authors for a repository's own, as its metadata names them,
+# an author the registry cannot name passed over with a warning; or, with
+# none, the runner
+function _repositoryauthors(registry::RegistryEndpoint,
+                            metadata::RepositoryMetadata)
+    authors = String[]
+    for name in metadata.authors
+        if !_nameable(name)
+            @warn "the registry cannot hold an author named '$name', which the repository's metadata gives: it takes none of $(join(UNNAMEABLE, " ")) in a name, so that author is passed over"
+            continue
+        end
+        identifier = get(metadata.identifiers, name, nothing)
+        url = if isnothing(identifier)
+            _namedauthorurl(registry, name) do
+                return _createentry(registry, "author",
+                                    Dict("name" => name))["url"]
+            end
+        else
+            _geturl(registry, "author", Dict("identifier" => identifier))
+        end
+        if isnothing(url)
+            url = _createentry(registry, "author",
+                               Dict("name" => name,
+                                    "identifier" => identifier))["url"]
+        end
+        url in authors || push!(authors, url)
+    end
+    return isempty(authors) ? [_getauthorurl(registry)] : authors
+end
+
+# Add a repository's licence to its object unless the object has it, a licence
+# that is neither in the SPDX list nor a URL passed over with a warning
+_addlicence!(::RegistryEndpoint, ::String, ::Nothing) = nothing
+function _addlicence!(registry::RegistryEndpoint, object_url::String,
+                      licence::String)
+    named = try
+        _licence(licence)
+    catch err
+        err isa ArgumentError || rethrow()
+        @warn "the repository's licence '$licence' is not recorded: $(err.msg)"
+        return nothing
+    end
+    query = Dict("object" => object_url, "identifier" => named.identifier)
+    isnothing(_getentry(registry, "licence", query)) &&
+        _createentry(registry, "licence",
+                     Dict("object" => object_url, "licence_info" => named.info,
+                          "identifier" => named.identifier))
+    return nothing
+end
+
+# Add a repository's keywords to its object, each unless the object has it,
+# one the registry would read as a pattern passed over
+function _addkeywords!(registry::RegistryEndpoint, object_url::String,
+                       keywords::Vector{String})
+    for keyword in keywords
+        _nameable(keyword) || continue
+        query = Dict("object" => object_url, "keyphrase" => keyword)
+        isnothing(_getentry(registry, "keyword", query)) &&
+            _createentry(registry, "keyword", query)
+    end
+    return nothing
+end
+
 # The issue raised against a code repository registered with uncommitted
 # changes, shared by every run from that state, as they share its object
 const DIRTY_REPOSITORY_ISSUE = "The code repository had uncommitted changes when this code ran, so the code that ran cannot be recovered from its commit."

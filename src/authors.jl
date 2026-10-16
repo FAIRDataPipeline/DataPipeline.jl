@@ -94,10 +94,14 @@ end
 # Throw unless the registry can hold an author of this name
 function _checkauthorname(name::AbstractString)
     isempty(strip(name)) && throw(ArgumentError("an author has no name"))
-    any(in(UNNAMEABLE), name) &&
+    _nameable(name) ||
         throw(ArgumentError("the registry cannot hold an author named '$name': it takes none of $(join(UNNAMEABLE, " ")) in a name"))
     return nothing
 end
+
+# Whether the registry can hold this text as a name, holding none of the
+# characters it reads as a pattern
+_nameable(name::AbstractString) = !any(in(UNNAMEABLE), name)
 
 # Register an author with an identifier, unless the registry holds the
 # identifier already, and have the name stand for that author in this run. An
@@ -151,13 +155,20 @@ end
 # The URL of the registry's author of exactly this name and no identifier:
 # the first that was registered, or a new one
 function _namedauthorurl(handle::DataRegistryHandle, name::AbstractString)
+    return _namedauthorurl(handle.registry, name) do
+        return _newnamedauthor(handle, name)
+    end
+end
+# ... in a registry, `create()` making the author where it has none
+function _namedauthorurl(create::Function, registry::RegistryEndpoint,
+                         name::AbstractString)
     # With no pattern character in it, a name is looked up as it is written
     _checkauthorname(name)
     unidentified = [author
-                    for author in _getentries(handle.registry, "author",
+                    for author in _getentries(registry, "author",
                                               Dict("name" => name))
                     if isnothing(author["identifier"])]
-    isempty(unidentified) && return _newnamedauthor(handle, name)
+    isempty(unidentified) && return create()
     # The first is the one that stays the same when another is registered
     oldest = argmin(unidentified) do author
         return parse(Int, _extractid(author["url"]))

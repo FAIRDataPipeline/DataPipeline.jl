@@ -14,6 +14,10 @@
     - `AncestorCommits()`, `CheckedOutCommit()` and `AllCommits()` made with no
       `repo` outside a git repository are an `ArgumentError`, since a selection
       holds its repository.
+    - `initialise()` registers a commit's code repository as one object, kept
+      where the registry holds one, and gives a new one the repository's own
+      authors, from `codemeta.json`, `.zenodo.json`, `CITATION.cff` or its
+      project file, rather than the runner; its licence and keywords too.
     - `registry_audit`, `registry_audit_recursive` and `record_issues!` are
       removed: written for the registry's 2021 schema, they could not run
       against any registry since. `provenance` and `downstream` are what they

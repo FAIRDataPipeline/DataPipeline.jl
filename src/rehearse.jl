@@ -183,10 +183,36 @@ function _openrun(mode::Rehearsal, config::Dict, config_file::String,
         @warn "the code repository has uncommitted changes ($commit): a recorded run would raise an issue against it"
     println("rehearsal: nothing is registered, and the outputs go to ",
             mode.outputs)
+    _rehearserepository(registry, config["run_metadata"])
     return _newhandle(mode, config, config_file, registry,
                       (config = nothing, script = nothing,
                        repository = nothing, datastore = nothing,
                        code_run = nothing), string(uuid4()))
+end
+
+# What a recorded run would register of the code repository at its commit,
+# said rather than done: the object the registry holds kept, or one made with
+# the authors the repository's metadata gives; its licence and keywords
+function _rehearserepository(registry::RegistryEndpoint, run_metadata::Dict)
+    metadata = _runrepositorymetadata(run_metadata)
+    commit = run_metadata["latest_commit"]
+    held = _heldrepository(registry, run_metadata).object
+    if isnothing(held)
+        authors = isempty(metadata.authors) ? "the runner" :
+                  join(metadata.authors, ", ")
+        println("would register the code repository at ", commit,
+                ", its authors ", authors,
+                isempty(metadata.files) ? "" :
+                " (from $(join(metadata.files, ", ")))")
+    else
+        println("would keep the code repository's object at ", commit, ", ",
+                held)
+    end
+    isnothing(metadata.licence) ||
+        println("  with the licence ", metadata.licence)
+    isempty(metadata.keywords) ||
+        println("  with the keywords ", join(metadata.keywords, ", "))
+    return nothing
 end
 
 # What `link_register!` would register, said rather than done, and `nothing`

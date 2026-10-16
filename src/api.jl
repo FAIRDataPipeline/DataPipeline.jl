@@ -26,6 +26,14 @@ ended it, is a [`ReadWriteException`](@ref) - for a rehearsal, to `rehearse`
 again; for a recorded run, since a script making several runs is not
 supported.
 
+The code repository is registered at its commit as one object, kept where the
+registry holds one already. A new one has the repository's own authors, read
+from its metadata files - `codemeta.json`, `.zenodo.json`, `CITATION.cff`,
+`JuliaProject.toml`, `Project.toml`, the first that lists any - as they are at
+the commit in the clone `run_metadata.local_repo`, or in its working tree for
+a run from uncommitted changes; with none, the runner. The licence and
+keywords the files give are added to the object either way.
+
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
 that ran cannot be recovered from its commit.
@@ -68,11 +76,7 @@ function _openrun(mode::RecordedRun, config::Dict, config_file::String,
     script_url = _registerobject(registry, submission_script, datastore,
                                  "Submission script")["url"]
 
-    repo = _repositorylocation(run_metadata["remote_repo"])
-    repo_url = _registerobject(registry, repo.path, repo.root,
-                               "Remote code repository.",
-                               hash = run_metadata["latest_commit"],
-                               local_root = false, file_type = nothing)["url"]
+    repo_url = _registerrepository(registry, run_metadata)
     endswith(run_metadata["latest_commit"], "-dirty") &&
         _flagdirtyrepository(registry, repo_url, run_metadata["latest_commit"])
 

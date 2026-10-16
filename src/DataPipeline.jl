@@ -76,11 +76,11 @@ public Trace
 public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
 public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
 
+include("repometadata.jl")
 include("fdp_i.jl")
 include("citations.jl")
 include("authors.jl")
 include("licences.jl")
-include("repometadata.jl")
 include("sources.jl")
 include("cli.jl")
 include("rehearse.jl")

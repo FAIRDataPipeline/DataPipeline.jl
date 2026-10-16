@@ -933,14 +933,187 @@ Test.@testset "a run from uncommitted changes" begin
                                          "component_issues" => [component]))
     @test unset["severity"] == DataPipeline.DEFAULT_ISSUE_SEVERITY
 
-    # A clean commit: no warning and no issue
-    config = DataPipeline._createconfig(cpath,
-                                        latest_commit = DataPipeline._randomhash())
+    # A clean commit: no warning and no issue - a commit of a clone of its own,
+    # which holds no metadata files, so that the run reads that clone
+    clean_dir = mktempdir()
+    clean_repo = LibGit2.init(clean_dir)
+    write(joinpath(clean_dir, "a.txt"), "a clean commit $uid\n")
+    LibGit2.add!(clean_repo, "a.txt")
+    clean_sha = string(LibGit2.commit(clean_repo, "clean",
+                                      author = LibGit2.Signature("Test",
+                                                                 "test@example.com"),
+                                      committer = LibGit2.Signature("Test",
+                                                                    "test@example.com")))
+    close(clean_repo)
+    config = DataPipeline._createconfig(cpath, latest_commit = clean_sha,
+                                        local_repo = clean_dir)
     clean = @test_logs DataPipeline.initialise(config, config)
     @test isempty(DataPipeline._getentry(registry,
                                          URIs.URI(DataPipeline._wholeobjectcomponent(registry,
                                                                                      clean.repo_obj)))["issues"])
     DataPipeline.finalise(clean)
+end
+
+Test.@testset "initialise() registers the code repository at its commit" begin
+    registry = handle.registry
+    # A clone of its own for each case, at a remote of its own, its files
+    # naming the run so that its commit is new to the registry
+    signature = LibGit2.Signature("Test", "test@example.com", 1_000_000_000, 0)
+    fixtures = Ref(0)
+    function fixture(files::Pair{String, String}...)
+        fixtures[] += 1
+        dir = mktempdir()
+        repo = LibGit2.init(dir)
+        for (name, text) in (files..., "run.txt" => "$uid $(fixtures[])\n")
+            write(joinpath(dir, name), text)
+            LibGit2.add!(repo, name)
+        end
+        sha = string(LibGit2.commit(repo, "fixture", author = signature,
+                                    committer = signature))
+        close(repo)
+        return (dir = dir, sha = sha,
+                remote = "https://github.com/FAIRDataPipeline/repository-fixture-$uid-$(fixtures[]).git")
+    end
+    function run_from(clone; commit = clone.sha)
+        config = DataPipeline._createconfig(cpath, latest_commit = commit,
+                                            local_repo = clone.dir,
+                                            remote_repo = clone.remote)
+        return config
+    end
+    function opened(config)
+        run_handle = DataPipeline.initialise(config, config)
+        DataPipeline.finalise(run_handle)
+        return run_handle.repo_obj
+    end
+    entry(url) = DataPipeline._getentry(registry, URIs.URI(url))
+    authors(object) = Set((author["name"], author["identifier"])
+                          for author in entry.(entry(object)["authors"]))
+    licences(object) = [(licence["licence_info"], licence["identifier"])
+                        for licence in entry.(entry(object)["licences"])]
+    keywords(object) = sort([keyword["keyphrase"]
+                             for keyword in entry.(entry(object)["keywords"])])
+    runner = entry(DataPipeline._getauthorurl(registry))
+    ada = "https://orcid.org/0000-0002-1825-0097"
+    codemeta = """
+    {"name": "Fixture", "license": "https://spdx.org/licenses/MIT",
+     "keywords": ["fixture", "repository $uid"],
+     "author": [{"givenName": "Ada", "familyName": "Lovelace", "id": "$ada"},
+                {"givenName": "Unidentified", "familyName": "Author $uid"}]}
+    """
+
+    # A new object has the repository's authors, by identifier where the
+    # metadata gives one and by name alone where not, with its licence and
+    # keywords
+    with_metadata = fixture("codemeta.json" => codemeta)
+    object = opened(run_from(with_metadata))
+    @test entry(object)["description"] == DataPipeline.REPOSITORY_DESCRIPTION
+    @test authors(object) == Set([("Ada Lovelace", ada),
+                  ("Unidentified Author $uid", nothing)])
+    @test licences(object) == [("MIT", "https://spdx.org/licenses/MIT")]
+    @test keywords(object) == ["fixture", "repository $uid"]
+    location = entry(entry(object)["storage_location"])
+    @test location["hash"] == with_metadata.sha
+    @test location["path"] ==
+          "FAIRDataPipeline/repository-fixture-$uid-$(fixtures[]).git"
+
+    # Another run from that commit keeps the object, and adds nothing to it
+    # that it has
+    @test opened(run_from(with_metadata)) == object
+    @test length(licences(object)) == 1 && length(keywords(object)) == 2
+
+    # An object the registry holds at the commit already is kept, whatever its
+    # authors, and given the licence and keywords
+    held_clone = fixture("codemeta.json" => codemeta)
+    root = DataPipeline._postentry(registry, "storage_root",
+                                   Dict("root" => "https://github.com/",
+                                        "local" => false))["url"]
+    held_location = DataPipeline._createentry(registry, "storage_location",
+                                              Dict("path" => "another/path",
+                                                   "hash" => held_clone.sha,
+                                                   "public" => true,
+                                                   "storage_root" => root))["url"]
+    make_object() = DataPipeline._createentry(registry, "object",
+                                              Dict("description" =>
+                                                       DataPipeline.REPOSITORY_DESCRIPTION,
+                                                   "storage_location" =>
+                                                       held_location,
+                                                   "authors" => [runner["url"]]))["url"]
+    held = make_object()
+    @test opened(run_from(held_clone)) == held
+    @test authors(held) == Set([(runner["name"], runner["identifier"])])
+    @test licences(held) == [("MIT", "https://spdx.org/licenses/MIT")]
+    # Of several, the oldest; but one a release is registered on before it
+    newer = make_object()
+    @test opened(run_from(held_clone)) == held
+    DataPipeline._createentry(registry, "code_repo_release",
+                              Dict("name" => "repository fixture $uid",
+                                   "version" => "1.0.0", "object" => newer))
+    @test opened(run_from(held_clone)) == newer
+
+    # A run from uncommitted changes reads the working tree, which is what ran
+    edited = fixture("codemeta.json" => codemeta)
+    write(joinpath(edited.dir, "codemeta.json"),
+          """{"author": [{"name": "Edited Author $uid"}]}""")
+    dirty_object = @test_logs((:warn, r"uncommitted changes"),
+                              opened(run_from(edited,
+                                              commit = "$(edited.sha)-dirty")))
+    @test authors(dirty_object) == Set([("Edited Author $uid", nothing)])
+    # ... and a clean run of the same commit the commit's files
+    @test authors(opened(run_from(edited))) ==
+          Set([("Ada Lovelace", ada), ("Unidentified Author $uid", nothing)])
+
+    # No metadata files: the runner, as for any repository that is no package
+    bare = fixture()
+    @test authors(@test_logs(opened(run_from(bare)))) ==
+          Set([(runner["name"], runner["identifier"])])
+
+    # A clone without the commit, or no clone, is warned of, and the runner
+    # is the author
+    elsewhere = fixture("codemeta.json" => codemeta)
+    absent = (dir = with_metadata.dir,
+              sha = bytes2hex(DataPipeline.SHA.sha1("test_api.jl absent commit $uid")),
+              remote = elsewhere.remote)
+    @test authors(@test_logs((:warn, r"does not have the run's commit"),
+                             opened(run_from(absent)))) ==
+          Set([(runner["name"], runner["identifier"])])
+    nowhere = (dir = joinpath(mktempdir(), "absent"), sha = elsewhere.sha,
+               remote = elsewhere.remote)
+    @test authors(@test_logs((:warn, r"names no clone"),
+                             opened(run_from(nowhere)))) ==
+          Set([(runner["name"], runner["identifier"])])
+
+    # An author the registry cannot name, and a licence it cannot record, are
+    # warned of and passed over
+    odd = fixture("codemeta.json" => """
+    {"license": "Not a licence $uid",
+     "author": [{"name": "Star * Author"}, {"name": "Plain Author $uid"}]}
+    """)
+    odd_object = @test_logs((:warn,
+                             r"cannot hold an author named 'Star \* Author'"),
+                            (:warn,
+                             r"licence 'Not a licence .*' is not recorded"),
+                            opened(run_from(odd)))
+    @test authors(odd_object) == Set([("Plain Author $uid", nothing)])
+    @test isempty(licences(odd_object))
+
+    # A rehearsal says what a recorded run would do, and registers nothing
+    said(clone) = mktemp() do path, io
+        redirect_stdout(io) do
+            DataPipeline._rehearserepository(registry,
+                                             DataPipeline.YAML.load_file(run_from(clone))["run_metadata"])
+        end
+        close(io)
+        return read(path, String)
+    end
+    unregistered = fixture("codemeta.json" => codemeta)
+    text = said(unregistered)
+    @test occursin("would register the code repository at $(unregistered.sha), its authors Ada Lovelace, Unidentified Author $uid (from codemeta.json)",
+                   text)
+    @test occursin("  with the licence https://spdx.org/licenses/MIT", text)
+    @test isnothing(DataPipeline._heldrepository(registry,
+                                                 DataPipeline.YAML.load_file(run_from(unregistered))["run_metadata"]).object)
+    @test occursin("would keep the code repository's object at $(with_metadata.sha), $object",
+                   said(with_metadata))
 end
 
 Test.@testset "identify() a git repository" begin
@@ -979,7 +1152,8 @@ Test.@testset "identify() a git repository" begin
     # A run from a commit, writing one output
     function run_from!(commit, name; issue = nothing)
         config = DataPipeline._createconfig(cpath, latest_commit = commit,
-                                            remote_repo = remote)
+                                            remote_repo = remote,
+                                            local_repo = dir)
         data_product = "data_product/identify-repository/$uid/$name"
         DataPipeline._addwrite(config, data_product, "repository fixture",
                                file_type = "txt", use_version = version)
