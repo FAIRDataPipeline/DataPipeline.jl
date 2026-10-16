@@ -67,7 +67,11 @@
         "id": "https://github.com/FAIRDataPipeline/DataPipeline.jl/actions/workflows/testing.yaml"
     },
     "keywords": [
-        "julia"
+        "FAIR data",
+        "data management",
+        "julia",
+        "reproducibility",
+        "workflows"
     ],
     "description": "The Julia interface to the FAIR Data Pipeline, intended to enable tracking of provenance of FAIR (findable, accessible, interoperable and reusable) data",
     "applicationCategory": "data"

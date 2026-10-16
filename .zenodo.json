@@ -32,6 +32,10 @@
         }
     ],
     "keywords": [
-        "julia"
+        "FAIR data",
+        "data management",
+        "julia",
+        "reproducibility",
+        "workflows"
     ]
 }
