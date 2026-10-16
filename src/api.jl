@@ -724,6 +724,10 @@ end
                  all_versions = false)
     raise_issue!(handle, targets, description; severity = $DEFAULT_ISSUE_SEVERITY,
                  all_versions = false)
+    raise_issue!(target, description; remote = nothing,
+                 severity = $DEFAULT_ISSUE_SEVERITY, all_versions = false)
+    raise_issue!(registry, target, description;
+                 severity = $DEFAULT_ISSUE_SEVERITY, all_versions = false)
 
 Raise an issue with one thing, or with several at once as one registry issue.
 A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
@@ -732,7 +736,9 @@ A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
 a data product of this run by its config name, as
 [`ConfigDataProduct`](@ref) names one, or a registered data product as
 `namespace:name@version` (`namespace:name` for its newest version), as
-[`ExistingDataProduct`](@ref) names one.
+[`ExistingDataProduct`](@ref) names one; or an
+[`AbstractCommitSelection`](@ref), which stands for the
+[`CodeRepository`](@ref) of the commits it selects.
 `severity` is an integer, larger for worse, by default the registry's own
 default. Issues are queued in the handle
 and registered by [`finalise`](@ref), so an output can be named before it
@@ -743,6 +749,30 @@ product too, which the issue would then not reach. `finalise` looks for them,
 and warns of any; with `all_versions = true` it raises the issue on every
 such version as well, as one issue over their components. There is no
 prompt, since a script may run where no one can answer.
+
+Outside a run - given a registry, or none for the CLI's local registry or its
+remote registry named `remote` - the issue is registered at once, and its URL
+returned, which [`downstream`](@ref) takes as `issue`. Only a target that names
+what it is on without a run can be raised so: an
+[`ExistingDataProduct`](@ref), or a string of its form, and commits - an
+[`AbstractCommitSelection`](@ref), or a `CodeRepository` given one; any other
+is an `ArgumentError`. So
+`raise_issue!(AncestorCommits(of = "v1.2", including = false), "Fixed in v1.2")`
+raises an issue on the code that came before `v1.2`. Registering needs the registry's token, which
+[`RegistryEndpoint`](@ref) reads from the CLI's configuration. While the
+session is rehearsing a run, the issue is printed as what would be raised,
+nothing is registered, and `nothing` is returned.
+
+# Arguments
+- `handle::DataRegistryHandle`: the code run the issue is raised in.
+- `registry::RegistryEndpoint`: the registry to raise it in, outside a run.
+- `target`, `targets`: what the issue is on, as above.
+- `description::String`: the issue.
+- `severity::Integer`: larger for worse.
+- `all_versions::Bool`: whether to raise it on the other versions of a data
+  product holding the same bytes too.
+- `remote`: with no registry given, the remote registry of that name in the
+  current project's CLI configuration, else the CLI's local registry.
 """
 function raise_issue!(handle::DataRegistryHandle, targets::AbstractVector,
                       description::String;
@@ -757,16 +787,53 @@ function raise_issue!(handle::DataRegistryHandle, targets::AbstractVector,
     return nothing
 end
 function raise_issue!(handle::DataRegistryHandle,
-                      target::Union{AbstractIssueTarget, AbstractString},
-                      description::String;
+                      target::_IssueTargetArgument, description::String;
                       severity::Integer = DEFAULT_ISSUE_SEVERITY,
                       all_versions::Bool = false)
     return raise_issue!(handle, [target], description; severity, all_versions)
 end
+function raise_issue!(registry::RegistryEndpoint, targets::AbstractVector,
+                      description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    resolved = AbstractIssueTarget[_astarget(target) for target in targets]
+    for target in resolved
+        _checkoutsiderun(target)
+    end
+    components = reduce(vcat,
+                        (_issuecomponents(registry, target)
+                         for target in resolved),
+                        init = String[])
+    issue = PendingIssue(resolved, description, severity, all_versions)
+    return _raiseoutsiderun(_sessionmode(), registry, issue, components)
+end
+function raise_issue!(registry::RegistryEndpoint, target::_IssueTargetArgument,
+                      description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(registry, [target], description; severity,
+                        all_versions)
+end
+function raise_issue!(targets::AbstractVector, description::String;
+                      remote::Union{Nothing, AbstractString} = nothing,
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(RegistryEndpoint(remote = remote), targets,
+                        description; severity, all_versions)
+end
+function raise_issue!(target::_IssueTargetArgument, description::String;
+                      remote::Union{Nothing, AbstractString} = nothing,
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(RegistryEndpoint(remote = remote), [target],
+                        description; severity, all_versions)
+end
 
 # A bare string names a data product: of this run by its config name, or a
-# registered one as `namespace:name@version`, which no config name looks like
+# registered one as `namespace:name@version`, which no config name looks like;
+# a commit selection names the commits of a code repository
 _astarget(target::AbstractIssueTarget) = target
+_astarget(commits::AbstractCommitSelection) = CodeRepository(commits)
 function _astarget(data_product::AbstractString)
     return occursin(':', data_product) ? ExistingDataProduct(data_product) :
            ConfigDataProduct(data_product)
@@ -781,3 +848,15 @@ function _checktarget(handle::DataRegistryHandle, target::ConfigDataProduct)
     return throw(ConfigFileException("'$(target.data_product)' not found in config file"))
 end
 _checktarget(::DataRegistryHandle, ::AbstractIssueTarget) = nothing
+
+# Throw unless a target names what it is on without a run, as an issue raised
+# outside one needs
+_checkoutsiderun(::ExistingDataProduct) = nothing
+function _checkoutsiderun(target::CodeRepository)
+    isnothing(target.commits) &&
+        throw(ArgumentError("CodeRepository() is the commit of a code run: outside a run, select commits, such as AncestorCommits()"))
+    return nothing
+end
+function _checkoutsiderun(target::AbstractIssueTarget)
+    return throw(ArgumentError("$target is part of a code run: raise it with the run's handle, as raise_issue!(handle, target, description)"))
+end

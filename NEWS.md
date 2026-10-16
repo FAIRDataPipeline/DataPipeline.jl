@@ -11,6 +11,9 @@
     - A source is one file: a second file under one identifier, title and
       release version is refused, at the call or at `finalise`.
     - Registering a source needs `data-registry` v1.4.0 or later.
+    - `AncestorCommits()`, `CheckedOutCommit()` and `AllCommits()` made with no
+      `repo` outside a git repository are an `ArgumentError`, since a selection
+      holds its repository.
     - `registry_audit`, `registry_audit_recursive` and `record_issues!` are
       removed: written for the registry's 2021 schema, they could not run
       against any registry since. `provenance` and `downstream` are what they
@@ -79,21 +82,27 @@
     run at its commit, what it read, each input's source, issues and the
     version that supersedes it, back to the data registered from elsewhere.
   - `DataPipeline.downstream(x)` traces the other way, to everything made from
-    a data product, from the runs of a repository with `repo = `, or from
-    everything an issue is raised on with `issue = `: what must be made again.
+    a data product, from the runs of selected commits, or from everything an
+    issue is raised on with `issue = `: what must be made again.
   - `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
     files, folders and data products named, as its metadata or saved as a
     zip with `to = "paper.zip"`.
   - `identify` of a file also reports the issues raised on anything behind it,
     each with the run it reaches the file through, and with `superseded = true`
     the inputs behind it that a newer version of has been registered since.
-  - A git repository is named to `identify` by `repo = folder`, or by the URL
-    of its remote with no clone; the folder by position is deprecated. `commits`
-    takes a commit by name - a tag, a branch, a hash or a registered release's
-    version - as a string or `NamedCommit`.
-  - `AncestorCommits(of = "v1.0", including = false)` selects the commits
-    before a named commit rather than the checked-out one; `of` names it as
-    `NamedCommit` does, and `including` says whether it is selected itself.
+  - A commit selection holds its repository, `repo` - a clone's top-level
+    folder or its remote's URL, by default the open run's clone, else the
+    repository holding the current directory - and is what `identify` and
+    `downstream` take: `identify(AncestorCommits())`. The folder by position is
+    deprecated.
+  - `NamedCommit("v1.0")` selects a commit by tag, branch, hash or registered
+    release's version; `AncestorCommits(of = "v1.0", including = false)` the
+    commits before it.
+  - `raise_issue!(target, description)` outside a run, with a registry or the
+    CLI's, registers the issue at once and returns its URL, for an
+    `ExistingDataProduct` or a commit selection: so
+    `raise_issue!(AncestorCommits(of = "v1.2", including = false), "...")`
+    raises an issue on the code before `v1.2`.
   - A registered data product is named `namespace:name@version` everywhere, as
     the CLI names one, with `namespace:name` for its newest version:
     `link_register!` takes the form in place of its `namespace` and `version`

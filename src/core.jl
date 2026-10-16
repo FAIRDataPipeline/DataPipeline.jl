@@ -63,6 +63,135 @@ function Base.show(io::IO, ::MIME"text/plain", registry::RegistryEndpoint)
 end
 
 """
+    AbstractCommitSelection
+
+Commits of a git repository: which commits, of which repository, and whether
+the runs made from them with uncommitted changes are included, which the
+registry records as `<sha>-dirty`. [`identify`](@ref) and
+[`downstream`](@ref) take one in place of a file, and [`raise_issue!`](@ref)
+takes one as a target. The selections are [`AncestorCommits`](@ref),
+[`CheckedOutCommit`](@ref), [`AllCommits`](@ref) and [`NamedCommit`](@ref).
+
+Each has a `repo` field and a `dirty` field, set by its constructor's keywords
+of the same names. `repo` is the repository: the top-level folder of a clone,
+as an absolute path, or the URL of its remote, which leaves the registry's
+record alone to go by. Given, a folder must be the top level of a repository;
+left out, it is the clone of the run open in this session, else the
+repository holding the current directory. A selection that needs a clone - the
+checked-out commit, or ancestors - cannot be made with a URL.
+"""
+abstract type AbstractCommitSelection end
+
+"""
+    AncestorCommits(; of = nothing, including = true, repo = nothing,
+                    dirty = false)
+
+Select a commit and every commit it descends from - the code it grew from -
+and, if `dirty`, the runs made from them with uncommitted changes too. Finding
+ancestors needs a clone holding the commit.
+
+# Arguments
+- `of`: the commit to start from, named as [`NamedCommit`](@ref) names one: a
+  tag, a branch, a commit hash or the version of a registered release of the
+  code. `nothing`, the default, is the checked-out commit.
+- `including`: whether that commit is selected itself; with `false`, only the
+  commits before it, and so not the runs made from it with uncommitted changes
+  either.
+- `repo`: the clone, as for every [`AbstractCommitSelection`](@ref).
+- `dirty`: whether the runs made with uncommitted changes are selected too.
+"""
+struct AncestorCommits <: AbstractCommitSelection
+    of::Union{Nothing, String}
+    including::Bool
+    repo::String
+    dirty::Bool
+
+    function AncestorCommits(; of::Union{Nothing, AbstractString} = nothing,
+                             including::Bool = true,
+                             repo::Union{Nothing, AbstractString} = nothing,
+                             dirty::Bool = false)
+        return new(isnothing(of) ? nothing : String(of), including,
+                   _selectionrepo(repo, "the ancestors of a commit"), dirty)
+    end
+end
+
+"""
+    CheckedOutCommit(; repo = nothing, dirty = false)
+
+Select only the checked-out commit of a clone and, if `dirty`, the runs made
+from it with uncommitted changes too. `repo` is the clone, as for every
+[`AbstractCommitSelection`](@ref).
+"""
+struct CheckedOutCommit <: AbstractCommitSelection
+    repo::String
+    dirty::Bool
+
+    function CheckedOutCommit(; repo::Union{Nothing, AbstractString} = nothing,
+                              dirty::Bool = false)
+        return new(_selectionrepo(repo, "the checked-out commit"), dirty)
+    end
+end
+
+"""
+    AllCommits(; repo = nothing, dirty = false)
+
+Select every commit of a repository that the registry holds runs for, whether
+or not the local clone has it, and, if `dirty`, the runs made from them with
+uncommitted changes too. `repo` is a clone or the URL of its remote, as for
+every [`AbstractCommitSelection`](@ref).
+"""
+struct AllCommits <: AbstractCommitSelection
+    repo::String
+    dirty::Bool
+
+    function AllCommits(; repo::Union{Nothing, AbstractString} = nothing,
+                        dirty::Bool = false)
+        return new(_selectionrepo(repo, nothing), dirty)
+    end
+end
+
+"""
+    NamedCommit(name; repo = nothing, dirty = false)
+
+Select one commit by name: a full commit hash, as it is; a tag, a branch or an
+abbreviated hash, resolved by the local clone; or the version of a release of
+the code that the registry holds, with or without a leading `v`, which
+resolves with no clone at all. If `dirty`, the runs made from the commit with
+uncommitted changes too. `repo` is a clone or the URL of its remote, as for
+every [`AbstractCommitSelection`](@ref); by URL, only a full hash and a
+release resolve.
+"""
+struct NamedCommit <: AbstractCommitSelection
+    name::String
+    repo::String
+    dirty::Bool
+
+    function NamedCommit(name::AbstractString;
+                         repo::Union{Nothing, AbstractString} = nothing,
+                         dirty::Bool = false)
+        return new(String(name), _selectionrepo(repo, nothing), dirty)
+    end
+end
+
+function Base.show(io::IO, selection::AbstractCommitSelection)
+    print(io, nameof(typeof(selection)), "(")
+    _showleading(io, selection)
+    selection.dirty && print(io, "dirty = true, ")
+    return print(io, "repo = ", repr(selection.repo), ")")
+end
+
+# What a selection is shown selecting, before the keywords every one has
+_showleading(::IO, ::AbstractCommitSelection) = nothing
+function _showleading(io::IO, selection::NamedCommit)
+    return print(io, repr(selection.name), ", ")
+end
+function _showleading(io::IO, selection::AncestorCommits)
+    isnothing(selection.of) || print(io, "of = ", repr(selection.of), ", ")
+    selection.including || print(io, "including = false, ")
+    return nothing
+end
+
+"""
     AbstractIssueTarget
 
 The thing a registry issue is raised against. Concrete targets are
@@ -87,11 +216,29 @@ Target for [`raise_issue!`](@ref): this code run's submission script.
 struct SubmissionScript <: AbstractIssueTarget end
 
 """
-    CodeRepository()
+    CodeRepository(commits = nothing)
 
-Target for [`raise_issue!`](@ref): the code repository this run was made from.
+Target for [`raise_issue!`](@ref): commits of a code repository. With no
+`commits`, the commit this code run was made from. With an
+[`AbstractCommitSelection`](@ref), every commit it selects that the registry
+holds a run of, as [`identify`](@ref) finds them, which needs no run: so
+`CodeRepository(AncestorCommits(of = "v1.2", including = false))` is the code
+that came before `v1.2`. A selection given to `raise_issue!` by itself means
+this target.
 """
-struct CodeRepository <: AbstractIssueTarget end
+struct CodeRepository <: AbstractIssueTarget
+    commits::Union{Nothing, AbstractCommitSelection}
+
+    function CodeRepository(commits::Union{Nothing, AbstractCommitSelection} = nothing)
+        return new(commits)
+    end
+end
+
+function Base.show(io::IO, target::CodeRepository)
+    print(io, "CodeRepository(")
+    isnothing(target.commits) || show(io, target.commits)
+    return print(io, ")")
+end
 
 """
     ConfigDataProduct(data_product; component = nothing)
@@ -136,6 +283,11 @@ struct ExistingDataProduct <: AbstractIssueTarget
                    isnothing(component) ? nothing : String(component))
     end
 end
+
+# What `raise_issue!` takes as a target: a target, or a data product's name
+# or a commit selection, which stand for one
+const _IssueTargetArgument = Union{AbstractIssueTarget, AbstractString,
+                                   AbstractCommitSelection}
 
 # An issue queued by `raise_issue`, registered by `finalise` once its targets exist
 struct PendingIssue
@@ -358,6 +510,43 @@ end
 const SESSION = Ref{Union{Nothing, SessionRun}}(nothing)
 
 # == Functions ==
+
+# The repository a commit selection is of, as it holds it: a URL as given,
+# refused for a selection needing a clone, which `needs_clone` describes; a
+# folder given, which must be a repository's top level; or, given none, the
+# clone of the run open in the session, else the repository holding the
+# current directory, as an absolute path either way
+function _selectionrepo(repo::AbstractString,
+                        needs_clone::Union{Nothing, String})
+    if _isremoteurl(repo)
+        isnothing(needs_clone) ||
+            throw(ArgumentError("$needs_clone needs a clone of the repository, and $repo is a URL: give the clone's folder, or select AllCommits() or a NamedCommit"))
+        return String(repo)
+    end
+    isdir(repo) || throw(ArgumentError("no folder at $repo"))
+    top = _gittoplevel(repo)
+    isnothing(top) &&
+        throw(ArgumentError("$repo is not the top level of a git repository"))
+    samefile(top, repo) ||
+        throw(ArgumentError("$repo is inside the git repository at $top: name that folder"))
+    return _foldername(top)
+end
+function _selectionrepo(::Nothing, ::Union{Nothing, String})
+    session = SESSION[]
+    open = !isnothing(session) && !isnothing(session.handle) && !session.ended
+    start = open ? session.handle.config["run_metadata"]["local_repo"] : pwd()
+    top = _gittoplevel(start)
+    isnothing(top) &&
+        throw(ArgumentError(string(open ? "the clone of this session's run, " :
+                                   "the current directory, ", start,
+                                   ", is not in a git repository: give `repo`")))
+    return _foldername(top)
+end
+
+# A folder's absolute path, with no trailing separator
+function _foldername(path::AbstractString)
+    return dirname(joinpath(normpath(abspath(path)), ""))
+end
 
 # The headers every registry request carries, with the endpoint's own token
 # when it has one

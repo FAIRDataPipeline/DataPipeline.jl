@@ -1021,15 +1021,16 @@ Test.@testset "identify() a git repository" begin
                                  "model_config" => handle.config_obj,
                                  "submission_script" => handle.script_obj))
 
-    # By default the checked-out commit and its ancestors, newest first,
-    # whichever way their paths were registered
-    found = DataPipeline.identify(registry; repo = dir)
+    # The checked-out commit and its ancestors, newest first, whichever way
+    # their paths were registered
+    found = DataPipeline.identify(registry,
+                                  DataPipeline.AncestorCommits(repo = dir))
     @test found isa DataPipeline.RepositoryIdentification
     @test samefile(found.path, dir)
     @test found.remote == remote
     @test found.head == head_sha
     @test !found.dirty
-    @test found.selection == DataPipeline.AncestorCommits()
+    @test found.selection == DataPipeline.AncestorCommits(repo = dir)
     @test [commit.sha for commit in found.commits] == [head_sha, parent_sha]
     @test !any(commit.dirty for commit in found.commits)
     @test found.commits[1].date == unix2datetime(t0 + 10)
@@ -1041,30 +1042,35 @@ Test.@testset "identify() a git repository" begin
     @test occursin(remote, text)
     @test occursin("commit issue $uid", text)
     @test occursin(second_output, text)
+    # The commits of a selection, and with whether each was dirty
+    ids(selection) = [commit.sha
+                      for commit in DataPipeline.identify(registry,
+                                                          selection).commits]
+    shas(selection) = [(commit.sha, commit.dirty)
+                       for commit in DataPipeline.identify(registry,
+                                                           selection).commits]
     # A handle may be given instead of a registry
     @test [commit.sha
-           for commit in DataPipeline.identify(handle; repo = dir).commits] ==
+           for commit in DataPipeline.identify(handle,
+                                               DataPipeline.AncestorCommits(repo = dir)).commits] ==
           [head_sha, parent_sha]
 
     # Only the checked-out commit
-    only_head = DataPipeline.identify(registry; repo = dir,
-                                      commits = DataPipeline.CheckedOutCommit())
-    @test [commit.sha for commit in only_head.commits] == [head_sha]
+    @test ids(DataPipeline.CheckedOutCommit(repo = dir)) == [head_sha]
 
     # Only what came before the checked-out commit, without the runs made from
     # it with uncommitted changes, which grew from it
-    before = DataPipeline.identify(registry; repo = dir,
-                                   commits = DataPipeline.AncestorCommits(including = false,
-                                                                          dirty = true))
-    @test [(commit.sha, commit.dirty) for commit in before.commits] ==
-          [(parent_sha, false)]
+    before_head = DataPipeline.AncestorCommits(including = false, repo = dir,
+                                               dirty = true)
+    @test shas(before_head) == [(parent_sha, false)]
     @test occursin("selected:    the ancestors of the checked-out commit,",
-                   sprint(show, MIME("text/plain"), before))
+                   sprint(show, MIME("text/plain"),
+                          DataPipeline.identify(registry, before_head)))
 
     # Every commit: those in the clone by commit date, then those the clone
     # lacks, newest first by their earliest run
-    every = DataPipeline.identify(registry; repo = dir,
-                                  commits = DataPipeline.AllCommits()).commits
+    every = DataPipeline.identify(registry,
+                                  DataPipeline.AllCommits(repo = dir)).commits
     @test [(commit.sha, commit.dirty) for commit in every] ==
           [(head_sha, false), (side_sha, false), (parent_sha, false),
         (later_absent_sha, false), (absent_sha, false)]
@@ -1072,57 +1078,78 @@ Test.@testset "identify() a git repository" begin
 
     # Runs with uncommitted changes only when asked for, each beside its commit,
     # whichever commits are selected
-    shas(selection) = [(commit.sha, commit.dirty)
-                       for commit in DataPipeline.identify(registry; repo = dir,
-                                                           commits = selection).commits]
-    @test shas(DataPipeline.AncestorCommits(dirty = true)) ==
+    @test shas(DataPipeline.AncestorCommits(repo = dir, dirty = true)) ==
           [(head_sha, false), (head_sha, true), (parent_sha, false)]
-    @test shas(DataPipeline.CheckedOutCommit(dirty = true)) ==
+    @test shas(DataPipeline.CheckedOutCommit(repo = dir, dirty = true)) ==
           [(head_sha, false), (head_sha, true)]
-    @test shas(DataPipeline.AllCommits(dirty = true)) ==
+    @test shas(DataPipeline.AllCommits(repo = dir, dirty = true)) ==
           [(head_sha, false), (head_sha, true), (side_sha, false),
         (parent_sha, false), (later_absent_sha, false), (absent_sha, false)]
     @test occursin("with runs made with uncommitted changes",
                    sprint(show, MIME("text/plain"),
-                          DataPipeline.identify(registry; repo = dir,
-                                                commits = DataPipeline.AllCommits(dirty = true))))
+                          DataPipeline.identify(registry,
+                                                DataPipeline.AllCommits(repo = dir,
+                                                                        dirty = true))))
 
-    # A selection is made with the keyword, and prints as it is written
-    @test sprint(show, DataPipeline.AncestorCommits()) == "AncestorCommits()"
-    @test sprint(show, DataPipeline.CheckedOutCommit(dirty = true)) ==
-          "CheckedOutCommit(dirty = true)"
-    @test DataPipeline.AllCommits(dirty = false) == DataPipeline.AllCommits()
+    # A selection is made with keywords, holds its repository as an absolute
+    # path, and prints as it is written, with that path
+    @test sprint(show, DataPipeline.AncestorCommits(repo = dir)) ==
+          "AncestorCommits(repo = $(repr(dir)))"
+    @test sprint(show,
+                 DataPipeline.CheckedOutCommit(repo = dir, dirty = true)) ==
+          "CheckedOutCommit(dirty = true, repo = $(repr(dir)))"
+    @test DataPipeline.AllCommits(repo = dir, dirty = false) ==
+          DataPipeline.AllCommits(repo = dir)
+    @test DataPipeline.AllCommits(repo = joinpath(dir, "")) ==
+          DataPipeline.AllCommits(repo = dir)
     @test_throws MethodError DataPipeline.AllCommits(true)
+
+    # A repository given must be a top-level folder; left out, it is the
+    # repository holding the current directory, found by walking up
+    mkdir(joinpath(dir, "sub"))
+    for folder in (joinpath(dir, "sub"), mktempdir(), joinpath(dir, "absent"))
+        @test_throws ArgumentError DataPipeline.AllCommits(repo = folder)
+    end
+    cd(joinpath(dir, "sub")) do
+        @test samefile(DataPipeline.AncestorCommits().repo, dir)
+        @test samefile(DataPipeline.NamedCommit("v1.0").repo, dir)
+    end
+    cd(mktempdir()) do
+        err = @test_throws ArgumentError DataPipeline.AllCommits()
+        @test occursin("is not in a git repository: give `repo`",
+                       err.value.msg)
+    end
 
     # Uncommitted changes in the checkout: a warning, and its commit taken as
     # committed
     write(joinpath(dir, "a.txt"), "edited")
-    edited = @test_logs (:warn, r"uncommitted changes") DataPipeline.identify(registry;
-                                                                              repo = dir)
+    edited = @test_logs (:warn, r"uncommitted changes") DataPipeline.identify(registry,
+                                                                              DataPipeline.AncestorCommits(repo = dir))
     @test edited.dirty
     @test [commit.sha for commit in edited.commits] == [head_sha, parent_sha]
     write(joinpath(dir, "a.txt"), committed("second"))
-    @test !DataPipeline.identify(registry; repo = dir).dirty
+    @test !DataPipeline.identify(registry,
+                                 DataPipeline.AncestorCommits(repo = dir)).dirty
 
     # A commit nothing was run from
     commit!("third", t = t0 + 20)
-    unrun = DataPipeline.identify(registry; repo = dir,
-                                  commits = DataPipeline.CheckedOutCommit())
+    unrun = DataPipeline.identify(registry,
+                                  DataPipeline.CheckedOutCommit(repo = dir))
     @test isempty(unrun.commits)
     @test occursin("no run registered", sprint(show, MIME("text/plain"), unrun))
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir).commits] ==
+    @test ids(DataPipeline.AncestorCommits(repo = dir)) ==
           [head_sha, parent_sha]
 
     # The repository is known by the remote its CLI configuration names, as
     # `fair run` records it, and by `origin` only when there is none
     LibGit2.set_remote_url(repo, "origin", "https://github.com/elsewhere/$uid")
     close(LibGit2.GitRemote(repo, "upstream", remote))
-    @test isempty(DataPipeline.identify(registry; repo = dir).commits)
+    @test isempty(ids(DataPipeline.AncestorCommits(repo = dir)))
     mkpath(joinpath(dir, ".fair"))
     DataPipeline.YAML.write_file(joinpath(dir, ".fair", "cli-config.yaml"),
                                  Dict("git" => Dict("remote" => "upstream")))
-    by_upstream = DataPipeline.identify(registry; repo = dir)
+    by_upstream = DataPipeline.identify(registry,
+                                        DataPipeline.AncestorCommits(repo = dir))
     @test by_upstream.remote == remote
     @test [commit.sha for commit in by_upstream.commits] ==
           [head_sha, parent_sha]
@@ -1131,39 +1158,28 @@ Test.@testset "identify() a git repository" begin
     # by the clone, with the runs made from it with uncommitted changes when
     # asked; the selection printed as written
     LibGit2.tag_create(repo, "v1.0", head_sha, sig = signature(t0 + 20))
-    by_hash = DataPipeline.identify(registry; repo = dir, commits = head_sha)
+    named(name; dirty = false) = DataPipeline.NamedCommit(name, repo = dir,
+                                                          dirty = dirty)
+    by_hash = DataPipeline.identify(registry, named(head_sha))
     @test [commit.sha for commit in by_hash.commits] == [head_sha]
-    @test by_hash.selection == DataPipeline.NamedCommit(head_sha)
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = first(head_sha, 7)).commits] ==
-          [head_sha]
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = "v1.0").commits] ==
-          [head_sha]
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = "side").commits] ==
-          [side_sha]
-    tagged = DataPipeline.identify(registry; repo = dir,
-                                   commits = DataPipeline.NamedCommit("v1.0",
-                                                                      dirty = true))
+    @test by_hash.selection == named(head_sha)
+    @test ids(named(first(head_sha, 7))) == [head_sha]
+    @test ids(named("v1.0")) == [head_sha]
+    @test ids(named("side")) == [side_sha]
+    tagged = DataPipeline.identify(registry, named("v1.0", dirty = true))
     @test [(commit.sha, commit.dirty) for commit in tagged.commits] ==
           [(head_sha, false), (head_sha, true)]
-    @test sprint(show, DataPipeline.NamedCommit("v1.0")) ==
-          "NamedCommit(\"v1.0\")"
-    @test sprint(show, DataPipeline.NamedCommit("v1.0", dirty = true)) ==
-          "NamedCommit(\"v1.0\", dirty = true)"
+    @test sprint(show, named("v1.0")) ==
+          "NamedCommit(\"v1.0\", repo = $(repr(dir)))"
+    @test sprint(show, named("v1.0", dirty = true)) ==
+          "NamedCommit(\"v1.0\", dirty = true, repo = $(repr(dir)))"
     @test occursin("selected:    the commit named \"v1.0\", with runs made",
                    sprint(show, MIME("text/plain"), tagged))
 
     # The ancestors of a commit by name rather than the checked-out one, with
     # or without it
     function ancestors(; kw...)
-        selection = DataPipeline.AncestorCommits(; kw...)
-        found = DataPipeline.identify(registry; repo = dir, commits = selection)
-        return [(commit.sha, commit.dirty) for commit in found.commits]
+        return shas(DataPipeline.AncestorCommits(; repo = dir, kw...))
     end
     @test ancestors(of = "side") == [(side_sha, false), (parent_sha, false)]
     @test ancestors(of = "v1.0", dirty = true) ==
@@ -1172,36 +1188,41 @@ Test.@testset "identify() a git repository" begin
           [(parent_sha, false)]
     @test ancestors(of = parent_sha, including = false) == []
     side_text = sprint(show, MIME("text/plain"),
-                       DataPipeline.identify(registry; repo = dir,
-                                             commits = DataPipeline.AncestorCommits(of = "side")))
+                       DataPipeline.identify(registry,
+                                             DataPipeline.AncestorCommits(of = "side",
+                                                                          repo = dir)))
     @test occursin("selected:    the commit named \"side\" and its ancestors\n",
                    side_text)
     @test sprint(show,
                  DataPipeline.AncestorCommits(of = "v1.0", including = false,
-                                              dirty = true)) ==
-          "AncestorCommits(of = \"v1.0\", including = false, dirty = true)"
-    @test DataPipeline.AncestorCommits(of = SubString("v1.0")) ==
-          DataPipeline.AncestorCommits(of = "v1.0")
+                                              repo = dir, dirty = true)) ==
+          "AncestorCommits(of = \"v1.0\", including = false, dirty = true, repo = $(repr(dir)))"
+    @test DataPipeline.AncestorCommits(of = SubString("v1.0"), repo = dir) ==
+          DataPipeline.AncestorCommits(of = "v1.0", repo = dir)
     # Named, they are not about the checkout, so its uncommitted changes go
     # unremarked
     write(joinpath(dir, "a.txt"), "edited")
-    @test_logs DataPipeline.identify(registry; repo = dir,
-                                     commits = DataPipeline.AncestorCommits(of = "v1.0"))
+    @test_logs DataPipeline.identify(registry,
+                                     DataPipeline.AncestorCommits(of = "v1.0",
+                                                                  repo = dir))
     write(joinpath(dir, "a.txt"), committed("third"))
     # A name that resolves to no commit, or to one the clone lacks
-    err = @test_throws ArgumentError ancestors(of = "no-such-ref-$uid")
-    @test occursin("no such tag, branch or commit", err.value.msg)
+    for selection in (named("no-such-ref-$uid"),
+                      DataPipeline.AncestorCommits(of = "no-such-ref-$uid",
+                                                   repo = dir))
+        err = @test_throws ArgumentError DataPipeline.identify(registry,
+                                                               selection)
+        @test occursin("no such tag, branch or commit", err.value.msg)
+    end
     err = @test_throws ArgumentError ancestors(of = absent_sha)
     @test occursin("which the clone at", err.value.msg)
-    err = @test_throws ArgumentError DataPipeline.identify(registry; repo = dir,
-                                                           commits = "no-such-ref-$uid")
-    @test occursin("no such tag, branch or commit", err.value.msg)
 
     # By the URL of its remote, with no clone: every commit the registry
-    # holds, by default, with no dates; a full hash; what needs the clone is
-    # refused, a tag among it
-    by_url = DataPipeline.identify(registry; repo = remote)
-    @test by_url.selection == DataPipeline.AllCommits()
+    # holds, with no dates, or a full hash; a selection that needs the clone
+    # cannot be made, and a tag does not resolve
+    by_url = DataPipeline.identify(registry,
+                                   DataPipeline.AllCommits(repo = remote))
+    @test by_url.selection == DataPipeline.AllCommits(repo = remote)
     @test by_url.path == remote && by_url.remote == remote
     @test isnothing(by_url.head) && !by_url.dirty
     @test Set(commit.sha for commit in by_url.commits) ==
@@ -1209,19 +1230,16 @@ Test.@testset "identify() a git repository" begin
     @test all(isnothing(commit.date) for commit in by_url.commits)
     @test occursin("  no clone: the registry's record alone\n",
                    sprint(show, MIME("text/plain"), by_url))
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = remote,
-                                               commits = head_sha).commits] ==
-          [head_sha]
-    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
-                                                     commits = DataPipeline.AncestorCommits())
-    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
-                                                     commits = DataPipeline.CheckedOutCommit())
-    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
-                                                     commits = DataPipeline.AncestorCommits(of = head_sha))
-    err = @test_throws ArgumentError DataPipeline.identify(registry;
-                                                           repo = remote,
-                                                           commits = "v1.0")
+    @test ids(DataPipeline.NamedCommit(head_sha, repo = remote)) == [head_sha]
+    for make in (() -> DataPipeline.AncestorCommits(repo = remote),
+        () -> DataPipeline.CheckedOutCommit(repo = remote),
+        () -> DataPipeline.AncestorCommits(of = head_sha, repo = remote))
+        err = @test_throws ArgumentError make()
+        @test occursin("needs a clone", err.value.msg)
+    end
+    err = @test_throws ArgumentError DataPipeline.identify(registry,
+                                                           DataPipeline.NamedCommit("v1.0",
+                                                                                    repo = remote))
     @test occursin("no clone to resolve it with", err.value.msg)
     # A release the registry holds resolves its version with no clone, and
     # with a clone that has no such tag
@@ -1229,29 +1247,132 @@ Test.@testset "identify() a git repository" begin
                             Dict("name" => "identify fixture $uid",
                                  "version" => "3.1.4",
                                  "object" => object_url))
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = remote,
-                                               commits = "v3.1.4").commits] ==
-          [parent_sha]
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = "3.1.4").commits] ==
-          [parent_sha]
+    @test ids(DataPipeline.NamedCommit("v3.1.4", repo = remote)) == [parent_sha]
+    @test ids(named("3.1.4")) == [parent_sha]
     @test ancestors(of = "v3.1.4") == [(parent_sha, false)]
 
-    # A folder inside the repository, a folder that is no repository, and
-    # `commits` for a file are all mistakes
-    mkdir(joinpath(dir, "sub"))
-    @test_throws ArgumentError DataPipeline.identify(registry;
-                                                     repo = joinpath(dir,
-                                                                     "sub"))
-    @test_throws ArgumentError DataPipeline.identify(registry;
-                                                     repo = mktempdir())
+    # An issue on commits of the repository, raised outside a run at once: one
+    # issue on the whole of every object standing for a selected commit,
+    # returned as its URL
+    components(url) = Set(DataPipeline._getentry(registry,
+                                                 URIs.URI(url))["component_issues"])
+    whole(sha) = Set(DataPipeline._wholeobjectcomponent(registry, object)
+                     for commit in DataPipeline.identify(registry,
+                                                         named(sha)).commits
+                     for object in commit.objects)
+    issues(sha) = [issue.description
+                   for issue in only(DataPipeline.identify(registry,
+                                                           named(sha)).commits).issues]
+    before = DataPipeline.AncestorCommits(of = "v1.0", including = false,
+                                          repo = dir)
+    url = raise_issue!(registry, before, "before v1.0 $uid", severity = 3)
+    @test url isa String
+    @test components(url) == whole(parent_sha)
+    issue = only(issue
+                 for issue in only(DataPipeline.identify(registry,
+                                                         named(parent_sha)).commits).issues
+                 if issue.description == "before v1.0 $uid")
+    @test issue.severity == 3
+    @test !("before v1.0 $uid" in issues(head_sha))
+    # The same issue again is the one registered, whether the selection is
+    # given as it is or as the target it stands for
+    @test raise_issue!(registry, DataPipeline.CodeRepository(before),
+                       "before v1.0 $uid", severity = 3) == url
+    # Several commits, one issue; by the remote's URL, with no clone
+    from_tag = raise_issue!(registry,
+                            DataPipeline.AncestorCommits(of = "v1.0",
+                                                         repo = dir),
+                            "from v1.0 $uid")
+    @test components(from_tag) == union(whole(parent_sha), whole(head_sha))
+    by_url_issue = raise_issue!(registry,
+                                DataPipeline.NamedCommit(side_sha,
+                                                         repo = remote),
+                                "side by URL $uid")
+    @test components(by_url_issue) == whole(side_sha)
+    # With no registry given, the CLI's local registry and its token
+    @test components(raise_issue!(named("side"), "side by CLI $uid")) ==
+          whole(side_sha)
+    # A data product registered already needs no run either, and goes into one
+    # issue with commits
+    second = only(only(only(DataPipeline.identify(registry,
+                                                  named(head_sha)).commits).runs).outputs)
+    second_name = DataPipeline._dataproductname(second.namespace, second.name,
+                                                string(second.version))
+    second_component = DataPipeline._wholeobjectcomponent(registry,
+                                                          DataPipeline._getentry(registry,
+                                                                                 URIs.URI(second.url))["object"])
+    @test components(raise_issue!(registry, [second_name],
+                                  "on the output $uid")) ==
+          Set([second_component])
+    @test components(raise_issue!(registry, [second_name, named("side")],
+                                  "on the output and side $uid")) ==
+          union(Set([second_component]), whole(side_sha))
+    # What only a run has is refused by name, before anything is registered;
+    # a selection that holds no registered commit is an error; and with no
+    # token nothing is posted
+    for target in (DataPipeline.CodeRepository(), DataPipeline.WorkingConfig(),
+        "data_product/in/a/config")
+        @test_throws ArgumentError raise_issue!(registry, target,
+                                                "refused $uid")
+    end
+    err = @test_throws DataPipeline.ReadWriteException raise_issue!(registry,
+                                                                    DataPipeline.CheckedOutCommit(repo = dir),
+                                                                    "unrun $uid")
+    @test occursin("holds no run of $remote from the checked-out commit",
+                   err.value.msg)
+    err = @test_throws DataPipeline.ReadWriteException raise_issue!(DataPipeline.RegistryEndpoint(registry.url),
+                                                                    before,
+                                                                    "no token $uid")
+    @test occursin("no token", err.value.msg)
+    # While the session rehearses, printed and not registered
+    saved = DataPipeline.SESSION[]
+    DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
+                                                     mktempdir(), nothing,
+                                                     false)
+    printed = mktemp() do path, io
+        result = redirect_stdout(io) do
+            return raise_issue!(registry, before, "rehearsed $uid")
+        end
+        close(io)
+        return (result = result, text = read(path, String))
+    end
+    DataPipeline.SESSION[] = saved
+    @test isnothing(printed.result)
+    @test occursin("registering nothing", printed.text)
+    @test occursin(sprint(show, DataPipeline.CodeRepository(before)),
+                   printed.text)
+    @test !("rehearsed $uid" in issues(parent_sha))
+
+    # Inside a run a selection is queued like any target and registered at
+    # finalise, and one made while the run is open is of the run's own clone
+    # unless `repo` says otherwise; the run's commit is drawn from this file's
+    # name, which no other file's is
+    run_sha = bytes2hex(DataPipeline.SHA.sha1("test_api.jl issue in a run $uid"))
+    config = DataPipeline._createconfig(cpath, latest_commit = run_sha,
+                                        remote_repo = remote, local_repo = dir)
+    in_run = DataPipeline.initialise(config, config)
+    before_side = DataPipeline.AncestorCommits(of = "side", including = false)
+    @test samefile(before_side.repo, dir)
+    raise_issue!(in_run, before_side, "in a run $uid")
+    raise_issue!(in_run, DataPipeline.NamedCommit(side_sha, repo = remote),
+                 "in a run by URL $uid")
+    DataPipeline.finalise(in_run)
+    @test "in a run $uid" in issues(parent_sha)
+    @test "in a run by URL $uid" in issues(side_sha)
+    # Once the run has ended, the default is the current directory's again
+    @test !samefile(DataPipeline.AllCommits().repo, dir)
+
+    # A repository named by position still works, as a deprecation, with the
+    # selection's own repository replaced by it; `commits` for a file is a
+    # mistake
+    @test DataPipeline.identify(registry, dir).remote == remote
+    by_position = DataPipeline.identify(registry, dir,
+                                        commits = DataPipeline.AllCommits(repo = remote))
+    @test samefile(by_position.path, dir)
+    @test by_position.selection == DataPipeline.AllCommits(repo = dir)
     @test_throws ArgumentError DataPipeline.identify(registry,
                                                      joinpath(dir, "a.txt"),
-                                                     commits = DataPipeline.AllCommits())
-    # A repository named by position still works, as a deprecation
-    @test DataPipeline.identify(registry, dir).remote == remote
+                                                     commits = DataPipeline.AllCommits(repo = dir))
     close(repo)
 end
 

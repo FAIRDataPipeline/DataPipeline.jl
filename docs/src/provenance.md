@@ -9,21 +9,22 @@ all works outside `fair run`, against the local registry or a remote one.
 
 ## Asking what the registry knows about a file or a repository
 
-`DataPipeline.identify` takes a file, or a git repository by the path of its
-top-level folder, and asks the registry the FAIR CLI is configured to use, or
-any other, what it knows about it. No token is needed, so it works outside
-`fair run`:
+`DataPipeline.identify` takes a file, or commits of a git repository, and asks
+the registry the FAIR CLI is configured to use, or any other, what it knows
+about them. A selection of commits holds its repository: the top-level folder
+of a clone, or the URL of its remote, by default the repository holding the
+current directory. No token is needed, so it works outside `fair run`:
 
 ```julia
 DataPipeline.identify("results.csv")                     # the local registry
 DataPipeline.identify("results.csv", remote = "origin")  # a remote of this project
 DataPipeline.identify("results.csv", superseded = true)  # and the inputs behind it since superseded
-DataPipeline.identify(repo = ".")                        # this checkout's commit and its ancestors
-DataPipeline.identify(repo = ".", commits = "v0.55.0")   # one commit, by tag, branch, hash or release
+DataPipeline.identify(DataPipeline.AncestorCommits())   # this checkout's commit and its ancestors
+DataPipeline.identify(DataPipeline.NamedCommit("v0.55.0"))   # one commit, by tag, branch, hash or release
 # every run of this repository, including those made with uncommitted changes
-DataPipeline.identify(repo = ".", commits = DataPipeline.AllCommits(dirty = true))
+DataPipeline.identify(DataPipeline.AllCommits(dirty = true))
 # a repository with no clone, by the registry's record of it alone
-DataPipeline.identify(repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl")
+DataPipeline.identify(DataPipeline.AllCommits(repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl"))
 ```
 
 A file's identification carries the issues raised on it and, behind it, the
@@ -102,7 +103,7 @@ everything an issue is raised on, and prints as the mirror image of
 
 ```julia
 DataPipeline.downstream("PSU:SEIRS_model/parameters@v1.0.0")
-DataPipeline.downstream(repo = ".", commits = "v0.55.0")   # what this release's runs made, and on
+DataPipeline.downstream(DataPipeline.NamedCommit("v0.55.0"))   # what this release's runs made, and on
 DataPipeline.downstream(issue = 12)                        # what an issue affects
 ```
 

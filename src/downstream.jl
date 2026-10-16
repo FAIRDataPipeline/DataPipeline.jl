@@ -92,9 +92,6 @@ end
     downstream(x; remote = nothing, depth = nothing)
     downstream(registry, x; depth = nothing)
     downstream(handle, x; depth = nothing)
-    downstream(; repo, remote = nothing, commits = nothing, depth = nothing)
-    downstream(registry; repo, commits = nothing, depth = nothing)
-    downstream(handle; repo, commits = nothing, depth = nothing)
     downstream(; issue, remote = nothing, depth = nothing)
     downstream(registry; issue, depth = nothing)
     downstream(handle; issue, depth = nothing)
@@ -109,9 +106,9 @@ reached that no newer version has superseded.
 `x` names the start: a file, whose contents identify it as [`identify`](@ref)
 does, every data product it is registered as being a root; or
 `namespace:name@version`, as the pipeline names one, with `namespace:name`
-meaning its newest version. With `repo`, the start is everything the runs of
-a git repository wrote: the repository and `commits` are as `identify` takes
-them, by the folder of a clone or the URL of its remote. With `issue`, the
+meaning its newest version; or an [`AbstractCommitSelection`](@ref), such as
+`AncestorCommits()`, every data product the runs of the commits it selects
+wrote being a root, the commits found as `identify` finds them. With `issue`, the
 start is everything the issue is raised on - each data product, at the
 version it is on, and everything the runs made whose code repository,
 working config or submission script it is on - so that what the problem
@@ -142,47 +139,47 @@ function downstream(x::AbstractString;
                     depth::Union{Nothing, Integer} = nothing)
     return downstream(RegistryEndpoint(remote = remote), x; depth)
 end
-function downstream(registry::RegistryEndpoint;
-                    repo::Union{Nothing, AbstractString} = nothing,
-                    issue::Union{Nothing, Integer, AbstractString, TraceIssue,
-                                 IssueRecord} = nothing,
-                    commits::Union{Nothing, AbstractString,
-                                   AbstractCommitSelection} = nothing,
+function downstream(registry::RegistryEndpoint,
+                    commits::AbstractCommitSelection;
                     depth::Union{Nothing, Integer} = nothing)
     _checkdepth(depth)
-    count(!isnothing, (repo, issue)) == 1 ||
-        throw(ArgumentError("name one start: a data product, or `repo`, or `issue`"))
-    if isnothing(repo)
-        isnothing(commits) ||
-            throw(ArgumentError("`commits` selects the commits of `repo`, and no `repo` is named"))
-        return _issuedownstream(registry, _issueurl(registry, issue), depth)
-    end
-    identification = identify(registry; repo, commits)
+    identification = identify(registry, commits)
     roots = unique(product.url
                    for commit in identification.commits
                    for run in commit.runs for product in run.outputs)
     isempty(roots) &&
-        throw(ReadWriteException("no registered run of $(identification.remote) from $(_describe(identification.selection)) wrote a data product"))
+        throw(ReadWriteException("no registered run of $(identification.remote) from $(_describe(commits)) wrote a data product"))
     return _downstream(registry, roots, depth)
 end
-function downstream(handle::DataRegistryHandle;
-                    repo::Union{Nothing, AbstractString} = nothing,
-                    issue::Union{Nothing, Integer, AbstractString, TraceIssue,
-                                 IssueRecord} = nothing,
-                    commits::Union{Nothing, AbstractString,
-                                   AbstractCommitSelection} = nothing,
+function downstream(handle::DataRegistryHandle,
+                    commits::AbstractCommitSelection;
                     depth::Union{Nothing, Integer} = nothing)
-    return downstream(handle.registry; repo, issue, commits, depth)
+    return downstream(handle.registry, commits; depth)
 end
-function downstream(; repo::Union{Nothing, AbstractString} = nothing,
-                    issue::Union{Nothing, Integer, AbstractString, TraceIssue,
-                                 IssueRecord} = nothing,
+function downstream(commits::AbstractCommitSelection;
                     remote::Union{Nothing, AbstractString} = nothing,
-                    commits::Union{Nothing, AbstractString,
-                                   AbstractCommitSelection} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
-    return downstream(RegistryEndpoint(remote = remote); repo, issue, commits,
-                      depth)
+    return downstream(RegistryEndpoint(remote = remote), commits; depth)
+end
+function downstream(registry::RegistryEndpoint;
+                    issue::Union{Integer, AbstractString, TraceIssue,
+                                 IssueRecord},
+                    depth::Union{Nothing, Integer} = nothing)
+    _checkdepth(depth)
+    return _issuedownstream(registry, _issueurl(registry, issue), depth)
+end
+function downstream(handle::DataRegistryHandle;
+                    issue::Union{Integer, AbstractString, TraceIssue,
+                                 IssueRecord},
+                    depth::Union{Nothing, Integer} = nothing)
+    return downstream(handle.registry; issue, depth)
+end
+function downstream(;
+                    issue::Union{Integer, AbstractString, TraceIssue,
+                                 IssueRecord},
+                    remote::Union{Nothing, AbstractString} = nothing,
+                    depth::Union{Nothing, Integer} = nothing)
+    return downstream(RegistryEndpoint(remote = remote); issue, depth)
 end
 
 # The registry URL of the issue named: by a record from a trace or identify,

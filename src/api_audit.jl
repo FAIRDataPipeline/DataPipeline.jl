@@ -242,109 +242,6 @@ function Base.show(io::IO, ::MIME"text/plain", id::FileIdentification)
 end
 
 """
-    AbstractCommitSelection
-
-Which commits of a git repository [`identify`](@ref) reports, and whether it
-includes the runs made from them with uncommitted changes, which the registry
-records as `<sha>-dirty`: [`AncestorCommits`](@ref), [`CheckedOutCommit`](@ref)
-or [`AllCommits`](@ref). Each has a `dirty` field saying which, set by its
-constructor's `dirty` keyword.
-"""
-abstract type AbstractCommitSelection end
-
-"""
-    AncestorCommits(; of = nothing, including = true, dirty = false)
-
-Select a commit and every commit it descends from - the code it grew from -
-and, if `dirty`, the runs made from them with uncommitted changes too. What
-[`identify`](@ref) reports for a repository unless told otherwise. Finding
-ancestors needs a clone holding the commit.
-
-# Arguments
-- `of`: the commit to start from, named as [`NamedCommit`](@ref) names one: a
-  tag, a branch, a commit hash or the version of a registered release of the
-  code. `nothing`, the default, is the checked-out commit.
-- `including`: whether that commit is selected itself; with `false`, only the
-  commits before it, and so not the runs made from it with uncommitted changes
-  either.
-- `dirty`: whether the runs made with uncommitted changes are selected too.
-"""
-struct AncestorCommits <: AbstractCommitSelection
-    of::Union{Nothing, String}
-    including::Bool
-    dirty::Bool
-
-    function AncestorCommits(; of::Union{Nothing, AbstractString} = nothing,
-                             including::Bool = true, dirty::Bool = false)
-        return new(isnothing(of) ? nothing : String(of), including, dirty)
-    end
-end
-
-"""
-    CheckedOutCommit(; dirty = false)
-
-Select only the checked-out commit and, if `dirty`, the runs made from it with
-uncommitted changes too.
-"""
-struct CheckedOutCommit <: AbstractCommitSelection
-    dirty::Bool
-
-    CheckedOutCommit(; dirty::Bool = false) = new(dirty)
-end
-
-"""
-    AllCommits(; dirty = false)
-
-Select every commit of the repository that the registry holds runs for,
-whether or not the local clone has it, and, if `dirty`, the runs made from them
-with uncommitted changes too.
-"""
-struct AllCommits <: AbstractCommitSelection
-    dirty::Bool
-
-    AllCommits(; dirty::Bool = false) = new(dirty)
-end
-
-"""
-    NamedCommit(name; dirty = false)
-
-Select one commit by name: a full commit hash, as it is; a tag, a branch or an
-abbreviated hash, resolved by the local clone; or the version of a release of
-the code that the registry holds, with or without a leading `v`, which
-resolves with no clone at all. A `String` given as `commits` means this. If
-`dirty`, the runs made from the commit with uncommitted changes too.
-"""
-struct NamedCommit <: AbstractCommitSelection
-    name::String
-    dirty::Bool
-
-    function NamedCommit(name::AbstractString; dirty::Bool = false)
-        return new(String(name), dirty)
-    end
-end
-
-function Base.show(io::IO, selection::AbstractCommitSelection)
-    return print(io, nameof(typeof(selection)),
-                 selection.dirty ? "(dirty = true)" : "()")
-end
-function Base.show(io::IO, selection::NamedCommit)
-    print(io, "NamedCommit(", repr(selection.name))
-    selection.dirty && print(io, ", dirty = true")
-    return print(io, ")")
-end
-function Base.show(io::IO, selection::AncestorCommits)
-    keywords = String[]
-    isnothing(selection.of) || push!(keywords, "of = $(repr(selection.of))")
-    selection.including || push!(keywords, "including = false")
-    selection.dirty && push!(keywords, "dirty = true")
-    return print(io, "AncestorCommits(", join(keywords, ", "), ")")
-end
-
-# What `commits` names: a selection as given, a string the commit so named
-_asselection(selection::AbstractCommitSelection) = selection
-_asselection(name::AbstractString) = NamedCommit(name)
-
-"""
     CodeRunRecord
 
 A code run the registry holds.
@@ -408,8 +305,8 @@ What a registry knows about a git repository, as returned by
 commits selected.
 
 # Fields
-- `path`: the repository's top-level folder, or its URL when it was named by
-  that alone
+- `path`: the repository's top-level folder, or its URL when the selection
+  named it by that alone
 - `remote`: the URL of the git remote the registry knows it by
 - `head`: the checked-out commit, or `nothing` with no clone
 - `dirty`: whether the working tree has uncommitted changes to tracked files;
@@ -516,12 +413,12 @@ end
     identify(path; remote = nothing, superseded = false)
     identify(registry, path; superseded = false)
     identify(handle, path; superseded = false)
-    identify(; repo, remote = nothing, commits = AncestorCommits())
-    identify(registry; repo, commits = AncestorCommits())
-    identify(handle; repo, commits = AncestorCommits())
+    identify(commits; remote = nothing)
+    identify(registry, commits)
+    identify(handle, commits)
 
-Ask a registry what it knows about a file, or about a git repository, on
-disk.
+Ask a registry what it knows about a file on disk, or about commits of a git
+repository.
 
 For a **file**, return a [`FileIdentification`](@ref): the data products it is
 registered as, where the registry expects to find it, whether a newer version
@@ -535,21 +432,24 @@ the registry has no record of a file with these contents. The file is
 identified by the SHA-1 of its contents, as everything in the pipeline is, so
 a copy under another name is recognised and an edited file is not.
 
-For a **git repository**, named by the path of its top-level folder as
-`repo`, return a [`RepositoryIdentification`](@ref): the code runs made from
-its commits, with their outputs, and any issues raised against those commits.
+For **commits**, an [`AbstractCommitSelection`](@ref) - such as
+`AncestorCommits()`, the checked-out commit of the repository holding the
+current directory and its ancestors - return a
+[`RepositoryIdentification`](@ref): the code runs made from the selected
+commits, with their outputs, and any issues raised against those commits.
 The repository is known to the registry by the URL of its git remote - the
-one named by `git.remote` in its `.fair/cli-config.yaml`, else `origin` - and
-`commits` chooses which of its commits to report. Runs made with uncommitted
-changes are included only when `commits` is given `dirty = true`. When the
-checkout itself has uncommitted changes, `AncestorCommits` of the checked-out
-commit and `CheckedOutCommit` warn and use its commit as committed.
+one named by `git.remote` in its `.fair/cli-config.yaml`, else `origin` - or
+by the URL the selection was given as its `repo`. Runs made with uncommitted
+changes are included only when the selection is made with `dirty = true`.
+When the checkout itself has uncommitted changes, `AncestorCommits` of the
+checked-out commit and `CheckedOutCommit` warn and use its commit as
+committed.
 
 # Arguments
 - `path::String`: the file to ask about.
-- `repo`: the git repository to ask about: the top-level folder of a clone,
-  or the URL of its remote, which asks the registry's record alone. Any other
-  folder is an `ArgumentError`, including one inside a repository.
+- `commits::AbstractCommitSelection`: the commits to ask about:
+  [`AncestorCommits`](@ref), [`CheckedOutCommit`](@ref),
+  [`AllCommits`](@ref) or [`NamedCommit`](@ref), each holding its repository.
 - `registry::RegistryEndpoint`: the registry to ask, which needs no token,
   e.g. `RegistryEndpoint("http://127.0.0.1:8000/api/")`; a
   `DataRegistryHandle` may be given instead, and its registry is used.
@@ -558,19 +458,9 @@ commit and `CheckedOutCommit` warn and use its commit as committed.
   configuration; see [`RegistryEndpoint`](@ref).
 - `superseded`: for a file, whether to report the inputs behind it that have
   been superseded.
-- `commits`: for a repository, [`AncestorCommits()`](@ref AncestorCommits)
-  (the default with a clone, which may instead start from a named commit and
-  leave it out), [`CheckedOutCommit()`](@ref CheckedOutCommit),
-  [`AllCommits()`](@ref AllCommits) (the default by URL) or a commit by name -
-  a tag, a branch, a commit hash or the version of a registered release of
-  the code, as a string or as [`NamedCommit`](@ref) - each optionally with
-  `dirty = true`. By URL there is no clone, so the checked-out commit and its
-  ancestors are an `ArgumentError`, and a name resolves only as a full hash
-  or a registered release.
 """
 function identify(registry::RegistryEndpoint, path::String;
-                  commits::Union{Nothing, AbstractString,
-                                 AbstractCommitSelection} = nothing,
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing,
                   superseded::Bool = false)
     if isfile(path)
         isnothing(commits) ||
@@ -578,40 +468,35 @@ function identify(registry::RegistryEndpoint, path::String;
         return _identifyfile(registry, path; superseded)
     end
     isdir(path) || throw(ReadWriteException("no file or folder at $path"))
-    # A repository named by position: deprecated in 0.55.0, named by `repo`
-    Base.depwarn("`identify(folder)` is deprecated: name a git repository by `identify(repo = folder)`",
+    # A repository named by position, with `commits` as a keyword: deprecated
+    # in 0.55.0 for the selection, which holds its repository
+    Base.depwarn("`identify(folder)` is deprecated: name a git repository's commits by a selection holding it, as `identify(AncestorCommits(repo = folder))`",
                  :identify)
-    return identify(registry; repo = path, commits)
+    return identify(registry,
+                    isnothing(commits) ? AncestorCommits(repo = path) :
+                    _withrepo(commits, path))
 end
 function identify(handle::DataRegistryHandle, path::String;
-                  commits::Union{Nothing, AbstractString,
-                                 AbstractCommitSelection} = nothing,
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing,
                   superseded::Bool = false)
     return identify(handle.registry, path; commits, superseded)
 end
 function identify(path::String;
                   remote::Union{Nothing, AbstractString} = nothing,
-                  commits::Union{Nothing, AbstractString,
-                                 AbstractCommitSelection} = nothing,
+                  commits::Union{Nothing, AbstractCommitSelection} = nothing,
                   superseded::Bool = false)
     return identify(RegistryEndpoint(remote = remote), path; commits,
                     superseded)
 end
-function identify(registry::RegistryEndpoint; repo::AbstractString,
-                  commits::Union{Nothing, AbstractString,
-                                 AbstractCommitSelection} = nothing)
-    return _identifyrepository(registry, String(repo), commits)
+function identify(registry::RegistryEndpoint, commits::AbstractCommitSelection)
+    return _identifyrepository(registry, commits)
 end
-function identify(handle::DataRegistryHandle; repo::AbstractString,
-                  commits::Union{Nothing, AbstractString,
-                                 AbstractCommitSelection} = nothing)
-    return identify(handle.registry; repo, commits)
+function identify(handle::DataRegistryHandle, commits::AbstractCommitSelection)
+    return identify(handle.registry, commits)
 end
-function identify(; repo::AbstractString,
-                  remote::Union{Nothing, AbstractString} = nothing,
-                  commits::Union{Nothing, AbstractString,
-                                 AbstractCommitSelection} = nothing)
-    return identify(RegistryEndpoint(remote = remote); repo, commits)
+function identify(commits::AbstractCommitSelection;
+                  remote::Union{Nothing, AbstractString} = nothing)
+    return identify(RegistryEndpoint(remote = remote), commits)
 end
 
 # What a registry knows about the file at `path`, by its hash: what it is
@@ -718,24 +603,16 @@ function _registeredobjects(registry::RegistryEndpoint, hash::String)
     return objects
 end
 
-# What a registry knows about the git repository whose top-level folder is
-# `path`, for the commits `selection` chooses
-function _identifyrepository(registry::RegistryEndpoint, repo::String,
-                             commits::Union{Nothing, AbstractString,
-                                            AbstractCommitSelection})
+# What a registry knows about the commits a selection chooses, of the
+# repository it holds: a clone's top-level folder, or a remote's URL
+function _identifyrepository(registry::RegistryEndpoint,
+                             selection::AbstractCommitSelection)
+    repo = selection.repo
     if _isremoteurl(repo)
-        selection = isnothing(commits) ? AllCommits() : _asselection(commits)
-        selection isa Union{AncestorCommits, CheckedOutCommit} &&
-            throw(ArgumentError("$(_describe(selection)) needs a clone of the repository, and $repo is a URL: give the clone's folder, or AllCommits() or a commit by name"))
         return _identifycommits(registry, nothing, repo, repo, nothing, false,
                                 selection)
     end
-    selection = isnothing(commits) ? AncestorCommits() : _asselection(commits)
-    top = _gittoplevel(repo)
-    isnothing(top) &&
-        throw(ArgumentError("$repo is not the top level of a git repository"))
-    samefile(top, repo) ||
-        throw(ArgumentError("$repo is inside the git repository at $top - identify that folder instead"))
+    top = repo
     return LibGit2.with(LibGit2.GitRepo(top)) do clone
         LibGit2.isorphan(clone) &&
             throw(ArgumentError("the git repository at $top has no commits"))

@@ -169,17 +169,18 @@ Test.@testset "downstream() of a chain" begin
     @test sprint(show, trace) ==
           "Downstream of $namespace:$root@v0.0.1: 4 runs, 4 data products made, 3 newest, $(length(trace.issues)) issues"
 
-    # Named by its file, through a handle; and from the repository whose run
-    # wrote the root, by URL and commit
+    # Named by its file, through a handle; and from the commit of the
+    # repository whose run wrote the root, by the remote's URL
     stored = joinpath(datastore, namespace, root, start.hash * ".txt")
     @test DataPipeline.downstream(remaking, stored).roots == trace.roots
-    from_repo = DataPipeline.downstream(registry; repo = fixture_remote,
-                                        commits = fixture_sha)
+    from_repo = DataPipeline.downstream(registry,
+                                        DataPipeline.NamedCommit(fixture_sha,
+                                                                 repo = fixture_remote))
     @test from_repo.roots == trace.roots
     @test length(from_repo.runs) == 4
-    @test_throws ReadWriteException DataPipeline.downstream(registry;
-                                                            repo = fixture_remote,
-                                                            commits = DataPipeline._randomhash())
+    @test_throws ReadWriteException DataPipeline.downstream(registry,
+                                                            DataPipeline.NamedCommit(DataPipeline._randomhash(),
+                                                                                     repo = fixture_remote))
 
     # Cut at a depth: the products one run on are held, and those a further
     # run read are marked
@@ -259,12 +260,11 @@ Test.@testset "downstream() of a chain" begin
 
     # One start at a time, an issue that is not there, and a name that is
     # not an issue's
-    @test_throws ArgumentError DataPipeline.downstream(registry;
-                                                       repo = fixture_remote,
-                                                       issue = found)
-    @test_throws ArgumentError DataPipeline.downstream(registry; issue = found,
-                                                       commits = fixture_sha)
-    @test_throws ArgumentError DataPipeline.downstream(registry)
+    @test_throws MethodError DataPipeline.downstream(registry,
+                                                     DataPipeline.NamedCommit(fixture_sha,
+                                                                              repo = fixture_remote),
+                                                     issue = found)
+    @test_throws UndefKeywordError DataPipeline.downstream(registry)
     @test_throws ReadWriteException DataPipeline.downstream(registry;
                                                             issue = 0)
     @test_throws ReadWriteException DataPipeline.downstream(registry;

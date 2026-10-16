@@ -758,8 +758,13 @@ end
 function _issuecomponents(handle::DataRegistryHandle, ::SubmissionScript)
     return [_wholeobjectcomponent(handle.registry, handle.script_obj)]
 end
-function _issuecomponents(handle::DataRegistryHandle, ::CodeRepository)
-    return [_wholeobjectcomponent(handle.registry, handle.repo_obj)]
+function _issuecomponents(handle::DataRegistryHandle, target::CodeRepository)
+    isnothing(target.commits) &&
+        return [_wholeobjectcomponent(handle.registry, handle.repo_obj)]
+    return _repositorycomponents(handle.registry, target.commits)
+end
+function _issuecomponents(registry::RegistryEndpoint, target::CodeRepository)
+    return _repositorycomponents(registry, target.commits)
 end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ConfigDataProduct)
@@ -781,7 +786,10 @@ function _issuecomponents(handle::DataRegistryHandle,
 end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ExistingDataProduct)
-    registry = handle.registry
+    return _issuecomponents(handle.registry, target)
+end
+function _issuecomponents(registry::RegistryEndpoint,
+                          target::ExistingDataProduct)
     if isnothing(target.version)
         dp_entry = _latestdataproduct(registry, target.namespace,
                                       target.data_product)
@@ -792,6 +800,17 @@ function _issuecomponents(handle::DataRegistryHandle,
                                     target.data_product, target.version)
     end
     return [_componenturl(registry, dp_entry["object"], target.component)]
+end
+
+# The whole components of the objects standing for the registered commits a
+# selection chooses, of which there must be some
+function _repositorycomponents(registry::RegistryEndpoint,
+                               commits::AbstractCommitSelection)
+    found = _identifyrepository(registry, commits)
+    isempty(found.commits) &&
+        throw(ReadWriteException("the registry holds no run of $(found.remote) from $(_describe(commits)), so there is nothing to raise the issue on"))
+    return [_wholeobjectcomponent(registry, object)
+            for commit in found.commits for object in commit.objects]
 end
 
 # The severity of the issue `supersede = true` raises on a superseded version:
@@ -914,21 +933,42 @@ function _registerissues(handle::DataRegistryHandle)
                             (_issuecomponents(handle, target)
                              for target in issue.targets),
                             init = String[])
-        for component in copy(components)
-            for (label, other) in _samebytesversions(handle.registry,
-                                                     component)
-                if issue.all_versions
-                    other in components || push!(components, other)
-                else
-                    @warn "$label has the same bytes as the data product the issue is on: raise the issue on every such version too with `all_versions = true`"
-                end
-            end
-        end
-        entry = _postissue(handle.registry, issue.severity, issue.description,
-                           components)
+        entry = _postpendingissue(handle.registry, issue, components)
         println("issue registered as ", entry["url"])
     end
     return nothing
+end
+
+# Post a queued issue on the components its targets resolve to, and on the
+# other versions holding the same bytes if it asks, warning of them if not
+function _postpendingissue(registry::RegistryEndpoint, issue::PendingIssue,
+                           components::Vector{String})
+    components = copy(components)
+    for component in copy(components)
+        for (label, other) in _samebytesversions(registry, component)
+            if issue.all_versions
+                other in components || push!(components, other)
+            else
+                @warn "$label has the same bytes as the data product the issue is on: raise the issue on every such version too with `all_versions = true`"
+            end
+        end
+    end
+    return _postissue(registry, issue.severity, issue.description, components)
+end
+
+# Register an issue raised outside a run at once and return its URL
+function _raiseoutsiderun(::RecordedRun, registry::RegistryEndpoint,
+                          issue::PendingIssue, components::Vector{String})
+    return _postpendingissue(registry, issue, components)["url"]
+end
+
+# The mode of what the session is doing now: rehearsing, while a rehearsal is
+# prepared and not ended, and otherwise recording
+function _sessionmode()
+    session = SESSION[]
+    (isnothing(session) || session.ended || !(session.mode isa Rehearsal)) &&
+        return RecordedRun()
+    return session.mode
 end
 
 # The other versions of the data product a component belongs to that hold

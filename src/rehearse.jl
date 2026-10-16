@@ -308,6 +308,17 @@ function _copyjobfiles(handle::DataRegistryHandle{Rehearsal})
     return nothing
 end
 
+# An issue raised outside a run while rehearsing: printed as what would be
+# raised, and nothing registered
+function _raiseoutsiderun(::Rehearsal, ::RegistryEndpoint, issue::PendingIssue,
+                          ::Vector{String})
+    println("rehearsing, so registering nothing: an issue of severity ",
+            issue.severity, " on ",
+            join((sprint(show, target) for target in issue.targets),
+                 ", "), ": ", issue.description)
+    return nothing
+end
+
 # Print what the rehearsal did: its inputs, its outputs and where they are,
 # the issues a recorded run would have raised
 function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
