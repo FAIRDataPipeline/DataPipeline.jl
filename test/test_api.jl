@@ -1051,6 +1051,16 @@ Test.@testset "identify() a git repository" begin
                                       commits = DataPipeline.CheckedOutCommit())
     @test [commit.sha for commit in only_head.commits] == [head_sha]
 
+    # Only what came before the checked-out commit, without the runs made from
+    # it with uncommitted changes, which grew from it
+    before = DataPipeline.identify(registry; repo = dir,
+                                   commits = DataPipeline.AncestorCommits(including = false,
+                                                                          dirty = true))
+    @test [(commit.sha, commit.dirty) for commit in before.commits] ==
+          [(parent_sha, false)]
+    @test occursin("selected:    the ancestors of the checked-out commit,",
+                   sprint(show, MIME("text/plain"), before))
+
     # Every commit: those in the clone by commit date, then those the clone
     # lacks, newest first by their earliest run
     every = DataPipeline.identify(registry; repo = dir,
@@ -1147,6 +1157,42 @@ Test.@testset "identify() a git repository" begin
           "NamedCommit(\"v1.0\", dirty = true)"
     @test occursin("selected:    the commit named \"v1.0\", with runs made",
                    sprint(show, MIME("text/plain"), tagged))
+
+    # The ancestors of a commit by name rather than the checked-out one, with
+    # or without it
+    function ancestors(; kw...)
+        selection = DataPipeline.AncestorCommits(; kw...)
+        found = DataPipeline.identify(registry; repo = dir, commits = selection)
+        return [(commit.sha, commit.dirty) for commit in found.commits]
+    end
+    @test ancestors(of = "side") == [(side_sha, false), (parent_sha, false)]
+    @test ancestors(of = "v1.0", dirty = true) ==
+          [(head_sha, false), (head_sha, true), (parent_sha, false)]
+    @test ancestors(of = first(head_sha, 7), including = false, dirty = true) ==
+          [(parent_sha, false)]
+    @test ancestors(of = parent_sha, including = false) == []
+    side_text = sprint(show, MIME("text/plain"),
+                       DataPipeline.identify(registry; repo = dir,
+                                             commits = DataPipeline.AncestorCommits(of = "side")))
+    @test occursin("selected:    the commit named \"side\" and its ancestors\n",
+                   side_text)
+    @test sprint(show,
+                 DataPipeline.AncestorCommits(of = "v1.0", including = false,
+                                              dirty = true)) ==
+          "AncestorCommits(of = \"v1.0\", including = false, dirty = true)"
+    @test DataPipeline.AncestorCommits(of = SubString("v1.0")) ==
+          DataPipeline.AncestorCommits(of = "v1.0")
+    # Named, they are not about the checkout, so its uncommitted changes go
+    # unremarked
+    write(joinpath(dir, "a.txt"), "edited")
+    @test_logs DataPipeline.identify(registry; repo = dir,
+                                     commits = DataPipeline.AncestorCommits(of = "v1.0"))
+    write(joinpath(dir, "a.txt"), committed("third"))
+    # A name that resolves to no commit, or to one the clone lacks
+    err = @test_throws ArgumentError ancestors(of = "no-such-ref-$uid")
+    @test occursin("no such tag, branch or commit", err.value.msg)
+    err = @test_throws ArgumentError ancestors(of = absent_sha)
+    @test occursin("which the clone at", err.value.msg)
     err = @test_throws ArgumentError DataPipeline.identify(registry; repo = dir,
                                                            commits = "no-such-ref-$uid")
     @test occursin("no such tag, branch or commit", err.value.msg)
@@ -1171,6 +1217,8 @@ Test.@testset "identify() a git repository" begin
                                                      commits = DataPipeline.AncestorCommits())
     @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
                                                      commits = DataPipeline.CheckedOutCommit())
+    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
+                                                     commits = DataPipeline.AncestorCommits(of = head_sha))
     err = @test_throws ArgumentError DataPipeline.identify(registry;
                                                            repo = remote,
                                                            commits = "v1.0")
@@ -1189,6 +1237,7 @@ Test.@testset "identify() a git repository" begin
            for commit in DataPipeline.identify(registry; repo = dir,
                                                commits = "3.1.4").commits] ==
           [parent_sha]
+    @test ancestors(of = "v3.1.4") == [(parent_sha, false)]
 
     # A folder inside the repository, a folder that is no repository, and
     # `commits` for a file are all mistakes

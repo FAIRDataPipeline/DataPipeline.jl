@@ -91,6 +91,9 @@
     of its remote with no clone; the folder by position is deprecated. `commits`
     takes a commit by name - a tag, a branch, a hash or a registered release's
     version - as a string or `NamedCommit`.
+  - `AncestorCommits(of = "v1.0", including = false)` selects the commits
+    before a named commit rather than the checked-out one; `of` names it as
+    `NamedCommit` does, and `including` says whether it is selected itself.
   - A registered data product is named `namespace:name@version` everywhere, as
     the CLI names one, with `namespace:name` for its newest version:
     `link_register!` takes the form in place of its `namespace` and `version`

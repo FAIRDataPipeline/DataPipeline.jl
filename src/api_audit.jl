@@ -253,17 +253,31 @@ constructor's `dirty` keyword.
 abstract type AbstractCommitSelection end
 
 """
-    AncestorCommits(; dirty = false)
+    AncestorCommits(; of = nothing, including = true, dirty = false)
 
-Select the checked-out commit and every commit it descends from - the code the
-checkout grew from - and, if `dirty`, the runs made from them with uncommitted
-changes too. What [`identify`](@ref) reports for a repository unless told
-otherwise.
+Select a commit and every commit it descends from - the code it grew from -
+and, if `dirty`, the runs made from them with uncommitted changes too. What
+[`identify`](@ref) reports for a repository unless told otherwise. Finding
+ancestors needs a clone holding the commit.
+
+# Arguments
+- `of`: the commit to start from, named as [`NamedCommit`](@ref) names one: a
+  tag, a branch, a commit hash or the version of a registered release of the
+  code. `nothing`, the default, is the checked-out commit.
+- `including`: whether that commit is selected itself; with `false`, only the
+  commits before it, and so not the runs made from it with uncommitted changes
+  either.
+- `dirty`: whether the runs made with uncommitted changes are selected too.
 """
 struct AncestorCommits <: AbstractCommitSelection
+    of::Union{Nothing, String}
+    including::Bool
     dirty::Bool
 
-    AncestorCommits(; dirty::Bool = false) = new(dirty)
+    function AncestorCommits(; of::Union{Nothing, AbstractString} = nothing,
+                             including::Bool = true, dirty::Bool = false)
+        return new(isnothing(of) ? nothing : String(of), including, dirty)
+    end
 end
 
 """
@@ -317,6 +331,13 @@ function Base.show(io::IO, selection::NamedCommit)
     print(io, "NamedCommit(", repr(selection.name))
     selection.dirty && print(io, ", dirty = true")
     return print(io, ")")
+end
+function Base.show(io::IO, selection::AncestorCommits)
+    keywords = String[]
+    isnothing(selection.of) || push!(keywords, "of = $(repr(selection.of))")
+    selection.including || push!(keywords, "including = false")
+    selection.dirty && push!(keywords, "dirty = true")
+    return print(io, "AncestorCommits(", join(keywords, ", "), ")")
 end
 
 # What `commits` names: a selection as given, a string the commit so named
@@ -449,7 +470,12 @@ end
 # == Functions ==
 
 # How a commit selection reads in a report
-_describe(::AncestorCommits) = "the checked-out commit and its ancestors"
+function _describe(selection::AncestorCommits)
+    commit = isnothing(selection.of) ? "the checked-out commit" :
+             "the commit named $(repr(selection.of))"
+    return selection.including ? "$commit and its ancestors" :
+           "the ancestors of $commit"
+end
 _describe(::CheckedOutCommit) = "the checked-out commit"
 _describe(::AllCommits) = "every commit of the repository"
 _describe(selection::NamedCommit) = "the commit named $(repr(selection.name))"
@@ -516,8 +542,8 @@ The repository is known to the registry by the URL of its git remote - the
 one named by `git.remote` in its `.fair/cli-config.yaml`, else `origin` - and
 `commits` chooses which of its commits to report. Runs made with uncommitted
 changes are included only when `commits` is given `dirty = true`. When the
-checkout itself has uncommitted changes, `AncestorCommits` and
-`CheckedOutCommit` warn and use its commit as committed.
+checkout itself has uncommitted changes, `AncestorCommits` of the checked-out
+commit and `CheckedOutCommit` warn and use its commit as committed.
 
 # Arguments
 - `path::String`: the file to ask about.
@@ -533,7 +559,8 @@ checkout itself has uncommitted changes, `AncestorCommits` and
 - `superseded`: for a file, whether to report the inputs behind it that have
   been superseded.
 - `commits`: for a repository, [`AncestorCommits()`](@ref AncestorCommits)
-  (the default with a clone), [`CheckedOutCommit()`](@ref CheckedOutCommit),
+  (the default with a clone, which may instead start from a named commit and
+  leave it out), [`CheckedOutCommit()`](@ref CheckedOutCommit),
   [`AllCommits()`](@ref AllCommits) (the default by URL) or a commit by name -
   a tag, a branch, a commit hash or the version of a registered release of
   the code, as a string or as [`NamedCommit`](@ref) - each optionally with
@@ -754,9 +781,7 @@ function _identifycommits(registry::RegistryEndpoint,
                                     commits)
 end
 
-# The commit a named selection names, else `nothing`: a full hash as it is,
-# then what the clone makes of the name, then a registered release of the
-# repository at that version
+# The commit a selection names, else `nothing`
 function _resolvename(::AbstractCommitSelection, clone, path, registry, root_id,
                       paths)
     return nothing
@@ -766,7 +791,25 @@ function _resolvename(selection::NamedCommit,
                       registry::RegistryEndpoint,
                       root_id::Union{Nothing, AbstractString},
                       paths::Vector{String})
-    name = selection.name
+    return _resolvecommit(selection.name, clone, path, registry, root_id, paths)
+end
+function _resolvename(selection::AncestorCommits, clone::LibGit2.GitRepo,
+                      path::String, registry::RegistryEndpoint,
+                      root_id::Union{Nothing, AbstractString},
+                      paths::Vector{String})
+    isnothing(selection.of) && return nothing
+    sha = _resolvecommit(selection.of, clone, path, registry, root_id, paths)
+    LibGit2.iscommit(sha, clone) ||
+        throw(ArgumentError("'$(selection.of)' names commit $sha, which the clone at $path does not have, so its ancestors cannot be found"))
+    return sha
+end
+
+# The commit a name names: a full hash as it is, then what the clone makes of
+# the name, then a registered release of the repository at that version
+function _resolvecommit(name::String, clone::Union{Nothing, LibGit2.GitRepo},
+                        path::String, registry::RegistryEndpoint,
+                        root_id::Union{Nothing, AbstractString},
+                        paths::Vector{String})
     occursin(r"^[0-9a-f]{40}$", name) && return name
     if !isnothing(clone)
         sha = _clonecommit(clone, name)
@@ -840,12 +883,21 @@ function _gittoplevel(dir::AbstractString)
     end
 end
 
-# Warn that the checkout's uncommitted changes are being set aside; selecting
-# every commit is not about the checkout, so says nothing
+# Warn that the checkout's uncommitted changes are being set aside; a selection
+# not made from the checked-out commit says nothing
 _warnifdirty(::AllCommits, top::AbstractString, head::AbstractString) = nothing
 _warnifdirty(::NamedCommit, top::AbstractString, head::AbstractString) = nothing
+function _warnifdirty(selection::AncestorCommits, top::AbstractString,
+                      head::AbstractString)
+    isnothing(selection.of) || return nothing
+    return _warndirtycheckout(top, head)
+end
 function _warnifdirty(::AbstractCommitSelection, top::AbstractString,
                       head::AbstractString)
+    return _warndirtycheckout(top, head)
+end
+# The warning that the checkout's uncommitted changes are set aside
+function _warndirtycheckout(top::AbstractString, head::AbstractString)
     @warn "the working tree at $top has uncommitted changes: identifying its checked-out commit $head as committed"
     return nothing
 end
@@ -932,10 +984,14 @@ function _selectscommit(::NamedCommit, clone, head, named::AbstractString,
                         sha::AbstractString)
     return sha == named
 end
-function _selectscommit(::AncestorCommits, clone::LibGit2.GitRepo,
-                        head::AbstractString, named, sha::AbstractString)
-    return LibGit2.iscommit(sha, clone) &&
-           LibGit2.is_ancestor_of(sha, head, clone)
+function _selectscommit(selection::AncestorCommits, clone::LibGit2.GitRepo,
+                        head::AbstractString,
+                        named::Union{Nothing, AbstractString},
+                        sha::AbstractString)
+    commit = something(named, head)
+    return (selection.including || sha != commit) &&
+           LibGit2.iscommit(sha, clone) &&
+           LibGit2.is_ancestor_of(sha, commit, clone)
 end
 
 # One registered commit: its date if the clone has it, and the runs made from
