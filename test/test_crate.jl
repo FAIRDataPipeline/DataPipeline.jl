@@ -131,10 +131,9 @@ Test.@testset "crate()" begin
     @test occursin("pack must be one of", err.value.msg)
 
     # Saved as a zip, with `pack` passed through - what the registry packs
-    # for each choice is its own, and not checked beyond the zip being one
-    # and no smaller with the files than without, since one Windows runner
-    # packed no bytes for `roots` where every other did; or its metadata as
-    # a file
+    # for each choice is its own, and not checked beyond the zip being one:
+    # the Windows runners pack no file's bytes, and two zips holding only
+    # their metadata may differ in size either way; or its metadata as a file
     packed = DataPipeline.crate(registry, joinpath(folder, "figures"),
                                 to = joinpath(folder, "paper.zip"))
     @test packed == joinpath(folder, "paper.zip")
@@ -144,7 +143,6 @@ Test.@testset "crate()" begin
                                   to = joinpath(folder, "metadata.zip"),
                                   pack = "none")
     @test read(unpacked, 4) == UInt8['P', 'K', 0x03, 0x04]
-    @test 0 < filesize(unpacked) <= filesize(packed)
     metadata = DataPipeline.crate(registry, joinpath(folder, "figures"),
                                   to = joinpath(folder,
                                                 "ro-crate-metadata.json"))
