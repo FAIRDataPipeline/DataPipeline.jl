@@ -143,6 +143,131 @@ const LibGit2 = DataPipeline.LibGit2
     end
 end
 
+# In test/releases, what was answered on 2026-10-16 for this package's own
+# release v0.54.1: GitHub's record of the repository (its id alone kept),
+# Zenodo's record 23129599, its search for that version and for one it has not
+# got, and DataCite's metadata of the DOI 10.5281/zenodo.23129599; and the
+# package's `.zenodo.json` at that release
+saved(name) = read(joinpath(@__DIR__, "releases", name), String)
+const DATACITE = "application/vnd.datacite.datacite+json"
+
+# Zenodo and GitHub as they answered, the search finding `found`, the DOI of
+# the version of the tag, or nothing
+function answers(found::Union{Nothing, String}; github::Int = 200,
+                 badge::Union{Nothing, String} = "https://doi.org/10.5281/zenodo.23129599")
+    search = DataPipeline.JSON.parse(saved("zenodo-search-v0.54.1.json"))
+    search["hits"]["hits"][1]["doi"] = something(found, "")
+    asked = String[]
+    function reply(url)
+        push!(asked, url)
+        startswith(url, "https://api.github.com/repos/") &&
+            return (status = github, location = nothing,
+                    body = saved("github-repository.json"))
+        startswith(url, "https://zenodo.org/badge/latestdoi/302237736") &&
+            return (status = isnothing(badge) ? 404 : 302, location = badge,
+                    body = "")
+        url == "https://zenodo.org/api/records/23129599" &&
+            return (status = 200, location = nothing,
+                    body = saved("zenodo-record.json"))
+        if startswith(url, "https://zenodo.org/api/records?q=")
+            isnothing(found) && return (status = 200, location = nothing,
+                    body = saved("zenodo-search-none.json"))
+            return (status = 200, location = nothing,
+                    body = DataPipeline.JSON.json(search))
+        end
+        return error("asked of no answer: $url")
+    end
+    return (reply = reply, asked = asked)
+end
+
+@testset "a release's DOI" begin
+    remote = "https://github.com/FAIRDataPipeline/DataPipeline.jl.git"
+    # Zenodo's version of a tag, the tags tried in turn, by the repository's
+    # id, its newest version's record and that record's concept
+    found = answers("10.5281/zenodo.23129599")
+    @test DataPipeline._zenododoi(remote, ["0.54.1", "v0.54.1"];
+                                  fetch = found.reply) ==
+          "10.5281/zenodo.23129599"
+    @test found.asked[1:3] ==
+          ["https://api.github.com/repos/FAIRDataPipeline/DataPipeline.jl",
+        "https://zenodo.org/badge/latestdoi/302237736",
+        "https://zenodo.org/api/records/23129599"]
+    @test found.asked[4] ==
+          "https://zenodo.org/api/records?q=parent.id%3A5270282%20AND%20metadata.version%3A%220.54.1%22&allversions=true&size=1"
+    # None yet, no release archived at all, a repository GitHub has not got,
+    # and a remote elsewhere: each said, and no DOI
+    @test_logs((:info,
+                r"^Zenodo has no version of FAIRDataPipeline/DataPipeline.jl for v9.9.9 yet"),
+               @test isnothing(DataPipeline._zenododoi(remote, ["v9.9.9"];
+                                                       fetch = answers(nothing).reply)))
+    @test_logs((:info, r"^Zenodo has archived no release"),
+               @test isnothing(DataPipeline._zenododoi(remote, ["v0.54.1"];
+                                                       fetch = answers(nothing,
+                                                                       badge = nothing).reply)))
+    @test_logs((:warn,
+                r"^GitHub's record of FAIRDataPipeline/DataPipeline.jl is not to be had now \(HTTP status 404\)"),
+               @test isnothing(DataPipeline._zenododoi(remote, ["v0.54.1"];
+                                                       fetch = answers(nothing,
+                                                                       github = 404).reply)))
+    @test_logs((:info, r"from GitHub, and https://gitlab.com/a/b is elsewhere"),
+               @test isnothing(DataPipeline._zenododoi("https://gitlab.com/a/b",
+                                                       ["v1.0.0"])))
+
+    # Licences compared as SPDX now writes them
+    @test DataPipeline._licencekey("LGPL-3.0+") ==
+          DataPipeline._licencekey("https://spdx.org/licenses/LGPL-3.0-or-later")
+    @test DataPipeline._licencekey("GPL-3.0") ==
+          DataPipeline._licencekey("gpl-3.0-only")
+    @test DataPipeline._licencekey("MIT") !=
+          DataPipeline._licencekey("Apache-2.0")
+
+    # The DOI's metadata compared with the repository's files
+    identifier = "https://doi.org/10.5281/zenodo.23129599"
+    citation = DataPipeline._datacitecitation(DataPipeline.JSON.parse(saved("datapipeline-v0.54.1.datacite.json")),
+                                              identifier)
+    sonia = "https://orcid.org/0000-0003-1536-2066"
+    martin = "https://orcid.org/0000-0002-0460-7139"
+    richard = "https://orcid.org/0000-0003-2589-8091"
+    files(authors, identifiers; licence = "LGPL-3.0-or-later",
+          title = "DataPipeline.jl") = (metadata = DataPipeline.RepositoryMetadata(authors,
+                                                                                   identifiers,
+                                                                                   licence,
+                                                                                   String[],
+                                                                                   nothing,
+                                                                                   nothing,
+                                                                                   title,
+                                                                                   [".zenodo.json"]),
+                                        version = "0.54.1")
+    same = files(["Sonia Mitchell", "Martin J. Burke", "Richard Reeve"],
+                 Dict("Sonia Mitchell" => sonia, "Richard Reeve" => richard,
+                      "Martin J. Burke" => martin))
+    @test_logs DataPipeline._comparerelease(identifier, citation, same)
+    # An author named by one alone, an identifier only one gives, another
+    # title, licence and version
+    differing = files(["Sonia Mitchell", "Richard Reeve", "Ada Lovelace"],
+                      Dict("Richard Reeve" => richard); licence = "MIT",
+                      title = "Something else")
+    differing = (metadata = differing.metadata, version = "0.55.0")
+    @test_logs((:warn,
+                Regex("^the release's DOI $identifier and the repository's metadata files differ: " *
+                      "the DOI names Martin J Burke and the files do not; " *
+                      "the files name Ada Lovelace and the DOI does not; " *
+                      "the DOI's title is 'DataPipeline.jl' and the files' 'Something else'; " *
+                      "the DOI's licence is LGPL-3.0\\+ and the files' MIT; " *
+                      "the DOI is of version v0.54.1 and the release 0.55.0\$")),
+               (:info,
+                Regex("^the release's DOI $identifier and the repository's metadata files: " *
+                      "the DOI identifies Sonia Mitchell as $sonia and the files do not\$")),
+               DataPipeline._comparerelease(identifier, citation, differing))
+
+    # Asking Zenodo and GitHub themselves, only when asked to, as the DOI
+    # lookup of a source is
+    if get(ENV, "FDP_TEST_DOI_LOOKUP", "false") == "true"
+        @test DataPipeline._zenododoi(remote, ["v0.54.1"]) ==
+              "10.5281/zenodo.23129599"
+    end
+end
+
 # Registering a release needs a registry: the suite's, when `fair run` launches
 # it; on its own this file tests the rest
 if haskey(ENV, "FDP_CONFIG_DIR")
@@ -325,6 +450,104 @@ if haskey(ENV, "FDP_CONFIG_DIR")
                                                Dict("name" => release.name,
                                                     "version" => "3.0.0")))
         close(repo)
+
+        # A DOI, for a repository Zenodo archives: its `.zenodo.json` the one
+        # this package had at v0.54.1, so that it agrees with the DOI's
+        # metadata. The DOI is made from this run's id, so that its source is
+        # new to the registry, and answered with the saved metadata.
+        zenodo_dir = mktempdir()
+        zenodo_repo = LibGit2.init(zenodo_dir)
+        zenodo_name = "zenodo-fixture-$(first(uid, 12))"
+        close(LibGit2.GitRemote(zenodo_repo, "origin",
+                                "https://github.com/FAIRDataPipeline/$zenodo_name.git"))
+        write(joinpath(zenodo_dir, ".zenodo.json"),
+              saved("datapipeline-v0.54.1.zenodo.json"))
+        write(joinpath(zenodo_dir, "run.txt"), "zenodo $uid\n")
+        LibGit2.add!(zenodo_repo, ".zenodo.json")
+        LibGit2.add!(zenodo_repo, "run.txt")
+        archived = string(LibGit2.commit(zenodo_repo, "archived",
+                                         author = signature,
+                                         committer = signature))
+        LibGit2.tag_create(zenodo_repo, "v0.54.1", archived, sig = signature,
+                           msg = "v0.54.1")
+        doi = "10.5281/zenodo.$(parse(Int, first(uid, 10), base = 16))"
+        doi_url = "https://doi.org/$doi"
+        metadata(url, type) = type == DATACITE ?
+                              saved("datapipeline-v0.54.1.datacite.json") :
+                              nothing
+        nothing_to_be_had(url, type) = nothing
+        archive(found; doi = nothing,
+                fetch = metadata) = DataPipeline._registerrelease(registry,
+                                                                  DataPipeline.CheckedOutCommit(repo = zenodo_dir),
+                                                                  nothing,
+                                                                  doi;
+                                                                  fetch,
+                                                                  reply = answers(found).reply)
+        # Zenodo has no version yet: the release is registered without a
+        # source, and that said
+        unarchived = @test_logs((:info,
+                                 r"^Zenodo has no version of FAIRDataPipeline/zenodo-fixture"),
+                                archive(nothing))
+        @test isnothing(unarchived.source)
+        # Called again once it has, the source is attached: the version DOI,
+        # primary, the DOI's title and date, the release's version
+        sourced = @test_logs archive(doi)
+        @test sourced.url == unarchived.url
+        @test !isnothing(sourced.source)
+        source = entry(sourced.source)
+        @test (source["identifier"], source["title"], source["version"],
+               source["primary_not_supplement"]) ==
+              (doi_url, "DataPipeline.jl", "0.54.1", true)
+        @test startswith(source["release_date"], "2026-10-04")
+        @test entry(sourced.data_product.url)["external_object"] ==
+              sourced.source
+        # ... and once it has one, it is not looked up again, and another
+        # DOI is refused
+        @test archive(nothing).source == sourced.source
+        err = @test_throws DataPipeline.ReadWriteException archive(nothing,
+                                                                   doi = "10.5281/zenodo.1")
+        @test occursin("has the source $doi_url already", err.value.msg)
+        # A DOI given that cannot be looked up is an error, and nothing is
+        # registered
+        unknown = string(LibGit2.commit(zenodo_repo, "unknown",
+                                        author = signature,
+                                        committer = signature))
+        LibGit2.tag_create(zenodo_repo, "v0.54.2", unknown, sig = signature,
+                           msg = "v0.54.2")
+        err = @test_throws DataPipeline.ReadWriteException archive(nothing,
+                                                                   doi = doi,
+                                                                   fetch = nothing_to_be_had)
+        @test occursin("cannot be looked up, so the release is not registered",
+                       err.value.msg)
+        @test isnothing(DataPipeline._getentry(registry, "code_repo_release",
+                                               Dict("name" => "FAIRDataPipeline/$zenodo_name",
+                                                    "version" => "0.54.2")))
+        # A DOI given whose metadata is of another version is warned of
+        given = @test_logs((:warn,
+                            r"the DOI is of version v0.54.1 and the release 0.54.2$"),
+                           archive(nothing, doi = doi))
+        @test entry(given.source)["identifier"] == doi_url
+        # A rehearsal says the source it would attach
+        DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
+                                                         mktempdir(), nothing,
+                                                         false)
+        rehearsed = string(LibGit2.commit(zenodo_repo, "rehearsed",
+                                          author = signature,
+                                          committer = signature))
+        LibGit2.tag_create(zenodo_repo, "v0.54.3", rehearsed, sig = signature,
+                           msg = "v0.54.3")
+        said = mktemp() do path, io
+            redirect_stdout(io) do
+                @test_logs((:warn, r"the DOI is of version v0.54.1"),
+                           archive(nothing,
+                                   doi = "$(doi)9"))
+            end
+            close(io)
+            return read(path, String)
+        end
+        DataPipeline._resetsession!()
+        @test occursin("  with the source $(doi_url)9", said)
+        close(zenodo_repo)
     end
 end
 

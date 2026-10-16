@@ -1,0 +1,37 @@
+{
+    "title": "DataPipeline.jl",
+    "description": "The Julia interface to the FAIR Data Pipeline, intended to enable tracking of provenance of FAIR (findable, accessible, interoperable and reusable) data",
+    "upload_type": "software",
+    "creators": [
+        {
+            "name": "Mitchell, Sonia",
+            "orcid": "0000-0003-1536-2066",
+            "affiliation": "Biomathematics and Statistics Scotland",
+            "ror": "03jwrz939"
+        },
+        {
+            "name": "Burke, Martin J",
+            "orcid": "0000-0002-0460-7139",
+            "affiliation": "Biomathematics and Statistics Scotland",
+            "ror": "03jwrz939"
+        },
+        {
+            "name": "Reeve, Richard",
+            "orcid": "0000-0003-2589-8091",
+            "affiliation": "University of Glasgow",
+            "ror": "00vtgdb53"
+        }
+    ],
+    "access_right": "open",
+    "license": "LGPL-3.0-or-later",
+    "related_identifiers": [
+        {
+            "scheme": "url",
+            "identifier": "https://github.com/FAIRDataPipeline/DataPipeline.jl",
+            "relation": "isOriginalFormOf"
+        }
+    ],
+    "keywords": [
+        "julia"
+    ]
+}

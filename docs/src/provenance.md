@@ -139,7 +139,10 @@ records that a commit is a release - its version read from the commit's tag,
 record and as a data product, `<organisation>:<repository>@<version>`, which
 the traces and the crate take as they take any data product. A release then
 names the code before it, so that a problem fixed in it can be raised on
-everything it was found in:
+everything it was found in. Its DOI - `doi = "10.5281/zenodo..."`, or for a
+repository with a `.zenodo.json` the Zenodo DOI of its tag's version, found
+there - is the data product's source; one that Zenodo has not minted yet is
+attached by calling `register_release!` again later:
 
 ```julia
 release = DataPipeline.register_release!(DataPipeline.NamedCommit("v1.2.0"))

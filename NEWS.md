@@ -108,6 +108,9 @@
     the code - the registry's release record and a data product
     `<organisation>:<repository>@<version>` - returning a `RegisteredRelease`,
     which `NamedCommit` and `AncestorCommits(of = release)` take.
+  - A release's DOI is its data product's source: `doi = ...`, or for a
+    repository with a `.zenodo.json` its tag's Zenodo version, looked up; a
+    release registered before Zenodo has it gets it on a second call.
   - `raise_issue!(target, description)` outside a run, with a registry or the
     CLI's, registers the issue at once and returns its URL, for an
     `ExistingDataProduct` or a commit selection: so

@@ -219,7 +219,8 @@ end
 # `nothing` in place of the release
 function _registerrelease(::Rehearsal, registry::RegistryEndpoint,
                           target::NamedTuple,
-                          website::Union{Nothing, String})
+                          website::Union{Nothing, String},
+                          source::Union{Nothing, NamedTuple})
     held = _heldrepository(registry, target.remote, target.commit).object
     println("would register the release ", target.release, " ",
             target.version, " of commit ", target.commit, ", its data product ",
@@ -233,6 +234,8 @@ function _registerrelease(::Rehearsal, registry::RegistryEndpoint,
     else
         println("  on the commit's object ", held)
     end
+    isnothing(source) ||
+        println("  with the source ", source.identifier)
     return nothing
 end
 

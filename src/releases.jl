@@ -99,6 +99,18 @@ the release, `<organisation>:<repository>@<version>`, on the same object, so
 that a trace and a crate take the release as they take any data product. A
 second call on a release changes nothing.
 
+The release's DOI, where it has one, is its data product's source: the
+version DOI given as `doi`, or, for a repository whose `.zenodo.json` says
+Zenodo archives its releases from GitHub, the DOI of the Zenodo version of
+its tag, looked up there. The DOI's metadata - its title, release date and
+description - describes the source, and is compared with the repository's
+metadata files: a difference in the authors, title, licence or version is
+warned of, an identifier one gives and the other lacks told of. A DOI given
+that cannot be looked up is an error; a Zenodo version not archived yet, or a
+lookup that cannot reach Zenodo or GitHub, is told of, and the release is
+registered without a source, which calling `register_release!` again attaches
+once it can.
+
 A commit released already under another version - a beta, say, retagged as a
 release - has the new version's data product registered and its release
 record changed to the new version, where the registry allows it; where not,
@@ -119,6 +131,8 @@ registered is printed, and nothing is.
   whose metadata files are read at the commit.
 - `website`: the release's web page; by default, for a remote on GitHub, the
   page of the release of its tag.
+- `doi`: the DOI of the version released, bare or as a URL - not a concept
+  DOI standing for every version.
 - `registry::RegistryEndpoint`: the registry to register it in, which needs
   its token; a `DataRegistryHandle` may be given instead, and its registry is
   used.
@@ -127,22 +141,22 @@ registered is printed, and nothing is.
 """
 function register_release!(registry::RegistryEndpoint,
                            commit::Union{CheckedOutCommit, NamedCommit} = CheckedOutCommit();
-                           website::Union{Nothing, AbstractString} = nothing)
-    target = _releasetarget(registry, commit)
-    return _registerrelease(_sessionmode(), registry, target,
-                            isnothing(website) ? target.website :
-                            String(website))
+                           website::Union{Nothing, AbstractString} = nothing,
+                           doi::Union{Nothing, AbstractString} = nothing)
+    return _registerrelease(registry, commit, website, doi)
 end
 function register_release!(handle::DataRegistryHandle,
                            commit::Union{CheckedOutCommit, NamedCommit} = CheckedOutCommit();
-                           website::Union{Nothing, AbstractString} = nothing)
-    return register_release!(handle.registry, commit; website)
+                           website::Union{Nothing, AbstractString} = nothing,
+                           doi::Union{Nothing, AbstractString} = nothing)
+    return register_release!(handle.registry, commit; website, doi)
 end
 function register_release!(commit::Union{CheckedOutCommit, NamedCommit} = CheckedOutCommit();
                            website::Union{Nothing, AbstractString} = nothing,
+                           doi::Union{Nothing, AbstractString} = nothing,
                            remote::Union{Nothing, AbstractString} = nothing)
     return register_release!(RegistryEndpoint(remote = remote), commit;
-                             website)
+                             website, doi)
 end
 
 # The tags of a clone, by name, each with the commit it names
@@ -252,6 +266,23 @@ function _commitversion(tags::AbstractDict{String, String},
     return (version = string(version), tags = sort(versions[version]))
 end
 
+# `register_release!`'s work: the release, the source it is to have, and its
+# registering or, while the session rehearses, the saying of it; `fetch` asks a
+# URL for a DOI's metadata, and `reply` asks one for its reply, as the tests
+# replace them
+function _registerrelease(registry::RegistryEndpoint,
+                          commit::Union{CheckedOutCommit, NamedCommit},
+                          website::Union{Nothing, AbstractString},
+                          doi::Union{Nothing, AbstractString};
+                          fetch::Function = _fetchmetadata,
+                          reply::Function = _fetchreply)
+    target = _releasetarget(registry, commit)
+    source = _releasesource(registry, target, doi; fetch, reply)
+    return _registerrelease(_sessionmode(), registry, target,
+                            isnothing(website) ? target.website :
+                            String(website), source)
+end
+
 # What a release of the selected commit is: the commit, its version and the
 # tags giving it, the clone (or `nothing`) and the remote's URL, what the
 # repository's files say at the commit, the names it is registered by and its
@@ -346,7 +377,8 @@ end
 # record and the release's data product
 function _registerrelease(::RecordedRun, registry::RegistryEndpoint,
                           target::NamedTuple,
-                          website::Union{Nothing, String})
+                          website::Union{Nothing, String},
+                          source::Union{Nothing, NamedTuple})
     _requiretoken(registry)
     object_url = _registerrepository(registry, target.remote, target.commit,
                                      target.metadata)
@@ -355,6 +387,7 @@ function _registerrelease(::RecordedRun, registry::RegistryEndpoint,
     product_url = _registerreleaseproduct(registry, object_url,
                                           target.namespace,
                                           target.data_product, target.version)
+    _registerreleasesource(registry, product_url, target, source)
     product = _dataproductrecord(registry, product_url)
     return RegisteredRelease(record["url"], target.release,
                              VersionNumber(target.version), website,
@@ -412,4 +445,232 @@ function _registerreleaseproduct(registry::RegistryEndpoint,
     end
     return _createentry(registry, "data_product",
                         merge(query, Dict("object" => object_url)))["url"]
+end
+
+# The source a release is to be given, as the DOI's URL and what its metadata
+# says, or `nothing`: none where its data product has one already, which a
+# `doi` given must be; else the `doi` given, whose metadata must be had; else,
+# for a repository archived on Zenodo, its tag's version there, if it has one
+# and its metadata can be had. The metadata is compared with the repository's.
+function _releasesource(registry::RegistryEndpoint, target::NamedTuple,
+                        doi::Union{Nothing, AbstractString};
+                        fetch::Function, reply::Function)
+    held = _heldreleasesource(registry, target)
+    identifier = isnothing(doi) ? nothing : _doiurl(doi)
+    if !isnothing(held)
+        isnothing(identifier) || held["identifier"] == identifier ||
+            throw(ReadWriteException("the release's data product has the source $(held["identifier"]) already, not $identifier"))
+        return nothing
+    end
+    if isnothing(identifier)
+        ".zenodo.json" in target.metadata.files || return nothing
+        found = _zenododoi(target.remote, target.tags; fetch = reply)
+        isnothing(found) && return nothing
+        identifier = _doiurl(found)
+        citation = try
+            _lookupcitation(identifier, fetch)
+        catch err
+            err isa ReadWriteException || rethrow()
+            @warn "the DOI of the release, $identifier, has no metadata to be had now, so it is not attached: call register_release! again to attach it ($(err.msg))"
+            return nothing
+        end
+    else
+        citation = try
+            _lookupcitation(identifier, fetch)
+        catch err
+            err isa ReadWriteException || rethrow()
+            throw(ReadWriteException("the DOI $identifier cannot be looked up, so the release is not registered: $(err.msg)"))
+        end
+    end
+    _comparerelease(identifier, citation, target)
+    return (identifier = identifier, citation = citation)
+end
+
+# The source the registry holds for a release's data product already, or
+# `nothing`, looked up without registering anything
+function _heldreleasesource(registry::RegistryEndpoint, target::NamedTuple)
+    namespace_id = _getid(registry, "namespace",
+                          Dict("name" => target.namespace))
+    isnothing(namespace_id) && return nothing
+    product = _getentry(registry, "data_product",
+                        Dict("namespace" => namespace_id,
+                             "name" => target.data_product,
+                             "version" => target.version))
+    (isnothing(product) || isnothing(product["external_object"])) &&
+        return nothing
+    return _getentry(registry, URIs.URI(product["external_object"]))
+end
+
+# Register a release's source, linked to its data product: one external object
+# for the DOI, its title and version, shared by the data products registered
+# from it, its title, release date and description the DOI's
+function _registerreleasesource(::RegistryEndpoint, ::String, ::NamedTuple,
+                                ::Nothing)
+    return nothing
+end
+function _registerreleasesource(registry::RegistryEndpoint, product_url::String,
+                                target::NamedTuple, source::NamedTuple)
+    _checksourcerows(registry)
+    citation = source.citation
+    isnothing(citation.release_date) &&
+        throw(ReadWriteException("the metadata of $(source.identifier) gives no date of release, which a source needs"))
+    data = Dict{String, Any}("data_product" => product_url,
+                             "identifier" => source.identifier,
+                             "title" => something(citation.title,
+                                       "$(target.release) $(target.version)"),
+                             "version" => target.version,
+                             "release_date" =>
+                                 Dates.format(citation.release_date,
+                                              "yyyy-mm-ddTHH:MM:SS") *
+                                 "Z",
+                             "primary_not_supplement" => true)
+    isnothing(citation.description) ||
+        (data["description"] = citation.description)
+    _createentry(registry, "external_object", data)
+    return nothing
+end
+
+# Warn of what a release's DOI and the repository's metadata files say
+# differently - authors, title, licence, version - and tell of an identifier
+# that one gives an author and the other does not
+function _comparerelease(identifier::String, citation::SourceCitation,
+                         target::NamedTuple)
+    metadata = target.metadata
+    differences = String[]
+    notes = String[]
+    unmatched = copy(metadata.authors)
+    for author in citation.authors
+        given = get(citation.identifiers, author, nothing)
+        index = isnothing(given) ? nothing :
+                findfirst(name -> get(metadata.identifiers, name, nothing) ==
+                                  given, metadata.authors)
+        if isnothing(index)
+            index = findfirst(name -> _namekey(name) == _namekey(author),
+                              metadata.authors)
+        end
+        if isnothing(index)
+            push!(differences, "the DOI names $author and the files do not")
+            continue
+        end
+        known = metadata.authors[index]
+        filter!(!=(known), unmatched)
+        held = get(metadata.identifiers, known, nothing)
+        if isnothing(given) && !isnothing(held)
+            push!(notes,
+                  "the files identify $known as $held and the DOI does not")
+        elseif !isnothing(given) && isnothing(held)
+            push!(notes,
+                  "the DOI identifies $author as $given and the files do not")
+        elseif !isnothing(given) && given != held
+            push!(differences,
+                  "the DOI identifies $author as $given and the files as $held")
+        end
+    end
+    for author in unmatched
+        push!(differences, "the files name $author and the DOI does not")
+    end
+    if !isnothing(citation.title) && !isnothing(metadata.title) &&
+       citation.title != metadata.title
+        push!(differences,
+              "the DOI's title is '$(citation.title)' and the files' '$(metadata.title)'")
+    end
+    if !isnothing(citation.licence) && !isnothing(metadata.licence) &&
+       _licencekey(citation.licence) != _licencekey(metadata.licence)
+        push!(differences,
+              "the DOI's licence is $(citation.licence) and the files' $(metadata.licence)")
+    end
+    released = isnothing(citation.release_version) ? nothing :
+               _tagversion(citation.release_version)
+    if !isnothing(released) && released != VersionNumber(target.version)
+        push!(differences,
+              "the DOI is of version $(citation.release_version) and the release $(target.version)")
+    end
+    isempty(differences) ||
+        @warn "the release's DOI $identifier and the repository's metadata files differ: $(join(differences, "; "))"
+    isempty(notes) ||
+        @info "the release's DOI $identifier and the repository's metadata files: $(join(notes, "; "))"
+    return nothing
+end
+
+# A licence as two records of it are compared: in lower case, as its SPDX
+# identifier where it has one, the deprecated `+` read as `-or-later` and a GNU
+# licence with no suffix as `-only`, as SPDX now writes them
+function _licencekey(licence::AbstractString)
+    named = try
+        _licence(licence).info
+    catch err
+        err isa ArgumentError || rethrow()
+        licence
+    end
+    key = replace(lowercase(named), r"\+$" => "-or-later")
+    occursin(r"^(a|l)?gpl-\d\.\d$|^gfdl-\d\.\d$", key) && (key *= "-only")
+    return key
+end
+
+# The DOI of the version that Zenodo archived of a GitHub repository's release
+# of one of `tags`, Zenodo naming a version by its tag: found by the
+# repository's id, the newest version's DOI that Zenodo's badge redirects to,
+# that record's concept, and its version of the tag. `nothing` where Zenodo has
+# none yet, which is told of, or where Zenodo or GitHub cannot be asked, which
+# is warned of. `fetch` gives a URL's reply, as `_fetchreply` does.
+function _zenododoi(remote::AbstractString, tags::Vector{String};
+                    fetch::Function = _fetchreply)
+    path = _githubpath(remote)
+    if isnothing(path)
+        @info "Zenodo archives a repository's releases from GitHub, and $remote is elsewhere: give the release's DOI as `doi`"
+        return nothing
+    end
+    repository = _replyjson(fetch("https://api.github.com/repos/$path"),
+                            "GitHub's record of $path")
+    isnothing(repository) && return nothing
+    badge = fetch("https://zenodo.org/badge/latestdoi/$(repository["id"])")
+    isnothing(badge) && return nothing
+    newest = isnothing(badge.location) ? nothing :
+             match(r"zenodo\.(\d+)$", badge.location)
+    if isnothing(newest)
+        @info "Zenodo has archived no release of $path yet: call register_release! again once it has, to attach the DOI"
+        return nothing
+    end
+    record = _replyjson(fetch("https://zenodo.org/api/records/$(newest[1])"),
+                        "Zenodo's record $(newest[1])")
+    isnothing(record) && return nothing
+    for tag in tags
+        query = URIs.escapeuri("parent.id:$(record["conceptrecid"]) AND metadata.version:\"$tag\"")
+        found = _replyjson(fetch("https://zenodo.org/api/records?q=$query&allversions=true&size=1"),
+                           "Zenodo's versions of $path")
+        isnothing(found) && return nothing
+        hits = found["hits"]["hits"]
+        isempty(hits) || return String(first(hits)["doi"])
+    end
+    @info "Zenodo has no version of $path for $(join(tags, " or ")) yet: call register_release! again once it has, to attach the DOI"
+    return nothing
+end
+
+# A reply's JSON, or `nothing` for no reply or one that is not a success, which
+# is warned of as `what` not to be had
+function _replyjson(answer, what::AbstractString)
+    isnothing(answer) && return nothing
+    if answer.status != 200
+        @warn "$what is not to be had now (HTTP status $(answer.status)), so the release's DOI is not looked up: call register_release! again later to attach it"
+        return nothing
+    end
+    return JSON.parse(answer.body)
+end
+
+# What a URL answers, its redirection not followed: its status, where a
+# redirection points or `nothing`, and its body; `nothing` where it cannot be
+# reached, which is warned of
+function _fetchreply(url::AbstractString)
+    response = try
+        HTTP.get(url, redirect = false, status_exception = false)
+    catch err
+        err isa Union{Base.IOError, HTTP.ConnectError, HTTP.TimeoutError} ||
+            rethrow()
+        @warn "cannot reach $url, so the release's DOI is not looked up: call register_release! again later to attach it ($(sprint(showerror, err)))"
+        return nothing
+    end
+    location = HTTP.header(response, "Location", "")
+    return (status = Int(response.status),
+            location = isempty(location) ? nothing : String(location),
+            body = String(response.body))
 end
