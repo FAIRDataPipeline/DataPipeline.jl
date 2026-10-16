@@ -120,7 +120,7 @@
     the CLI names one, with `namespace:name` for its newest version:
     `link_register!` takes the form in place of its `namespace` and `version`
     keywords, `ExistingDataProduct` takes it (the three-part constructor is
-    deprecated), `raise_issue` takes it bare, and `identify` prints it.
+    deprecated), `raise_issue!` takes it bare, and `identify` prints it.
   - Every call that changes what a run registers ends in `!`: `raise_issue!`,
     `read_array!`, `read_table!`, `read_estimate!`, `read_distribution!`,
     `write_array!`, `write_table!`, `write_estimate!` and `write_distribution!`,

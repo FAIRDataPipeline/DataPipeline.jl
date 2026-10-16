@@ -186,6 +186,30 @@ link_register!
 
 ## Raising issues
 
+An issue records a problem found in something registered, so that
+[`DataPipeline.identify`](@ref) of anything made from it reports it and
+[`DataPipeline.downstream`](@ref) of it says what to make again. In a run,
+`raise_issue!(handle, target, description)` queues it, and `finalise`
+registers it, so that an output can be named before it is written:
+
+```julia
+raise_issue!(handle, "SEIRS_model/parameters", "Rates are per day, not per week",
+             severity = 4)
+raise_issue!(handle, DataPipeline.CodeRepository(), "Fixed in the next commit")
+```
+
+Outside a run, an issue on something registered already - a data product, or
+commits of a code repository - is registered at once. A selection of commits
+stands for the code at each of them, so a problem fixed in a release is raised
+on everything before it in one call (see [Releases of the
+code](@ref)):
+
+```julia
+raise_issue!("PSU:SEIRS_model/parameters@v1.0.0", "Rates are per day, not per week")
+raise_issue!(DataPipeline.AncestorCommits(of = "v1.2.0", including = false),
+             "Bug X, fixed in v1.2.0")
+```
+
 ```@docs
 raise_issue!
 DataPipeline.AbstractIssueTarget
