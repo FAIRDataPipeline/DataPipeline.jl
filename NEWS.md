@@ -111,6 +111,9 @@
   - A release's DOI is its data product's source: `doi = ...`, or for a
     repository with a `.zenodo.json` its tag's Zenodo version, looked up; a
     release registered before Zenodo has it gets it on a second call.
+  - A run's line in `provenance` and `downstream`, and a commit's in `identify`,
+    show the release its commit is, with its DOI: `TraceRun.release` and
+    `RegisteredCommit.release`, each a `TraceRelease`.
   - `raise_issue!(target, description)` outside a run, with a registry or the
     CLI's, registers the issue at once and returns its URL, for an
     `ExistingDataProduct` or a commit selection: so

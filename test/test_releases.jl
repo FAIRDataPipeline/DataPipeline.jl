@@ -3,6 +3,7 @@
 module TestReleases
 
 using DataPipeline
+using Dates
 using Test
 
 const LibGit2 = DataPipeline.LibGit2
@@ -548,6 +549,92 @@ if haskey(ENV, "FDP_CONFIG_DIR")
         DataPipeline._resetsession!()
         @test occursin("  with the source $(doi_url)9", said)
         close(zenodo_repo)
+
+        # A run from a released commit is traced with its release - the
+        # highest version on the commit, with its DOI - and one from a commit
+        # that is no release without
+        datetime = Dates.format(Dates.now(), "yyyymmdd-HHMMSS")
+        cpath = joinpath("coderun", datetime, "config.yaml")
+        function run_from(clone_dir, remote_url, sha, name)
+            config = DataPipeline._createconfig(cpath, latest_commit = sha,
+                                                local_repo = clone_dir,
+                                                remote_repo = remote_url)
+            data_product = "release-trace/$(first(uid, 12))/$name"
+            DataPipeline._addwrite(config, data_product, "release trace",
+                                   file_type = "txt", use_version = "0.0.1")
+            handle = DataPipeline.initialise(config, config)
+            write(DataPipeline.link_write!(handle, data_product),
+                  "$name $uid\n")
+            DataPipeline.finalise(handle)
+            namespace = handle.config["run_metadata"]["default_output_namespace"]
+            return "$namespace:$data_product@v0.0.1"
+        end
+        released_output = run_from(zenodo_dir,
+                                   "https://github.com/FAIRDataPipeline/$zenodo_name.git",
+                                   archived, "released")
+        released_trace = DataPipeline.provenance(registry, released_output)
+        made = only(values(released_trace.runs))
+        # The report names the run's code by its release record, which stands
+        # for the repository's object at the commit
+        @test made.commit == archived
+        @test sourced.object in made.objects
+        @test made.release ==
+              DataPipeline.TraceRelease("FAIRDataPipeline/$zenodo_name",
+                                        v"0.54.1",
+                                        "https://github.com/FAIRDataPipeline/$zenodo_name/releases/tag/v0.54.1",
+                                        doi_url)
+        @test sprint(show, made.release) ==
+              "FAIRDataPipeline/$zenodo_name 0.54.1, doi:$doi"
+        @test occursin(", FAIRDataPipeline/$zenodo_name 0.54.1, doi:$doi\n",
+                       sprint(show, MIME("text/plain"), released_trace))
+        # ... the same going forward, from an issue on the released code, which
+        # holds the run that the code made its output in
+        issue = raise_issue!(registry,
+                             DataPipeline.NamedCommit(archived,
+                                                      repo = zenodo_dir),
+                             "an issue on release 0.54.1 $uid")
+        forward = DataPipeline.downstream(registry, issue = issue)
+        @test only(values(forward.runs)).release == made.release
+        # ... with the release's own data product among what the issue is on
+        @test "$(sourced.data_product)" in
+              [DataPipeline._dataproductname(product.namespace, product.name,
+                                             product.version)
+               for product in values(forward.products)]
+        # An issue on released code is behind what the code made, as the
+        # object of the run's code, whatever releases the object carries
+        @test any(found.issue.description == "an issue on release 0.54.1 $uid"
+                  for found in DataPipeline._upstreamissues(DataPipeline.provenance(registry,
+                                                                                    released_output)))
+        # ... and none for a commit that is no release
+        unreleased_output = run_from(dir, remote, untagged, "unreleased")
+        unreleased = only(values(DataPipeline.provenance(registry,
+                                                         unreleased_output).runs))
+        @test isnothing(unreleased.release)
+
+        # An issue on the promoted beta's code reaches both its versions on
+        # the one object, and warns of no other version holding its bytes
+        @test_logs raise_issue!(registry,
+                                DataPipeline.NamedCommit(beta_commit,
+                                                         repo = dir),
+                                "an issue on the promoted beta $uid")
+
+        # identify gives each commit its release: the promoted beta its
+        # release, the record's page being the beta's, not shown
+        promoted_commit = only(DataPipeline.identify(registry,
+                                                     DataPipeline.NamedCommit(beta_commit,
+                                                                              repo = dir)).commits)
+        @test promoted_commit.release ==
+              DataPipeline.TraceRelease("FAIRDataPipeline/$name", v"2.0.0",
+                                        nothing, nothing)
+        archived_text = sprint(show, MIME("text/plain"),
+                               DataPipeline.identify(registry,
+                                                     DataPipeline.NamedCommit(archived,
+                                                                              repo = zenodo_dir)))
+        @test occursin(", release FAIRDataPipeline/$zenodo_name 0.54.1, doi:$doi\n",
+                       archived_text)
+        @test isnothing(only(DataPipeline.identify(registry,
+                                                   DataPipeline.NamedCommit(untagged,
+                                                                            repo = dir)).commits).release)
     end
 end
 

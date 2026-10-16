@@ -216,10 +216,11 @@ function _issuedownstream(registry::RegistryEndpoint, url::String,
     for component_url in issue["component_issues"]
         component = _cached(registry, parts, component_url)
         object = _cached(registry, parts, component["object"])
-        if !isempty(object["data_products"])
-            append!(roots, object["data_products"])
-            continue
-        end
+        append!(roots, object["data_products"])
+        # A code repository's object carries the data products of its
+        # releases, and is the code of the runs made from it too
+        (isempty(object["data_products"]) ||
+         object["description"] == REPOSITORY_DESCRIPTION) || continue
         for run_url in _runsfromobject(registry, object["url"])
             haskey(parts.runs, run_url) || _runpart!(parts, registry, run_url)
             run = parts.runs[run_url]

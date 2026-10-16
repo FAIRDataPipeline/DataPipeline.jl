@@ -279,6 +279,7 @@ A commit of a git repository that the registry holds runs for.
 - `objects`: the URLs of the registry objects that stand for it
 - `runs`: the [`CodeRunRecord`](@ref)s made from it, newest first
 - `issues`: the [`IssueRecord`](@ref)s raised against it
+- `release`: the [`TraceRelease`](@ref) it is, or `nothing`
 """
 struct RegisteredCommit
     sha::String
@@ -287,6 +288,7 @@ struct RegisteredCommit
     objects::Vector{String}
     runs::Vector{CodeRunRecord}
     issues::Vector{IssueRecord}
+    release::Union{Nothing, TraceRelease}
 end
 
 function Base.show(io::IO, commit::RegisteredCommit)
@@ -349,7 +351,8 @@ function Base.show(io::IO, ::MIME"text/plain", id::RepositoryIdentification)
         println(io, "  commit ", commit.sha, commit.dirty ? "-dirty" : "",
                 isnothing(commit.date) ? ", not in this clone" :
                 ", committed $(commit.date)",
-                commit.sha == id.head ? " (checked out)" : "")
+                commit.sha == id.head ? " (checked out)" : "",
+                isnothing(commit.release) ? "" : ", release $(commit.release)")
         for issue in commit.issues
             println(io, "    issue (severity ", issue.severity, "): ",
                     issue.description)
@@ -876,8 +879,9 @@ function _selectscommit(selection::AncestorCommits, clone::LibGit2.GitRepo,
            LibGit2.is_ancestor_of(sha, commit, clone)
 end
 
-# One registered commit: its date if the clone has it, and the runs made from
-# and issues raised against every object standing for it
+# One registered commit: its date if the clone has it, the runs made from and
+# issues raised against every object standing for it, and the release the
+# first of them to stand for one says it is
 function _registeredcommit(registry::RegistryEndpoint,
                            clone::Union{Nothing, LibGit2.GitRepo},
                            sha::String, dirty::Bool, locations::AbstractVector)
@@ -890,12 +894,18 @@ function _registeredcommit(registry::RegistryEndpoint,
     objects = String[]
     runs = CodeRunRecord[]
     issues = IssueRecord[]
+    release = nothing
     for location in locations
         for object in _getentries(registry, "object",
                                   Dict("storage_location" =>
                                            _extractid(location["url"])))
             push!(objects, object["url"])
             append!(issues, _objectissues(registry, object))
+            if isnothing(release)
+                release = _objectrelease(object) do url
+                    return _getentry(registry, URIs.URI(url))
+                end
+            end
             for run in _getentries(registry, "code_run",
                                    Dict("code_repo" =>
                                             _extractid(object["url"])))
@@ -904,7 +914,7 @@ function _registeredcommit(registry::RegistryEndpoint,
         end
     end
     sort!(runs, by = run -> run.run_date, rev = true)
-    return RegisteredCommit(sha, dirty, date, objects, runs, issues)
+    return RegisteredCommit(sha, dirty, date, objects, runs, issues, release)
 end
 
 # A code run, with the data products it wrote

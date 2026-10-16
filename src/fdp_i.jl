@@ -1147,6 +1147,8 @@ function _samebytesversions(registry::RegistryEndpoint, component_url::String)
                                           _extractid(product["namespace"])))
             other["name"] == product["name"] || continue
             other["version"] == product["version"] && continue
+            # Another version on this very object is covered already
+            other["object"] == component["object"] && continue
             other_object = _getentry(registry, URIs.URI(other["object"]))
             isnothing(other_object["storage_location"]) && continue
             _getentry(registry, URIs.URI(other_object["storage_location"]))["hash"] ==

@@ -73,7 +73,8 @@ public RepositoryIdentification, RegisteredCommit, CodeRunRecord
 # crate that packs files with their provenance
 public provenance, downstream, crate
 public Trace
-public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
+public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget,
+       TraceRelease
 public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
 public register_release!, RegisteredRelease
 

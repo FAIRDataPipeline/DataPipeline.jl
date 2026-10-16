@@ -88,6 +88,7 @@ DataPipeline.TraceProduct
 DataPipeline.TraceRun
 DataPipeline.TraceIssue
 DataPipeline.TraceSource
+DataPipeline.TraceRelease
 DataPipeline.TraceTarget
 ```
 
