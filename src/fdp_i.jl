@@ -883,11 +883,18 @@ const REPOSITORY_DESCRIPTION = "Remote code repository."
 # holds there, else one made with the authors the repository's metadata gives;
 # with its licence and keywords added either way
 function _registerrepository(registry::RegistryEndpoint, run_metadata::Dict)
-    metadata = _runrepositorymetadata(run_metadata)
-    held = _heldrepository(registry, run_metadata)
+    return _registerrepository(registry, run_metadata["remote_repo"],
+                               run_metadata["latest_commit"],
+                               _runrepositorymetadata(run_metadata))
+end
+# ... at a commit of the repository at `remote`, with the metadata it gives
+function _registerrepository(registry::RegistryEndpoint,
+                             remote::AbstractString, commit::AbstractString,
+                             metadata::RepositoryMetadata)
+    held = _heldrepository(registry, remote, commit)
     object_url = held.object
     if isnothing(object_url)
-        repo = _repositorylocation(run_metadata["remote_repo"])
+        repo = _repositorylocation(remote)
         location_url = held.location
         if isnothing(location_url)
             root_url = _postentry(registry, "storage_root",
@@ -895,8 +902,7 @@ function _registerrepository(registry::RegistryEndpoint, run_metadata::Dict)
                                        "local" => false))["url"]
             location_url = _createentry(registry, "storage_location",
                                         Dict("path" => repo.path,
-                                             "hash" =>
-                                                 run_metadata["latest_commit"],
+                                             "hash" => commit,
                                              "public" => true,
                                              "storage_root" => root_url))["url"]
         end
@@ -913,16 +919,22 @@ function _registerrepository(registry::RegistryEndpoint, run_metadata::Dict)
 end
 
 # The storage location the registry holds for a run's commit and the object it
-# keeps there, either `nothing` where there is none: one location for a commit
+# keeps there, either `nothing` where there is none
+function _heldrepository(registry::RegistryEndpoint, run_metadata::Dict)
+    return _heldrepository(registry, run_metadata["remote_repo"],
+                           run_metadata["latest_commit"])
+end
+# ... for a commit of the repository at `remote`: one location for a commit
 # under its host, whatever path it was registered with, and of several objects
 # at it, the one a release is registered on, else the oldest
-function _heldrepository(registry::RegistryEndpoint, run_metadata::Dict)
-    repo = _repositorylocation(run_metadata["remote_repo"])
+function _heldrepository(registry::RegistryEndpoint, remote::AbstractString,
+                         commit::AbstractString)
+    repo = _repositorylocation(remote)
     root_id = _getid(registry, "storage_root", Dict("root" => repo.root))
     isnothing(root_id) && return (location = nothing, object = nothing)
     location_url = _geturl(registry, "storage_location",
-                           Dict("hash" => run_metadata["latest_commit"],
-                                "public" => true, "storage_root" => root_id))
+                           Dict("hash" => commit, "public" => true,
+                                "storage_root" => root_id))
     isnothing(location_url) && return (location = nothing, object = nothing)
     objects = _getentries(registry, "object",
                           Dict("storage_location" => _extractid(location_url)))

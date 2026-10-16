@@ -93,7 +93,9 @@ ancestors needs a clone holding the commit.
 # Arguments
 - `of`: the commit to start from, named as [`NamedCommit`](@ref) names one: a
   tag, a branch, a commit hash or the version of a registered release of the
-  code. `nothing`, the default, is the checked-out commit.
+  code; or a [`RegisteredRelease`](@ref), whose commit and clone it is, so
+  that `repo` need not be given. `nothing`, the default, is the checked-out
+  commit.
 - `including`: whether that commit is selected itself; with `false`, only the
   commits before it, and so not the runs made from it with uncommitted changes
   either.
@@ -106,12 +108,15 @@ struct AncestorCommits <: AbstractCommitSelection
     repo::String
     dirty::Bool
 
-    function AncestorCommits(; of::Union{Nothing, AbstractString} = nothing,
-                             including::Bool = true,
+    # `of` is not annotated: a release given there names the clone as well as
+    # the commit, which `_ancestorstart` works out and checks
+    function AncestorCommits(; of = nothing, including::Bool = true,
                              repo::Union{Nothing, AbstractString} = nothing,
                              dirty::Bool = false)
-        return new(isnothing(of) ? nothing : String(of), including,
-                   _selectionrepo(repo, "the ancestors of a commit"), dirty)
+        start = _ancestorstart(of, repo)
+        return new(start.of, including,
+                   _selectionrepo(start.repo, "the ancestors of a commit"),
+                   dirty)
     end
 end
 
@@ -152,6 +157,7 @@ end
 
 """
     NamedCommit(name; repo = nothing, dirty = false)
+    NamedCommit(release; dirty = false)
 
 Select one commit by name: a full commit hash, as it is; a tag, a branch or an
 abbreviated hash, resolved by the local clone; or the version of a release of
@@ -160,7 +166,9 @@ resolves with no clone at all. If `dirty`, the runs made from the commit with
 uncommitted changes too. `repo` is a clone or the URL of its remote, as for
 every [`AbstractCommitSelection`](@ref); by URL, a tag or a branch is
 resolved by asking the remote, which needs the network and a remote that
-asks for no credentials, and an abbreviated hash does not resolve.
+asks for no credentials, and an abbreviated hash does not resolve. A
+[`RegisteredRelease`](@ref) names its commit, of the clone it was registered
+from, else of its remote.
 """
 struct NamedCommit <: AbstractCommitSelection
     name::String
@@ -180,6 +188,12 @@ function Base.show(io::IO, selection::AbstractCommitSelection)
     selection.dirty && print(io, "dirty = true, ")
     return print(io, "repo = ", repr(selection.repo), ")")
 end
+
+# The commit an `AncestorCommits` starts from, as its name, and the repository
+# it names, given `of` and `repo` as its constructor was: a commit's name or
+# none, with the repository given
+_ancestorstart(::Nothing, repo) = (of = nothing, repo = repo)
+_ancestorstart(of::AbstractString, repo) = (of = String(of), repo = repo)
 
 # What a selection is shown selecting, before the keywords every one has
 _showleading(::IO, ::AbstractCommitSelection) = nothing
@@ -653,6 +667,19 @@ function _postentry(registry::RegistryEndpoint, table::String, query::Dict)
     end
     body = JSON.json(query)
     r = HTTP.request("POST", url, headers = _headers(registry), body = body)
+    return JSON.parse(String(r.body))
+end
+
+# Change fields of a registry entry and return it changed, or `nothing` where
+# the registry has no update for its table
+function _patchentry(registry::RegistryEndpoint, url::AbstractString,
+                     data::Dict)
+    _requiretoken(registry)
+    r = HTTP.request("PATCH", URIs.URI(url), _headers(registry),
+                     JSON.json(data), status_exception = false)
+    r.status == 405 && return nothing
+    r.status == 200 ||
+        throw(ReadWriteException("the registry refused to change $url: HTTP status $(r.status), $(String(r.body))"))
     return JSON.parse(String(r.body))
 end
 

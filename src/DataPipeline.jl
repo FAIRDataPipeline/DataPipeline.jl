@@ -75,6 +75,7 @@ public provenance, downstream, crate
 public Trace
 public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
 public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
+public register_release!, RegisteredRelease
 
 include("repometadata.jl")
 include("fdp_i.jl")

@@ -130,6 +130,32 @@ Where there is nothing to supersede - the file is the highest version's and
 unchanged, or the name has no version before - nothing is raised and an info
 message says so.
 
+## Releases of the code
+
+A run records the commit of the code it ran. `DataPipeline.register_release!`
+records that a commit is a release - its version read from the commit's tag,
+`v1.2.0` say, its authors and licence from the repository's `codemeta.json`,
+`.zenodo.json`, `CITATION.cff` or project file - as the registry's release
+record and as a data product, `<organisation>:<repository>@<version>`, which
+the traces and the crate take as they take any data product. A release then
+names the code before it, so that a problem fixed in it can be raised on
+everything it was found in:
+
+```julia
+release = DataPipeline.register_release!(DataPipeline.NamedCommit("v1.2.0"))
+raise_issue!(DataPipeline.AncestorCommits(of = release, including = false),
+             "Bug X, fixed in v1.2.0")
+```
+
+With `fair-cli` 0.10.2 a release is registered on each registry it belongs on -
+`register_release!(...; remote = "origin")` for the project's remote - since
+`fair push` does not carry it; and its data product is not to be `fair add`ed.
+
+```@docs
+DataPipeline.register_release!
+DataPipeline.RegisteredRelease
+```
+
 ## The crate for a paper
 
 `DataPipeline.crate` fetches the RO-Crate the registry builds for data

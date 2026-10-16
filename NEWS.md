@@ -104,6 +104,10 @@
     commits before it.
   - A `NamedCommit` of a repository named by its remote's URL resolves a tag or
     a branch by asking the remote, with no clone; it needs the network.
+  - `DataPipeline.register_release!` registers a tagged commit as a release of
+    the code - the registry's release record and a data product
+    `<organisation>:<repository>@<version>` - returning a `RegisteredRelease`,
+    which `NamedCommit` and `AncestorCommits(of = release)` take.
   - `raise_issue!(target, description)` outside a run, with a registry or the
     CLI's, registers the issue at once and returns its URL, for an
     `ExistingDataProduct` or a commit selection: so

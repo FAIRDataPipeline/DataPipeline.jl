@@ -62,7 +62,8 @@ One version of a data product in a [`Trace`](@ref).
 # Fields
 - `url`: its registry URL, the key it has in the trace
 - `namespace`, `name`, `version`: what names it
-- `hash`: the SHA-1 of its file, or `nothing` for a data product with no file
+- `hash`: the SHA-1 of its file - for a code repository's release, its
+  commit - or `nothing` for a data product with no file
 - `location`: where the registry says the file is, or `nothing`
 - `description`: its description, or `nothing`
 - `format`: the extension of its file type, as `txt`, or `nothing`
@@ -238,11 +239,14 @@ function _productlabel(product::TraceProduct)
     return _dataproductname(product.namespace, product.name, product.version)
 end
 
-# What a data product's line of a tree says after its name: its file, whether
-# a newer version exists, and its source, ending the line
+# What a data product's line of a tree says after its name: its file - a code
+# repository's being its commit - whether a newer version exists, and its
+# source, ending the line
 function _printproductdetails(io::IO, product::TraceProduct)
     print(io, "  ",
           isnothing(product.hash) ? "no file" :
+          product.description == REPOSITORY_DESCRIPTION ?
+          "commit " * first(product.hash, 8) :
           "sha1 " * first(product.hash, 8))
     isnothing(product.superseded_by) ||
         print(io, "  superseded by v", product.superseded_by)

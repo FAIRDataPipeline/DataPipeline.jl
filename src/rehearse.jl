@@ -215,6 +215,27 @@ function _rehearserepository(registry::RegistryEndpoint, run_metadata::Dict)
     return nothing
 end
 
+# What `register_release!` would register, said rather than done, and
+# `nothing` in place of the release
+function _registerrelease(::Rehearsal, registry::RegistryEndpoint,
+                          target::NamedTuple,
+                          website::Union{Nothing, String})
+    held = _heldrepository(registry, target.remote, target.commit).object
+    println("would register the release ", target.release, " ",
+            target.version, " of commit ", target.commit, ", its data product ",
+            _dataproductname(target.namespace, target.data_product,
+                             target.version),
+            isnothing(website) ? "" : ", its website $website")
+    if isnothing(held)
+        authors = target.metadata.authors
+        println("  on a new object for the commit, its authors ",
+                isempty(authors) ? "the runner" : join(authors, ", "))
+    else
+        println("  on the commit's object ", held)
+    end
+    return nothing
+end
+
 # What `link_register!` would register, said rather than done, and `nothing`
 # in place of the data product's entry
 function _registerexternal(::DataRegistryHandle{Rehearsal},
