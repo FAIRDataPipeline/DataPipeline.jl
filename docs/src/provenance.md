@@ -9,21 +9,22 @@ all works outside `fair run`, against the local registry or a remote one.
 
 ## Asking what the registry knows about a file or a repository
 
-`DataPipeline.identify` takes a file, or a git repository by the path of its
-top-level folder, and asks the registry the FAIR CLI is configured to use, or
-any other, what it knows about it. No token is needed, so it works outside
-`fair run`:
+`DataPipeline.identify` takes a file, or commits of a git repository, and asks
+the registry the FAIR CLI is configured to use, or any other, what it knows
+about them. A selection of commits holds its repository: the top-level folder
+of a clone, or the URL of its remote, by default the repository holding the
+current directory. No token is needed, so it works outside `fair run`:
 
 ```julia
-DataPipeline.identify("results.csv")                     # the local registry
-DataPipeline.identify("results.csv", remote = "origin")  # a remote of this project
-DataPipeline.identify("results.csv", superseded = true)  # and the inputs behind it since superseded
-DataPipeline.identify(repo = ".")                        # this checkout's commit and its ancestors
-DataPipeline.identify(repo = ".", commits = "v0.55.0")   # one commit, by tag, branch, hash or release
+DataPipeline.identify("results.csv")                        # the local registry
+DataPipeline.identify("results.csv", remote = "origin")     # a remote of this project
+DataPipeline.identify("results.csv", superseded = true)     # and the inputs behind it since superseded
+DataPipeline.identify(DataPipeline.AncestorCommits())       # this checkout's commit and its ancestors
+DataPipeline.identify(DataPipeline.NamedCommit("v0.55.0"))  # one commit, by tag, branch, hash or release
 # every run of this repository, including those made with uncommitted changes
-DataPipeline.identify(repo = ".", commits = DataPipeline.AllCommits(dirty = true))
+DataPipeline.identify(DataPipeline.AllCommits(dirty = true))
 # a repository with no clone, by the registry's record of it alone
-DataPipeline.identify(repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl")
+DataPipeline.identify(DataPipeline.AllCommits(repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl"))
 ```
 
 A file's identification carries the issues raised on it and, behind it, the
@@ -87,6 +88,7 @@ DataPipeline.TraceProduct
 DataPipeline.TraceRun
 DataPipeline.TraceIssue
 DataPipeline.TraceSource
+DataPipeline.TraceRelease
 DataPipeline.TraceTarget
 ```
 
@@ -96,14 +98,14 @@ DataPipeline.TraceTarget
 product, what they wrote, the runs that read those, and on to the end of every
 path. It answers "I have found a problem in this - what must be made again?":
 every data product reached that no newer version has superseded. It starts
-from a data product, from everything the runs of a repository wrote, or from
-everything an issue is raised on, and prints as the mirror image of
+from a data product, from everything the runs of selected commits wrote, or
+from everything an issue is raised on, and prints as the mirror image of
 `provenance`:
 
 ```julia
 DataPipeline.downstream("PSU:SEIRS_model/parameters@v1.0.0")
-DataPipeline.downstream(repo = ".", commits = "v0.55.0")   # what this release's runs made, and on
-DataPipeline.downstream(issue = 12)                        # what an issue affects
+DataPipeline.downstream(DataPipeline.NamedCommit("v0.55.0"))  # what this release's runs made, and on
+DataPipeline.downstream(issue = 12)                           # what an issue affects
 ```
 
 ```@docs
@@ -128,6 +130,35 @@ link_write!(handle, "era5/t2m/2021", path = "cache/era5_t2m_2021.nc", doi = era5
 Where there is nothing to supersede - the file is the highest version's and
 unchanged, or the name has no version before - nothing is raised and an info
 message says so.
+
+## Releases of the code
+
+A run records the commit of the code it ran. `DataPipeline.register_release!`
+records that a commit is a release - its version read from the commit's tag,
+`v1.2.0` say, its authors and licence from the repository's `codemeta.json`,
+`.zenodo.json`, `CITATION.cff` or project file - as the registry's release
+record and as a data product, `<organisation>:<repository>@<version>`, which
+the traces and the crate take as they take any data product. A release then
+names the code before it, so that a problem fixed in it can be raised on
+everything it was found in. Its DOI - `doi = "10.5281/zenodo..."`, or for a
+repository with a `.zenodo.json` the Zenodo DOI of its tag's version, found
+there - is the data product's source; one that Zenodo has not minted yet is
+attached by calling `register_release!` again later:
+
+```julia
+release = DataPipeline.register_release!(DataPipeline.NamedCommit("v1.2.0"))
+raise_issue!(DataPipeline.AncestorCommits(of = release, including = false),
+             "Bug X, fixed in v1.2.0")
+```
+
+With `fair-cli` 0.10.2 a release is registered on each registry it belongs on -
+`register_release!(...; remote = "origin")` for the project's remote - since
+`fair push` does not carry it; and its data product is not to be `fair add`ed.
+
+```@docs
+DataPipeline.register_release!
+DataPipeline.RegisteredRelease
+```
 
 ## The crate for a paper
 

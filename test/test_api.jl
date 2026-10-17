@@ -124,7 +124,7 @@ Test.@testset "link_read()" begin
     @test handle.inputs[(data_product, nothing)]["path"] == should_be_here
 end
 
-Test.@testset "write_array()" begin
+Test.@testset "write_array!()" begin
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
@@ -135,12 +135,12 @@ Test.@testset "write_array()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_array(handle, data1, data_product, component1, "description1")
+    write_array!(handle, data1, data_product, component1, "description1")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_array(handle, data1, data_product, component1, "description1")
+    write_array!(handle, data1, data_product, component1, "description1")
     @test length(handle.outputs) == 1
-    write_array(handle, data2, data_product, component2, "description2")
+    write_array!(handle, data2, data_product, component2, "description2")
     @test length(handle.outputs) == 2
 
     path1 = handle.outputs[(data_product, component1)]["path"]
@@ -174,7 +174,7 @@ Test.@testset "write_array()" begin
     @test isfile(joinpath(datastore, should_be_here))
 end
 
-Test.@testset "read_array()" begin
+Test.@testset "read_array!()" begin
     data_product = "data_product/write_array/$uid"
 
     # Create working config.yaml
@@ -184,16 +184,16 @@ Test.@testset "read_array()" begin
     @test handle.outputs == Dict()
 
     # Read components
-    dat1 = read_array(handle, data_product, component1)
-    dat2 = read_array(handle, data_product, component2)
+    dat1 = read_array!(handle, data_product, component1)
+    dat2 = read_array!(handle, data_product, component2)
     @test dat1 == data1
     @test dat2 == data2
     # A second read returns the data again, not the handle key
-    @test read_array(handle, data_product, component1) == data1
+    @test read_array!(handle, data_product, component1) == data1
     @test length(handle.inputs) == 2
 
     # A component is compulsory
-    @test_throws MethodError read_array(handle, data_product)
+    @test_throws MethodError read_array!(handle, data_product)
 
     # Finalise Code Run
     DataPipeline.finalise(handle)
@@ -205,7 +205,7 @@ Test.@testset "read_array()" begin
                      handle.registry.url * "object_component/")
 end
 
-Test.@testset "write_estimate()" begin
+Test.@testset "write_estimate!()" begin
     data_product = "data_product/write_estimate/$uid"
 
     # Create working config.yaml
@@ -216,12 +216,12 @@ Test.@testset "write_estimate()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_estimate(handle, estimate1, data_product, component1, "description1")
+    write_estimate!(handle, estimate1, data_product, component1, "description1")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_estimate(handle, estimate1, data_product, component1, "description1")
+    write_estimate!(handle, estimate1, data_product, component1, "description1")
     @test length(handle.outputs) == 1
-    write_estimate(handle, estimate2, data_product, component2, "description2")
+    write_estimate!(handle, estimate2, data_product, component2, "description2")
     @test length(handle.outputs) == 2
 
     # Check data
@@ -248,7 +248,7 @@ Test.@testset "write_estimate()" begin
     @test isfile(joinpath(datastore, should_be_here))
 end
 
-Test.@testset "read_estimate()" begin
+Test.@testset "read_estimate!()" begin
     data_product = "data_product/write_estimate/$uid"
 
     # Create working config.yaml
@@ -258,13 +258,13 @@ Test.@testset "read_estimate()" begin
     @test handle.outputs == Dict()
 
     # Read components
-    dat1 = read_estimate(handle, data_product, component1)
-    dat2 = read_estimate(handle, data_product, component2)
+    dat1 = read_estimate!(handle, data_product, component1)
+    dat2 = read_estimate!(handle, data_product, component2)
     @test dat1 == estimate1
     @test dat2 == estimate2
-    @test read_estimate(handle, data_product, component1) == estimate1
+    @test read_estimate!(handle, data_product, component1) == estimate1
 
-    @test_throws MethodError read_estimate(handle, data_product)
+    @test_throws MethodError read_estimate!(handle, data_product)
 
     # Finalise Code Run
     DataPipeline.finalise(handle)
@@ -274,7 +274,7 @@ Test.@testset "read_estimate()" begin
     @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
-Test.@testset "write_distribution()" begin
+Test.@testset "write_distribution!()" begin
     data_product = "data_product/write_distribution/$uid"
 
     # Create working config.yaml
@@ -285,18 +285,18 @@ Test.@testset "write_distribution()" begin
     @test handle.outputs == Dict()
 
     # Write components
-    write_distribution(handle, distribution["distribution"],
-                       distribution["parameters"],
-                       data_product, component1, "symptom-delay")
+    write_distribution!(handle, distribution["distribution"],
+                        distribution["parameters"],
+                        data_product, component1, "symptom-delay")
     @test handle.outputs[(data_product, component1)]["use_dp"] == data_product
     @test length(handle.outputs) == 1
-    write_distribution(handle, distribution["distribution"],
-                       distribution["parameters"],
-                       data_product, component1, "symptom-delay")
+    write_distribution!(handle, distribution["distribution"],
+                        distribution["parameters"],
+                        data_product, component1, "symptom-delay")
     @test length(handle.outputs) == 1
-    write_distribution(handle, distribution["distribution"],
-                       distribution["parameters"],
-                       data_product, component2, "symptom-delay")
+    write_distribution!(handle, distribution["distribution"],
+                        distribution["parameters"],
+                        data_product, component2, "symptom-delay")
     @test length(handle.outputs) == 2
 
     # Check data
@@ -322,7 +322,7 @@ Test.@testset "write_distribution()" begin
     @test isfile(joinpath(datastore, should_be_here))
 end
 
-Test.@testset "read_distribution()" begin
+Test.@testset "read_distribution!()" begin
     data_product = "data_product/write_distribution/$uid"
 
     # Create working config.yaml
@@ -332,8 +332,8 @@ Test.@testset "read_distribution()" begin
     @test handle.outputs == Dict()
 
     # Read components
-    dat1 = read_distribution(handle, data_product, component1)
-    dat2 = read_distribution(handle, data_product, component2)
+    dat1 = read_distribution!(handle, data_product, component1)
+    dat2 = read_distribution!(handle, data_product, component2)
     @test dat1 == distribution
     @test dat2 == distribution
 
@@ -349,7 +349,7 @@ end
 # a previous Code Run, then an error should be thrown.
 Test.@testset "new components aren't added to existing data products" begin
 
-    # write_array() -------------------------------------------------------------------
+    # write_array!() -------------------------------------------------------------------
 
     data_product = "data_product/write_array/$uid"
 
@@ -363,12 +363,13 @@ Test.@testset "new components aren't added to existing data products" begin
     msg = string("data product already exists in registry: ", data_product,
                  " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_array(handle, data1,
-                                                                  data_product,
-                                                                  component3,
-                                                                  "description3")
+    @test_throws DataPipeline.ReadWriteException(msg) write_array!(handle,
+                                                                   data1,
+                                                                   data_product,
+                                                                   component3,
+                                                                   "description3")
 
-    # write_estimate() ----------------------------------------------------------------
+    # write_estimate!() ----------------------------------------------------------------
 
     data_product = "data_product/write_estimate/$uid"
 
@@ -382,13 +383,13 @@ Test.@testset "new components aren't added to existing data products" begin
     msg = string("data product already exists in registry: ", data_product,
                  " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_estimate(handle,
-                                                                     estimate1,
-                                                                     data_product,
-                                                                     component3,
-                                                                     "description3")
+    @test_throws DataPipeline.ReadWriteException(msg) write_estimate!(handle,
+                                                                      estimate1,
+                                                                      data_product,
+                                                                      component3,
+                                                                      "description3")
 
-    # write_distribution() ------------------------------------------------------------
+    # write_distribution!() ------------------------------------------------------------
 
     data_product = "data_product/write_distribution/$uid"
 
@@ -402,12 +403,12 @@ Test.@testset "new components aren't added to existing data products" begin
     msg = string("data product already exists in registry: ", data_product,
                  " :-(ns: ",
                  namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_distribution(handle,
-                                                                         distribution["distribution"],
-                                                                         distribution["parameters"],
-                                                                         data_product,
-                                                                         component3,
-                                                                         "symptom-delay")
+    @test_throws DataPipeline.ReadWriteException(msg) write_distribution!(handle,
+                                                                          distribution["distribution"],
+                                                                          distribution["parameters"],
+                                                                          data_product,
+                                                                          component3,
+                                                                          "symptom-delay")
 end
 
 # The issues of a component, as the registry holds them
@@ -428,7 +429,7 @@ Test.@testset "names outside the convention are refused at a write" begin
                            file_type = "txt", use_version = version)
     DataPipeline._addwrite(config, dotted, "refused description",
                            file_type = "txt", use_version = version,
-                           use_data_product = "$dotted.txt")
+                           use_data_product = "$dotted/.txt")
     DataPipeline._addwrite(config, spaced_namespace, "refused description",
                            file_type = "toml", use_version = version,
                            use_namespace = "no such namespace")
@@ -438,16 +439,16 @@ Test.@testset "names outside the convention are refused at a write" begin
     err = @test_throws ArgumentError link_write!(handle, spaced)
     @test occursin("is not a data product name", err.value.msg)
     err = @test_throws ArgumentError link_write!(handle, dotted)
-    @test occursin("'$dotted.txt' is not a data product name", err.value.msg)
-    err = @test_throws ArgumentError write_estimate(handle, 1.0,
-                                                    spaced_namespace, "point",
-                                                    "refused")
+    @test occursin("'$dotted/.txt' is not a data product name", err.value.msg)
+    err = @test_throws ArgumentError write_estimate!(handle, 1.0,
+                                                     spaced_namespace, "point",
+                                                     "refused")
     @test occursin("is not a namespace", err.value.msg)
-    err = @test_throws ArgumentError write_estimate(handle, 1.0, accepted,
-                                                    "a point", "refused")
+    err = @test_throws ArgumentError write_estimate!(handle, 1.0, accepted,
+                                                     "a point", "refused")
     @test occursin("'a point' is not a component name", err.value.msg)
     @test isempty(handle.outputs)
-    write_estimate(handle, 1.0, accepted, "a/point-1_2", "accepted")
+    write_estimate!(handle, 1.0, accepted, "a/point-1_2", "accepted")
     @test haskey(handle.outputs, (accepted, "a/point-1_2"))
     DataPipeline.finalise(handle)
 end
@@ -529,12 +530,12 @@ Test.@testset "supersede = true" begin
 
     # A component writer supersedes the same way, once for the data product
     estimating = writing(estimates, "0.0.1")
-    write_estimate(estimating, 1.0, estimates, "point", "first estimate")
+    write_estimate!(estimating, 1.0, estimates, "point", "first estimate")
     DataPipeline.finalise(estimating)
     again = writing(estimates, "0.0.2")
-    write_estimate(again, 2.0, estimates, "point", "second estimate",
-                   supersede = true)
-    write_estimate(again, 3.0, estimates, "other", "second estimate")
+    write_estimate!(again, 2.0, estimates, "point", "second estimate",
+                    supersede = true)
+    write_estimate!(again, 3.0, estimates, "other", "second estimate")
     DataPipeline.finalise(again)
     @test only(again.issues).description ==
           "Superseded by $namespace:$estimates@v0.0.2"
@@ -542,7 +543,68 @@ Test.@testset "supersede = true" begin
           [DataPipeline.ExistingDataProduct("$namespace:$estimates@v0.0.1")]
 end
 
-Test.@testset "raise_issue()" begin
+Test.@testset "the released names, deprecated, and a repeated read" begin
+    estimates = "data_product/deprecated/$uid"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, estimates, "deprecated description",
+                           file_type = "toml", use_version = version)
+    writing = DataPipeline.initialise(config, config)
+    @test write_estimate(writing, 1.5, estimates, "point", "d") ==
+          (estimates, "point")
+    @test write_distribution(writing, "Gaussian", Dict("mean" => 1.0),
+                             estimates, "spread", "d") == (estimates, "spread")
+    @test isnothing(write_table(writing, nothing, estimates, "table"))
+    raise_issue(writing, DataPipeline.WorkingConfig(), "deprecated $uid")
+    @test length(writing.issues) == 1
+    DataPipeline.finalise(writing)
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addread(config, estimates, use_version = version)
+    reading = DataPipeline.initialise(config, config)
+    @test read_estimate(reading, estimates, "point") == 1.5
+    @test read_distribution(reading, estimates, "spread")["distribution"] ==
+          "Gaussian"
+    @test isnothing(read_table(reading, estimates, "table"))
+    # A repeated read leaves the recorded input as it was
+    recorded = reading.inputs[(estimates, "point")]
+    @test read_estimate!(reading, estimates, "point") == 1.5
+    @test reading.inputs[(estimates, "point")] === recorded
+    DataPipeline.finalise(reading)
+end
+
+Test.@testset "raise_issue!() on bytes other versions share" begin
+    registry = handle.registry
+    name = "data_product/same_bytes/$uid"
+    function writing(text, use_version)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, name, "same bytes description",
+                               file_type = "txt", use_version = use_version)
+        run = DataPipeline.initialise(config, config)
+        write(link_write!(run, name), text)
+        return run
+    end
+    whole(run) = run.outputs[(name, nothing)]["component_url"]
+    first_x = writing("same bytes x $uid\n", "0.0.1")
+    DataPipeline.finalise(first_x)
+    first_y = writing("same bytes y $uid\n", "0.0.2")
+    DataPipeline.finalise(first_y)
+    # The bytes of 0.0.1 again at 0.0.3: the issue is on 0.0.3 alone, with a
+    # warning naming the keyword and 0.0.1
+    second_x = writing("same bytes x $uid\n", "0.0.3")
+    raise_issue!(second_x, name, "same bytes $uid")
+    @test_logs (:warn, r"@v0.0.1 has the same bytes.*all_versions = true") match_mode=:any DataPipeline.finalise(second_x)
+    @test DataPipeline._getentry(registry, "issue",
+                                 Dict("description" => "same bytes $uid"))["component_issues"] ==
+          [whole(second_x)]
+    # Asked for, the issue reaches every version with those bytes
+    second_y = writing("same bytes y $uid\n", "0.0.4")
+    raise_issue!(second_y, name, "all versions $uid", all_versions = true)
+    @test_logs DataPipeline.finalise(second_y)
+    @test Set(DataPipeline._getentry(registry, "issue",
+                                     Dict("description" => "all versions $uid"))["component_issues"]) ==
+          Set([whole(second_y), whole(first_y)])
+end
+
+Test.@testset "raise_issue!()" begin
     written = "data_product/link_write/$uid"
     estimates = "data_product/write_estimate/$uid"
     data_product = "data_product/raise_issue/$uid"
@@ -556,26 +618,26 @@ Test.@testset "raise_issue()" begin
     @test isempty(handle.issues)
 
     # Queued, not registered, until finalise
-    raise_issue(handle, DataPipeline.WorkingConfig(), "config $uid",
-                severity = 3)
-    raise_issue(handle,
-                [
-                    DataPipeline.SubmissionScript(),
-                    DataPipeline.CodeRepository()
-                ], "run $uid",
-                severity = 7)
-    raise_issue(handle, written, "input $uid")
-    raise_issue(handle,
-                DataPipeline.ConfigDataProduct(data_product,
-                                               component = component1),
-                "output $uid", severity = 1)
-    raise_issue(handle,
-                DataPipeline.ExistingDataProduct("$namespace:$estimates@v$version",
-                                                 component = component2),
-                "existing $uid", severity = 2)
+    raise_issue!(handle, DataPipeline.WorkingConfig(), "config $uid",
+                 severity = 3)
+    raise_issue!(handle,
+                 [
+                     DataPipeline.SubmissionScript(),
+                     DataPipeline.CodeRepository()
+                 ], "run $uid",
+                 severity = 7)
+    raise_issue!(handle, written, "input $uid")
+    raise_issue!(handle,
+                 DataPipeline.ConfigDataProduct(data_product,
+                                                component = component1),
+                 "output $uid", severity = 1)
+    raise_issue!(handle,
+                 DataPipeline.ExistingDataProduct("$namespace:$estimates@v$version",
+                                                  component = component2),
+                 "existing $uid", severity = 2)
     # A string holding a colon names a registered data product: its newest
     # version, with none given
-    raise_issue(handle, "$namespace:$estimates", "newest $uid")
+    raise_issue!(handle, "$namespace:$estimates", "newest $uid")
     @test length(handle.issues) == 6
     @test handle.issues[6].targets ==
           [DataPipeline.ExistingDataProduct("$namespace:$estimates")]
@@ -585,14 +647,14 @@ Test.@testset "raise_issue()" begin
                                            Dict("description" => "config $uid")))
 
     # A data product not in the config is rejected at once
-    @test_throws DataPipeline.ConfigFileException raise_issue(handle,
-                                                              "not/in/config",
-                                                              "bad")
-    @test_throws ArgumentError raise_issue(handle, "no such:name", "bad")
+    @test_throws DataPipeline.ConfigFileException raise_issue!(handle,
+                                                               "not/in/config",
+                                                               "bad")
+    @test_throws ArgumentError raise_issue!(handle, "no such:name", "bad")
     @test length(handle.issues) == 6
 
     link_read!(handle, written)
-    write_estimate(handle, estimate1, data_product, component1, "description1")
+    write_estimate!(handle, estimate1, data_product, component1, "description1")
     DataPipeline.finalise(handle)
 
     # Each call is one registry issue, on the components of its targets
@@ -624,7 +686,7 @@ Test.@testset "raise_issue()" begin
     # Several targets at once take the same default severity as one
     DataPipeline._resetsession!()
     several = DataPipeline.initialise(config, config)
-    raise_issue(several, [DataPipeline.WorkingConfig()], "default $uid")
+    raise_issue!(several, [DataPipeline.WorkingConfig()], "default $uid")
     @test only(several.issues).severity == DataPipeline.DEFAULT_ISSUE_SEVERITY
     DataPipeline.finalise(several)
 
@@ -632,11 +694,14 @@ Test.@testset "raise_issue()" begin
     # there; on other components, even overlapping ones, it is another
     DataPipeline._resetsession!()
     shared = DataPipeline.initialise(config, config)
-    raise_issue(shared,
-                [DataPipeline.WorkingConfig(), DataPipeline.SubmissionScript()],
-                "shared $uid")
-    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
-    raise_issue(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    raise_issue!(shared,
+                 [
+                     DataPipeline.WorkingConfig(),
+                     DataPipeline.SubmissionScript()
+                 ],
+                 "shared $uid")
+    raise_issue!(shared, DataPipeline.WorkingConfig(), "shared $uid")
+    raise_issue!(shared, DataPipeline.WorkingConfig(), "shared $uid")
     DataPipeline.finalise(shared)
     function shared_on(component_url)
         return [entry
@@ -706,6 +771,71 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     code_run = DataPipeline._getentry(handle.registry,
                                       URIs.URI(handle.code_run_obj))
     @test length(code_run["inputs"]) == 3
+end
+
+Test.@testset "a pattern read under each kind of working config" begin
+    written = "data_product/link_write/$uid"
+    arrays = "data_product/write_array/$uid"
+    both = "data_product/*/$uid"
+    nothing_yet = "data_product/nothing_yet/*"
+    # A working config holding these read entries, each a name, or a name
+    # with the mark of the pattern it was expanded from, or a pattern's own
+    # entry as a CLI may keep it
+    function opened(entries::Vector)
+        config = DataPipeline._createconfig(cpath)
+        for (name, mark) in entries
+            DataPipeline._addread(config, name,
+                                  use_version = occursin('*', name) ? nothing :
+                                                version)
+        end
+        data = DataPipeline.YAML.load_file(config)
+        for (entry, (_, mark)) in zip(data["read"], entries)
+            isnothing(mark) || (entry["wildcard"] = mark)
+        end
+        DataPipeline.YAML.write_file(config, data)
+        return DataPipeline.initialise(config, config)
+    end
+    path_of(handle, name) = (link_read!(handle, name);
+                             handle.inputs[(name, nothing)]["path"])
+
+    # As fair-cli 0.10.2 writes it - no pattern entries: names are matched,
+    # and a pattern that matches none is an error
+    handle = opened([written => nothing, arrays => nothing])
+    @test length(link_read_files!(handle, both)) == 2
+    @test_throws DataPipeline.ConfigFileException link_read_files!(handle,
+                                                                   nothing_yet)
+    @test !DataPipeline.canread(handle, nothing_yet)
+    DataPipeline.finalise(handle)
+
+    # With the patterns' own entries kept: still matched by name, the pattern
+    # entry not among its matches; a kept pattern that matches nothing is an
+    # empty result, and one never configured still an error
+    handle = opened([written => nothing, arrays => nothing, both => nothing,
+                        nothing_yet => nothing])
+    @test link_read_files!(handle, both) ==
+          [path_of(handle, written), path_of(handle, arrays)]
+    @test link_read_files!(handle, nothing_yet) == String[]
+    empty = link_read!(handle, nothing_yet)
+    @test isdir(empty) && isempty(readdir(empty))
+    @test DataPipeline.canread(handle, nothing_yet)
+    @test_throws DataPipeline.ConfigFileException link_read_files!(handle,
+                                                                   "data_product/never/*")
+    # A pattern names no single data product, so takes no issue
+    err = @test_throws ArgumentError raise_issue!(handle, both,
+                                                  "a pattern $uid")
+    @test occursin("is a pattern, which names no single data product",
+                   err.value.msg)
+    DataPipeline.finalise(handle)
+
+    # With the expanded entries marked: a pattern's entries are those marked
+    # with it, whatever else its matching would find - here `arrays`, which it
+    # matches but is no expansion of it - and none marked is an empty result
+    handle = opened([written => both, arrays => nothing, both => nothing,
+                        nothing_yet => nothing])
+    @test link_read_files!(handle, both) == [path_of(handle, written)]
+    @test link_read_files!(handle, nothing_yet) == String[]
+    @test DataPipeline.canread(handle, nothing_yet)
+    DataPipeline.finalise(handle)
 end
 
 Test.@testset "identify()" begin
@@ -868,14 +998,187 @@ Test.@testset "a run from uncommitted changes" begin
                                          "component_issues" => [component]))
     @test unset["severity"] == DataPipeline.DEFAULT_ISSUE_SEVERITY
 
-    # A clean commit: no warning and no issue
-    config = DataPipeline._createconfig(cpath,
-                                        latest_commit = DataPipeline._randomhash())
+    # A clean commit: no warning and no issue - a commit of a clone of its own,
+    # which holds no metadata files, so that the run reads that clone
+    clean_dir = mktempdir()
+    clean_repo = LibGit2.init(clean_dir)
+    write(joinpath(clean_dir, "a.txt"), "a clean commit $uid\n")
+    LibGit2.add!(clean_repo, "a.txt")
+    clean_sha = string(LibGit2.commit(clean_repo, "clean",
+                                      author = LibGit2.Signature("Test",
+                                                                 "test@example.com"),
+                                      committer = LibGit2.Signature("Test",
+                                                                    "test@example.com")))
+    close(clean_repo)
+    config = DataPipeline._createconfig(cpath, latest_commit = clean_sha,
+                                        local_repo = clean_dir)
     clean = @test_logs DataPipeline.initialise(config, config)
     @test isempty(DataPipeline._getentry(registry,
                                          URIs.URI(DataPipeline._wholeobjectcomponent(registry,
                                                                                      clean.repo_obj)))["issues"])
     DataPipeline.finalise(clean)
+end
+
+Test.@testset "initialise() registers the code repository at its commit" begin
+    registry = handle.registry
+    # A clone of its own for each case, at a remote of its own, its files
+    # naming the run so that its commit is new to the registry
+    signature = LibGit2.Signature("Test", "test@example.com", 1_000_000_000, 0)
+    fixtures = Ref(0)
+    function fixture(files::Pair{String, String}...)
+        fixtures[] += 1
+        dir = mktempdir()
+        repo = LibGit2.init(dir)
+        for (name, text) in (files..., "run.txt" => "$uid $(fixtures[])\n")
+            write(joinpath(dir, name), text)
+            LibGit2.add!(repo, name)
+        end
+        sha = string(LibGit2.commit(repo, "fixture", author = signature,
+                                    committer = signature))
+        close(repo)
+        return (dir = dir, sha = sha,
+                remote = "https://github.com/FAIRDataPipeline/repository-fixture-$uid-$(fixtures[]).git")
+    end
+    function run_from(clone; commit = clone.sha)
+        config = DataPipeline._createconfig(cpath, latest_commit = commit,
+                                            local_repo = clone.dir,
+                                            remote_repo = clone.remote)
+        return config
+    end
+    function opened(config)
+        run_handle = DataPipeline.initialise(config, config)
+        DataPipeline.finalise(run_handle)
+        return run_handle.repo_obj
+    end
+    entry(url) = DataPipeline._getentry(registry, URIs.URI(url))
+    authors(object) = Set((author["name"], author["identifier"])
+                          for author in entry.(entry(object)["authors"]))
+    licences(object) = [(licence["licence_info"], licence["identifier"])
+                        for licence in entry.(entry(object)["licences"])]
+    keywords(object) = sort([keyword["keyphrase"]
+                             for keyword in entry.(entry(object)["keywords"])])
+    runner = entry(DataPipeline._getauthorurl(registry))
+    ada = "https://orcid.org/0000-0002-1825-0097"
+    codemeta = """
+    {"name": "Fixture", "license": "https://spdx.org/licenses/MIT",
+     "keywords": ["fixture", "repository $uid"],
+     "author": [{"givenName": "Ada", "familyName": "Lovelace", "id": "$ada"},
+                {"givenName": "Unidentified", "familyName": "Author $uid"}]}
+    """
+
+    # A new object has the repository's authors, by identifier where the
+    # metadata gives one and by name alone where not, with its licence and
+    # keywords
+    with_metadata = fixture("codemeta.json" => codemeta)
+    object = opened(run_from(with_metadata))
+    @test entry(object)["description"] == DataPipeline.REPOSITORY_DESCRIPTION
+    @test authors(object) == Set([("Ada Lovelace", ada),
+                  ("Unidentified Author $uid", nothing)])
+    @test licences(object) == [("MIT", "https://spdx.org/licenses/MIT")]
+    @test keywords(object) == ["fixture", "repository $uid"]
+    location = entry(entry(object)["storage_location"])
+    @test location["hash"] == with_metadata.sha
+    @test location["path"] ==
+          "FAIRDataPipeline/repository-fixture-$uid-$(fixtures[]).git"
+
+    # Another run from that commit keeps the object, and adds nothing to it
+    # that it has
+    @test opened(run_from(with_metadata)) == object
+    @test length(licences(object)) == 1 && length(keywords(object)) == 2
+
+    # An object the registry holds at the commit already is kept, whatever its
+    # authors, and given the licence and keywords
+    held_clone = fixture("codemeta.json" => codemeta)
+    root = DataPipeline._postentry(registry, "storage_root",
+                                   Dict("root" => "https://github.com/",
+                                        "local" => false))["url"]
+    held_location = DataPipeline._createentry(registry, "storage_location",
+                                              Dict("path" => "another/path",
+                                                   "hash" => held_clone.sha,
+                                                   "public" => true,
+                                                   "storage_root" => root))["url"]
+    make_object() = DataPipeline._createentry(registry, "object",
+                                              Dict("description" =>
+                                                       DataPipeline.REPOSITORY_DESCRIPTION,
+                                                   "storage_location" =>
+                                                       held_location,
+                                                   "authors" => [runner["url"]]))["url"]
+    held = make_object()
+    @test opened(run_from(held_clone)) == held
+    @test authors(held) == Set([(runner["name"], runner["identifier"])])
+    @test licences(held) == [("MIT", "https://spdx.org/licenses/MIT")]
+    # Of several, the oldest; but one a release is registered on before it
+    newer = make_object()
+    @test opened(run_from(held_clone)) == held
+    DataPipeline._createentry(registry, "code_repo_release",
+                              Dict("name" => "repository fixture $uid",
+                                   "version" => "1.0.0", "object" => newer))
+    @test opened(run_from(held_clone)) == newer
+
+    # A run from uncommitted changes reads the working tree, which is what ran
+    edited = fixture("codemeta.json" => codemeta)
+    write(joinpath(edited.dir, "codemeta.json"),
+          """{"author": [{"name": "Edited Author $uid"}]}""")
+    dirty_object = @test_logs((:warn, r"uncommitted changes"),
+                              opened(run_from(edited,
+                                              commit = "$(edited.sha)-dirty")))
+    @test authors(dirty_object) == Set([("Edited Author $uid", nothing)])
+    # ... and a clean run of the same commit the commit's files
+    @test authors(opened(run_from(edited))) ==
+          Set([("Ada Lovelace", ada), ("Unidentified Author $uid", nothing)])
+
+    # No metadata files: the runner, as for any repository that is no package
+    bare = fixture()
+    @test authors(@test_logs(opened(run_from(bare)))) ==
+          Set([(runner["name"], runner["identifier"])])
+
+    # A clone without the commit, or no clone, is warned of, and the runner
+    # is the author
+    elsewhere = fixture("codemeta.json" => codemeta)
+    absent = (dir = with_metadata.dir,
+              sha = bytes2hex(DataPipeline.SHA.sha1("test_api.jl absent commit $uid")),
+              remote = elsewhere.remote)
+    @test authors(@test_logs((:warn, r"does not have the run's commit"),
+                             opened(run_from(absent)))) ==
+          Set([(runner["name"], runner["identifier"])])
+    nowhere = (dir = joinpath(mktempdir(), "absent"), sha = elsewhere.sha,
+               remote = elsewhere.remote)
+    @test authors(@test_logs((:warn, r"names no clone"),
+                             opened(run_from(nowhere)))) ==
+          Set([(runner["name"], runner["identifier"])])
+
+    # An author the registry cannot name, and a licence it cannot record, are
+    # warned of and passed over
+    odd = fixture("codemeta.json" => """
+    {"license": "Not a licence $uid",
+     "author": [{"name": "Star * Author"}, {"name": "Plain Author $uid"}]}
+    """)
+    odd_object = @test_logs((:warn,
+                             r"cannot hold an author named 'Star \* Author'"),
+                            (:warn,
+                             r"licence 'Not a licence .*' is not recorded"),
+                            opened(run_from(odd)))
+    @test authors(odd_object) == Set([("Plain Author $uid", nothing)])
+    @test isempty(licences(odd_object))
+
+    # A rehearsal says what a recorded run would do, and registers nothing
+    said(clone) = mktemp() do path, io
+        redirect_stdout(io) do
+            DataPipeline._rehearserepository(registry,
+                                             DataPipeline.YAML.load_file(run_from(clone))["run_metadata"])
+        end
+        close(io)
+        return read(path, String)
+    end
+    unregistered = fixture("codemeta.json" => codemeta)
+    text = said(unregistered)
+    @test occursin("would register the code repository at $(unregistered.sha), its authors Ada Lovelace, Unidentified Author $uid (from codemeta.json)",
+                   text)
+    @test occursin("  with the licence https://spdx.org/licenses/MIT", text)
+    @test isnothing(DataPipeline._heldrepository(registry,
+                                                 DataPipeline.YAML.load_file(run_from(unregistered))["run_metadata"]).object)
+    @test occursin("would keep the code repository's object at $(with_metadata.sha), $object",
+                   said(with_metadata))
 end
 
 Test.@testset "identify() a git repository" begin
@@ -914,15 +1217,16 @@ Test.@testset "identify() a git repository" begin
     # A run from a commit, writing one output
     function run_from!(commit, name; issue = nothing)
         config = DataPipeline._createconfig(cpath, latest_commit = commit,
-                                            remote_repo = remote)
+                                            remote_repo = remote,
+                                            local_repo = dir)
         data_product = "data_product/identify-repository/$uid/$name"
         DataPipeline._addwrite(config, data_product, "repository fixture",
                                file_type = "txt", use_version = version)
         run_handle = DataPipeline.initialise(config, config)
         write(link_write!(run_handle, data_product), "$name $uid\n")
         isnothing(issue) ||
-            raise_issue(run_handle, DataPipeline.CodeRepository(), issue,
-                        severity = 4)
+            raise_issue!(run_handle, DataPipeline.CodeRepository(), issue,
+                         severity = 4)
         DataPipeline.finalise(run_handle)
         return data_product
     end
@@ -956,15 +1260,16 @@ Test.@testset "identify() a git repository" begin
                                  "model_config" => handle.config_obj,
                                  "submission_script" => handle.script_obj))
 
-    # By default the checked-out commit and its ancestors, newest first,
-    # whichever way their paths were registered
-    found = DataPipeline.identify(registry; repo = dir)
+    # The checked-out commit and its ancestors, newest first, whichever way
+    # their paths were registered
+    found = DataPipeline.identify(registry,
+                                  DataPipeline.AncestorCommits(repo = dir))
     @test found isa DataPipeline.RepositoryIdentification
     @test samefile(found.path, dir)
     @test found.remote == remote
     @test found.head == head_sha
     @test !found.dirty
-    @test found.selection == DataPipeline.AncestorCommits()
+    @test found.selection == DataPipeline.AncestorCommits(repo = dir)
     @test [commit.sha for commit in found.commits] == [head_sha, parent_sha]
     @test !any(commit.dirty for commit in found.commits)
     @test found.commits[1].date == unix2datetime(t0 + 10)
@@ -976,20 +1281,35 @@ Test.@testset "identify() a git repository" begin
     @test occursin(remote, text)
     @test occursin("commit issue $uid", text)
     @test occursin(second_output, text)
+    # The commits of a selection, and with whether each was dirty
+    ids(selection) = [commit.sha
+                      for commit in DataPipeline.identify(registry,
+                                                          selection).commits]
+    shas(selection) = [(commit.sha, commit.dirty)
+                       for commit in DataPipeline.identify(registry,
+                                                           selection).commits]
     # A handle may be given instead of a registry
     @test [commit.sha
-           for commit in DataPipeline.identify(handle; repo = dir).commits] ==
+           for commit in DataPipeline.identify(handle,
+                                               DataPipeline.AncestorCommits(repo = dir)).commits] ==
           [head_sha, parent_sha]
 
     # Only the checked-out commit
-    only_head = DataPipeline.identify(registry; repo = dir,
-                                      commits = DataPipeline.CheckedOutCommit())
-    @test [commit.sha for commit in only_head.commits] == [head_sha]
+    @test ids(DataPipeline.CheckedOutCommit(repo = dir)) == [head_sha]
+
+    # Only what came before the checked-out commit, without the runs made from
+    # it with uncommitted changes, which grew from it
+    before_head = DataPipeline.AncestorCommits(including = false, repo = dir,
+                                               dirty = true)
+    @test shas(before_head) == [(parent_sha, false)]
+    @test occursin("selected:    the ancestors of the checked-out commit,",
+                   sprint(show, MIME("text/plain"),
+                          DataPipeline.identify(registry, before_head)))
 
     # Every commit: those in the clone by commit date, then those the clone
     # lacks, newest first by their earliest run
-    every = DataPipeline.identify(registry; repo = dir,
-                                  commits = DataPipeline.AllCommits()).commits
+    every = DataPipeline.identify(registry,
+                                  DataPipeline.AllCommits(repo = dir)).commits
     @test [(commit.sha, commit.dirty) for commit in every] ==
           [(head_sha, false), (side_sha, false), (parent_sha, false),
         (later_absent_sha, false), (absent_sha, false)]
@@ -997,57 +1317,78 @@ Test.@testset "identify() a git repository" begin
 
     # Runs with uncommitted changes only when asked for, each beside its commit,
     # whichever commits are selected
-    shas(selection) = [(commit.sha, commit.dirty)
-                       for commit in DataPipeline.identify(registry; repo = dir,
-                                                           commits = selection).commits]
-    @test shas(DataPipeline.AncestorCommits(dirty = true)) ==
+    @test shas(DataPipeline.AncestorCommits(repo = dir, dirty = true)) ==
           [(head_sha, false), (head_sha, true), (parent_sha, false)]
-    @test shas(DataPipeline.CheckedOutCommit(dirty = true)) ==
+    @test shas(DataPipeline.CheckedOutCommit(repo = dir, dirty = true)) ==
           [(head_sha, false), (head_sha, true)]
-    @test shas(DataPipeline.AllCommits(dirty = true)) ==
+    @test shas(DataPipeline.AllCommits(repo = dir, dirty = true)) ==
           [(head_sha, false), (head_sha, true), (side_sha, false),
         (parent_sha, false), (later_absent_sha, false), (absent_sha, false)]
     @test occursin("with runs made with uncommitted changes",
                    sprint(show, MIME("text/plain"),
-                          DataPipeline.identify(registry; repo = dir,
-                                                commits = DataPipeline.AllCommits(dirty = true))))
+                          DataPipeline.identify(registry,
+                                                DataPipeline.AllCommits(repo = dir,
+                                                                        dirty = true))))
 
-    # A selection is made with the keyword, and prints as it is written
-    @test sprint(show, DataPipeline.AncestorCommits()) == "AncestorCommits()"
-    @test sprint(show, DataPipeline.CheckedOutCommit(dirty = true)) ==
-          "CheckedOutCommit(dirty = true)"
-    @test DataPipeline.AllCommits(dirty = false) == DataPipeline.AllCommits()
+    # A selection is made with keywords, holds its repository as an absolute
+    # path, and prints as it is written, with that path
+    @test sprint(show, DataPipeline.AncestorCommits(repo = dir)) ==
+          "AncestorCommits(repo = $(repr(dir)))"
+    @test sprint(show,
+                 DataPipeline.CheckedOutCommit(repo = dir, dirty = true)) ==
+          "CheckedOutCommit(dirty = true, repo = $(repr(dir)))"
+    @test DataPipeline.AllCommits(repo = dir, dirty = false) ==
+          DataPipeline.AllCommits(repo = dir)
+    @test DataPipeline.AllCommits(repo = joinpath(dir, "")) ==
+          DataPipeline.AllCommits(repo = dir)
     @test_throws MethodError DataPipeline.AllCommits(true)
+
+    # A repository given must be a top-level folder; left out, it is the
+    # repository holding the current directory, found by walking up
+    mkdir(joinpath(dir, "sub"))
+    for folder in (joinpath(dir, "sub"), mktempdir(), joinpath(dir, "absent"))
+        @test_throws ArgumentError DataPipeline.AllCommits(repo = folder)
+    end
+    cd(joinpath(dir, "sub")) do
+        @test samefile(DataPipeline.AncestorCommits().repo, dir)
+        @test samefile(DataPipeline.NamedCommit("v1.0").repo, dir)
+    end
+    cd(mktempdir()) do
+        err = @test_throws ArgumentError DataPipeline.AllCommits()
+        @test occursin("is not in a git repository: give `repo`",
+                       err.value.msg)
+    end
 
     # Uncommitted changes in the checkout: a warning, and its commit taken as
     # committed
     write(joinpath(dir, "a.txt"), "edited")
-    edited = @test_logs (:warn, r"uncommitted changes") DataPipeline.identify(registry;
-                                                                              repo = dir)
+    edited = @test_logs (:warn, r"uncommitted changes") DataPipeline.identify(registry,
+                                                                              DataPipeline.AncestorCommits(repo = dir))
     @test edited.dirty
     @test [commit.sha for commit in edited.commits] == [head_sha, parent_sha]
     write(joinpath(dir, "a.txt"), committed("second"))
-    @test !DataPipeline.identify(registry; repo = dir).dirty
+    @test !DataPipeline.identify(registry,
+                                 DataPipeline.AncestorCommits(repo = dir)).dirty
 
     # A commit nothing was run from
     commit!("third", t = t0 + 20)
-    unrun = DataPipeline.identify(registry; repo = dir,
-                                  commits = DataPipeline.CheckedOutCommit())
+    unrun = DataPipeline.identify(registry,
+                                  DataPipeline.CheckedOutCommit(repo = dir))
     @test isempty(unrun.commits)
     @test occursin("no run registered", sprint(show, MIME("text/plain"), unrun))
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir).commits] ==
+    @test ids(DataPipeline.AncestorCommits(repo = dir)) ==
           [head_sha, parent_sha]
 
     # The repository is known by the remote its CLI configuration names, as
     # `fair run` records it, and by `origin` only when there is none
     LibGit2.set_remote_url(repo, "origin", "https://github.com/elsewhere/$uid")
     close(LibGit2.GitRemote(repo, "upstream", remote))
-    @test isempty(DataPipeline.identify(registry; repo = dir).commits)
+    @test isempty(ids(DataPipeline.AncestorCommits(repo = dir)))
     mkpath(joinpath(dir, ".fair"))
     DataPipeline.YAML.write_file(joinpath(dir, ".fair", "cli-config.yaml"),
                                  Dict("git" => Dict("remote" => "upstream")))
-    by_upstream = DataPipeline.identify(registry; repo = dir)
+    by_upstream = DataPipeline.identify(registry,
+                                        DataPipeline.AncestorCommits(repo = dir))
     @test by_upstream.remote == remote
     @test [commit.sha for commit in by_upstream.commits] ==
           [head_sha, parent_sha]
@@ -1056,41 +1397,72 @@ Test.@testset "identify() a git repository" begin
     # by the clone, with the runs made from it with uncommitted changes when
     # asked; the selection printed as written
     LibGit2.tag_create(repo, "v1.0", head_sha, sig = signature(t0 + 20))
-    by_hash = DataPipeline.identify(registry; repo = dir, commits = head_sha)
+    named(name; dirty = false) = DataPipeline.NamedCommit(name, repo = dir,
+                                                          dirty = dirty)
+    by_hash = DataPipeline.identify(registry, named(head_sha))
     @test [commit.sha for commit in by_hash.commits] == [head_sha]
-    @test by_hash.selection == DataPipeline.NamedCommit(head_sha)
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = first(head_sha, 7)).commits] ==
-          [head_sha]
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = "v1.0").commits] ==
-          [head_sha]
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = "side").commits] ==
-          [side_sha]
-    tagged = DataPipeline.identify(registry; repo = dir,
-                                   commits = DataPipeline.NamedCommit("v1.0",
-                                                                      dirty = true))
+    @test by_hash.selection == named(head_sha)
+    @test ids(named(first(head_sha, 7))) == [head_sha]
+    @test ids(named("v1.0")) == [head_sha]
+    @test ids(named("side")) == [side_sha]
+    tagged = DataPipeline.identify(registry, named("v1.0", dirty = true))
     @test [(commit.sha, commit.dirty) for commit in tagged.commits] ==
           [(head_sha, false), (head_sha, true)]
-    @test sprint(show, DataPipeline.NamedCommit("v1.0")) ==
-          "NamedCommit(\"v1.0\")"
-    @test sprint(show, DataPipeline.NamedCommit("v1.0", dirty = true)) ==
-          "NamedCommit(\"v1.0\", dirty = true)"
+    @test sprint(show, named("v1.0")) ==
+          "NamedCommit(\"v1.0\", repo = $(repr(dir)))"
+    @test sprint(show, named("v1.0", dirty = true)) ==
+          "NamedCommit(\"v1.0\", dirty = true, repo = $(repr(dir)))"
     @test occursin("selected:    the commit named \"v1.0\", with runs made",
                    sprint(show, MIME("text/plain"), tagged))
-    err = @test_throws ArgumentError DataPipeline.identify(registry; repo = dir,
-                                                           commits = "no-such-ref-$uid")
-    @test occursin("no such tag, branch or commit", err.value.msg)
+
+    # The ancestors of a commit by name rather than the checked-out one, with
+    # or without it
+    function ancestors(; kw...)
+        return shas(DataPipeline.AncestorCommits(; repo = dir, kw...))
+    end
+    @test ancestors(of = "side") == [(side_sha, false), (parent_sha, false)]
+    @test ancestors(of = "v1.0", dirty = true) ==
+          [(head_sha, false), (head_sha, true), (parent_sha, false)]
+    @test ancestors(of = first(head_sha, 7), including = false, dirty = true) ==
+          [(parent_sha, false)]
+    @test ancestors(of = parent_sha, including = false) == []
+    side_text = sprint(show, MIME("text/plain"),
+                       DataPipeline.identify(registry,
+                                             DataPipeline.AncestorCommits(of = "side",
+                                                                          repo = dir)))
+    @test occursin("selected:    the commit named \"side\" and its ancestors\n",
+                   side_text)
+    @test sprint(show,
+                 DataPipeline.AncestorCommits(of = "v1.0", including = false,
+                                              repo = dir, dirty = true)) ==
+          "AncestorCommits(of = \"v1.0\", including = false, dirty = true, repo = $(repr(dir)))"
+    @test DataPipeline.AncestorCommits(of = SubString("v1.0"), repo = dir) ==
+          DataPipeline.AncestorCommits(of = "v1.0", repo = dir)
+    # Named, they are not about the checkout, so its uncommitted changes go
+    # unremarked
+    write(joinpath(dir, "a.txt"), "edited")
+    @test_logs DataPipeline.identify(registry,
+                                     DataPipeline.AncestorCommits(of = "v1.0",
+                                                                  repo = dir))
+    write(joinpath(dir, "a.txt"), committed("third"))
+    # A name that resolves to no commit, or to one the clone lacks
+    for selection in (named("no-such-ref-$uid"),
+                      DataPipeline.AncestorCommits(of = "no-such-ref-$uid",
+                                                   repo = dir))
+        err = @test_throws ArgumentError DataPipeline.identify(registry,
+                                                               selection)
+        @test occursin("no such tag, branch or commit", err.value.msg)
+    end
+    err = @test_throws ArgumentError ancestors(of = absent_sha)
+    @test occursin("which the clone at", err.value.msg)
 
     # By the URL of its remote, with no clone: every commit the registry
-    # holds, by default, with no dates; a full hash; what needs the clone is
-    # refused, a tag among it
-    by_url = DataPipeline.identify(registry; repo = remote)
-    @test by_url.selection == DataPipeline.AllCommits()
+    # holds, with no dates, or a full hash; a selection that needs the clone
+    # cannot be made, and a tag is asked of the remote, which this one, on no
+    # host that answers for it, cannot be: a warning, and no commit
+    by_url = DataPipeline.identify(registry,
+                                   DataPipeline.AllCommits(repo = remote))
+    @test by_url.selection == DataPipeline.AllCommits(repo = remote)
     @test by_url.path == remote && by_url.remote == remote
     @test isnothing(by_url.head) && !by_url.dirty
     @test Set(commit.sha for commit in by_url.commits) ==
@@ -1098,46 +1470,151 @@ Test.@testset "identify() a git repository" begin
     @test all(isnothing(commit.date) for commit in by_url.commits)
     @test occursin("  no clone: the registry's record alone\n",
                    sprint(show, MIME("text/plain"), by_url))
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = remote,
-                                               commits = head_sha).commits] ==
-          [head_sha]
-    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
-                                                     commits = DataPipeline.AncestorCommits())
-    @test_throws ArgumentError DataPipeline.identify(registry; repo = remote,
-                                                     commits = DataPipeline.CheckedOutCommit())
-    err = @test_throws ArgumentError DataPipeline.identify(registry;
-                                                           repo = remote,
-                                                           commits = "v1.0")
-    @test occursin("no clone to resolve it with", err.value.msg)
+    @test ids(DataPipeline.NamedCommit(head_sha, repo = remote)) == [head_sha]
+    for make in (() -> DataPipeline.AncestorCommits(repo = remote),
+        () -> DataPipeline.CheckedOutCommit(repo = remote),
+        () -> DataPipeline.AncestorCommits(of = head_sha, repo = remote))
+        err = @test_throws ArgumentError make()
+        @test occursin("needs a clone", err.value.msg)
+    end
+    err = @test_logs((:warn, r"^cannot list the tags and branches of "),
+                     @test_throws ArgumentError DataPipeline.identify(registry,
+                                                                      DataPipeline.NamedCommit("v1.0",
+                                                                                               repo = remote)))
+    @test occursin("the remote at $remote has no such tag or branch",
+                   err.value.msg)
     # A release the registry holds resolves its version with no clone, and
     # with a clone that has no such tag
     DataPipeline._postentry(registry, "code_repo_release",
                             Dict("name" => "identify fixture $uid",
                                  "version" => "3.1.4",
                                  "object" => object_url))
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = remote,
-                                               commits = "v3.1.4").commits] ==
-          [parent_sha]
-    @test [commit.sha
-           for commit in DataPipeline.identify(registry; repo = dir,
-                                               commits = "3.1.4").commits] ==
-          [parent_sha]
+    @test ids(DataPipeline.NamedCommit("v3.1.4", repo = remote)) == [parent_sha]
+    @test ids(named("3.1.4")) == [parent_sha]
+    @test ancestors(of = "v3.1.4") == [(parent_sha, false)]
 
-    # A folder inside the repository, a folder that is no repository, and
-    # `commits` for a file are all mistakes
-    mkdir(joinpath(dir, "sub"))
-    @test_throws ArgumentError DataPipeline.identify(registry;
-                                                     repo = joinpath(dir,
-                                                                     "sub"))
-    @test_throws ArgumentError DataPipeline.identify(registry;
-                                                     repo = mktempdir())
+    # An issue on commits of the repository, raised outside a run at once: one
+    # issue on the whole of every object standing for a selected commit,
+    # returned as its URL
+    components(url) = Set(DataPipeline._getentry(registry,
+                                                 URIs.URI(url))["component_issues"])
+    whole(sha) = Set(DataPipeline._wholeobjectcomponent(registry, object)
+                     for commit in DataPipeline.identify(registry,
+                                                         named(sha)).commits
+                     for object in commit.objects)
+    issues(sha) = [issue.description
+                   for issue in only(DataPipeline.identify(registry,
+                                                           named(sha)).commits).issues]
+    before = DataPipeline.AncestorCommits(of = "v1.0", including = false,
+                                          repo = dir)
+    url = raise_issue!(registry, before, "before v1.0 $uid", severity = 3)
+    @test url isa String
+    @test components(url) == whole(parent_sha)
+    issue = only(issue
+                 for issue in only(DataPipeline.identify(registry,
+                                                         named(parent_sha)).commits).issues
+                 if issue.description == "before v1.0 $uid")
+    @test issue.severity == 3
+    @test !("before v1.0 $uid" in issues(head_sha))
+    # The same issue again is the one registered, whether the selection is
+    # given as it is or as the target it stands for
+    @test raise_issue!(registry, DataPipeline.CodeRepository(before),
+                       "before v1.0 $uid", severity = 3) == url
+    # Several commits, one issue; by the remote's URL, with no clone
+    from_tag = raise_issue!(registry,
+                            DataPipeline.AncestorCommits(of = "v1.0",
+                                                         repo = dir),
+                            "from v1.0 $uid")
+    @test components(from_tag) == union(whole(parent_sha), whole(head_sha))
+    by_url_issue = raise_issue!(registry,
+                                DataPipeline.NamedCommit(side_sha,
+                                                         repo = remote),
+                                "side by URL $uid")
+    @test components(by_url_issue) == whole(side_sha)
+    # With no registry given, the CLI's local registry and its token
+    @test components(raise_issue!(named("side"), "side by CLI $uid")) ==
+          whole(side_sha)
+    # A data product registered already needs no run either, and goes into one
+    # issue with commits
+    second = only(only(only(DataPipeline.identify(registry,
+                                                  named(head_sha)).commits).runs).outputs)
+    second_name = DataPipeline._dataproductname(second.namespace, second.name,
+                                                string(second.version))
+    second_component = DataPipeline._wholeobjectcomponent(registry,
+                                                          DataPipeline._getentry(registry,
+                                                                                 URIs.URI(second.url))["object"])
+    @test components(raise_issue!(registry, [second_name],
+                                  "on the output $uid")) ==
+          Set([second_component])
+    @test components(raise_issue!(registry, [second_name, named("side")],
+                                  "on the output and side $uid")) ==
+          union(Set([second_component]), whole(side_sha))
+    # What only a run has is refused by name, before anything is registered;
+    # a selection that holds no registered commit is an error; and with no
+    # token nothing is posted
+    for target in (DataPipeline.CodeRepository(), DataPipeline.WorkingConfig(),
+        "data_product/in/a/config")
+        @test_throws ArgumentError raise_issue!(registry, target,
+                                                "refused $uid")
+    end
+    err = @test_throws DataPipeline.ReadWriteException raise_issue!(registry,
+                                                                    DataPipeline.CheckedOutCommit(repo = dir),
+                                                                    "unrun $uid")
+    @test occursin("holds no run of $remote from the checked-out commit",
+                   err.value.msg)
+    err = @test_throws DataPipeline.ReadWriteException raise_issue!(DataPipeline.RegistryEndpoint(registry.url),
+                                                                    before,
+                                                                    "no token $uid")
+    @test occursin("no token", err.value.msg)
+    # While the session rehearses, printed and not registered
+    saved = DataPipeline.SESSION[]
+    DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
+                                                     mktempdir(), nothing,
+                                                     false)
+    printed = mktemp() do path, io
+        result = redirect_stdout(io) do
+            return raise_issue!(registry, before, "rehearsed $uid")
+        end
+        close(io)
+        return (result = result, text = read(path, String))
+    end
+    DataPipeline.SESSION[] = saved
+    @test isnothing(printed.result)
+    @test occursin("registering nothing", printed.text)
+    @test occursin(sprint(show, DataPipeline.CodeRepository(before)),
+                   printed.text)
+    @test !("rehearsed $uid" in issues(parent_sha))
+
+    # Inside a run a selection is queued like any target and registered at
+    # finalise, and one made while the run is open is of the run's own clone
+    # unless `repo` says otherwise; the run's commit is drawn from this file's
+    # name, which no other file's is
+    run_sha = bytes2hex(DataPipeline.SHA.sha1("test_api.jl issue in a run $uid"))
+    config = DataPipeline._createconfig(cpath, latest_commit = run_sha,
+                                        remote_repo = remote, local_repo = dir)
+    in_run = DataPipeline.initialise(config, config)
+    before_side = DataPipeline.AncestorCommits(of = "side", including = false)
+    @test samefile(before_side.repo, dir)
+    raise_issue!(in_run, before_side, "in a run $uid")
+    raise_issue!(in_run, DataPipeline.NamedCommit(side_sha, repo = remote),
+                 "in a run by URL $uid")
+    DataPipeline.finalise(in_run)
+    @test "in a run $uid" in issues(parent_sha)
+    @test "in a run by URL $uid" in issues(side_sha)
+    # Once the run has ended, the default is the current directory's again
+    @test !samefile(DataPipeline.AllCommits().repo, dir)
+
+    # A repository named by position still works, as a deprecation, with the
+    # selection's own repository replaced by it; `commits` for a file is a
+    # mistake
+    @test DataPipeline.identify(registry, dir).remote == remote
+    by_position = DataPipeline.identify(registry, dir,
+                                        commits = DataPipeline.AllCommits(repo = remote))
+    @test samefile(by_position.path, dir)
+    @test by_position.selection == DataPipeline.AllCommits(repo = dir)
     @test_throws ArgumentError DataPipeline.identify(registry,
                                                      joinpath(dir, "a.txt"),
-                                                     commits = DataPipeline.AllCommits())
-    # A repository named by position still works, as a deprecation
-    @test DataPipeline.identify(registry, dir).remote == remote
+                                                     commits = DataPipeline.AllCommits(repo = dir))
     close(repo)
 end
 
@@ -1239,7 +1716,7 @@ Test.@testset "link_write!() with a wildcard entry" begin
 
     # A component write reaches the same lookup
     estimates = "data_product/wild/$uid/estimates"
-    write_estimate(handle, estimate1, estimates, component1, "description1")
+    write_estimate!(handle, estimate1, estimates, component1, "description1")
     @test handle.outputs[(estimates, component1)]["use_dp"] == estimates
     @test endswith(handle.outputs[(estimates, component1)]["path"], ".toml")
 
@@ -1360,7 +1837,7 @@ Test.@testset "\${{RUN_ID}} in an output name" begin
     # in a directory named with it
     @test occursin("\${{ RUN_ID }}", path)
     write(path, "run id $uid\n")
-    raise_issue(handle, data_product, "run id issue $uid")
+    raise_issue!(handle, data_product, "run id issue $uid")
     DataPipeline.finalise(handle)
 
     registered = replace(use_name, "\${{ RUN_ID }}" => handle.code_run_uuid)
@@ -1645,7 +2122,7 @@ Test.@testset "an output that is registered already" begin
     handle = offering("0.0.2")
     written = link_write!(handle, name)
     write(written, "written $uid\n")
-    raise_issue(handle, name, "written twice $uid")
+    raise_issue!(handle, name, "written twice $uid")
     DataPipeline.finalise(handle)
     @test !isfile(written)
     @test readdir(dirname(registered)) == [basename(registered)]
@@ -1673,7 +2150,7 @@ Test.@testset "an output that is registered already" begin
     stored = link_write!(handle, name, path = given)
     @test isempty(handle.outputs)
     @test handle.unchanged[(name, nothing)]["path"] == stored
-    raise_issue(handle, name, "given again $uid")
+    raise_issue!(handle, name, "given again $uid")
     DataPipeline.finalise(handle)
     @test raised(newer) == ["given again $uid"]
     @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
@@ -1683,7 +2160,7 @@ Test.@testset "an output that is registered already" begin
     estimates = ("a/b" => 1.5, "c/d" => 2.5)
     handle = offering("0.0.1")
     for (part, value) in estimates
-        write_estimate(handle, value, tabled, part, "an estimate")
+        write_estimate!(handle, value, tabled, part, "an estimate")
     end
     DataPipeline.finalise(handle)
     @test length(code_run_of(handle)["outputs"]) == 2
@@ -1691,7 +2168,7 @@ Test.@testset "an output that is registered already" begin
                  for (key, metadata) in handle.outputs)
     handle = offering("0.0.2")
     for (part, value) in estimates
-        write_estimate(handle, value, tabled, part, "an estimate")
+        write_estimate!(handle, value, tabled, part, "an estimate")
     end
     DataPipeline.finalise(handle)
     @test registered_versions(registry, tabled) == ["0.0.1"]
@@ -1701,8 +2178,8 @@ Test.@testset "an output that is registered already" begin
     @test isempty(code_run_of(handle)["outputs"])
     # ... and with one of them changed it is the next version
     handle = offering("0.0.2")
-    write_estimate(handle, 1.5, tabled, "a/b", "an estimate")
-    write_estimate(handle, 3.5, tabled, "c/d", "an estimate")
+    write_estimate!(handle, 1.5, tabled, "a/b", "an estimate")
+    write_estimate!(handle, 3.5, tabled, "c/d", "an estimate")
     DataPipeline.finalise(handle)
     @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2"]
     @test length(code_run_of(handle)["outputs"]) == 2
@@ -1721,7 +2198,7 @@ Test.@testset "an output that is registered already" begin
         # Times are kept to the second: the second run writes in another
         offered == "0.0.2" && sleep(1.5)
         for (part, array) in arrays
-            write_array(handle, array, arrayed, part, "an array")
+            write_array!(handle, array, arrayed, part, "an array")
         end
         DataPipeline.finalise(handle)
         @test registered_versions(registry, arrayed) == versions

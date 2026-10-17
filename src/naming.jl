@@ -4,10 +4,14 @@
 # product is named outside the working config: `namespace:name@version`, or
 # `namespace:name` for its newest version, as `fair` writes one.
 
-# What a namespace is made of: ASCII letters, digits, `_` and `-`. A data
-# product name, and a component name, is parts of the same joined by `/`
+# What a namespace is made of: ASCII letters, digits, `_` and `-`. A component
+# name is parts of the same joined by `/`. A data product name is too, and a
+# part may hold `.` between its first and last characters: a name is a folder
+# structure in the data store, where a part beginning with a period would be
+# a hidden folder and one ending with a period loses it on Windows
 const NAMESPACE_PATTERN = r"^[A-Za-z0-9_-]+$"
-const DATA_PRODUCT_PATTERN = r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$"
+const COMPONENT_PATTERN = r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$"
+const DATA_PRODUCT_PATTERN = r"^[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?(?:/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)*$"
 
 # `${{RUN_ID}}` in a name to be written, replaced by the run's uuid at finalise
 const RUN_ID_PLACEHOLDER = r"\$\{\{\s*RUN_ID\s*\}\}"
@@ -56,11 +60,11 @@ function _checknamespace(namespace::AbstractString)
 end
 function _checkdataproduct(name::AbstractString)
     occursin(DATA_PRODUCT_PATTERN, replace(name, RUN_ID_PLACEHOLDER => "id")) ||
-        throw(ArgumentError("'$name' is not a data product name: one holds ASCII letters, digits, '_' and '-', in parts joined by '/'"))
+        throw(ArgumentError("'$name' is not a data product name: one holds ASCII letters, digits, '_', '-' and '.', in parts joined by '/', no part beginning or ending with '.'"))
     return String(name)
 end
 function _checkcomponent(component::AbstractString)
-    occursin(DATA_PRODUCT_PATTERN, component) ||
+    occursin(COMPONENT_PATTERN, component) ||
         throw(ArgumentError("'$component' is not a component name: one holds ASCII letters, digits, '_' and '-', in parts joined by '/'"))
     return String(component)
 end

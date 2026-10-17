@@ -117,11 +117,11 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     path = link_write!(handle, whole)
     @test startswith(basename(path), "dat-")
     write(path, "a rehearsed file $uid\n")
-    @test write_estimate(handle, 4.2, estimate, "point",
-                         "a rehearsed estimate") == (estimate, "point")
+    @test write_estimate!(handle, 4.2, estimate, "point",
+                          "a rehearsed estimate") == (estimate, "point")
     copied = link_write!(handle, again)
     cp(parameters, copied, force = true)
-    raise_issue(handle, whole, "a rehearsed issue $uid")
+    raise_issue!(handle, whole, "a rehearsed issue $uid")
 
     # What registers at the call registers nothing: an author, a deposit
     # with no file and a file from elsewhere, the file given back as it is

@@ -655,7 +655,7 @@ Test.@testset "one source for a data product in a code run" begin
     tabled = "sources/again/tabled/$uid"
     handle = offering(tabled => "0.0.1", file_type = "toml")
     link_write!(handle, tabled; of("Tabled")...)
-    write_estimate(handle, 1.5, tabled, "an/estimate", "an estimate")
+    write_estimate!(handle, 1.5, tabled, "an/estimate", "an estimate")
     DataPipeline.finalise(handle)
     @test source_of(registered(tabled, "0.0.1"))["title"] == "Tabled $uid"
     @test length(entry(handle.code_run_obj)["outputs"]) == 2
@@ -855,7 +855,7 @@ Test.@testset "what link_register!() refuses" begin
     # A name outside the convention, in the name or the namespace
     @test occursin("is not a data product name",
                    message_of(ArgumentError) do
-                       return link_register!(handle, "$name.csv",
+                       return link_register!(handle, "$name/.csv",
                                              bibtex = "deposit",
                                              primary = true)
                    end)

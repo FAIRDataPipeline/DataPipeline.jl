@@ -55,6 +55,35 @@ struct TraceSource
 end
 
 """
+    TraceRelease
+
+The release of the code that a commit is, as a run in a [`Trace`](@ref), or a
+commit that [`identify`](@ref) reports, was made from it; see
+[`register_release!`](@ref).
+
+# Fields
+- `name`: the release's name, the path of the repository's remote, as
+  `FAIRDataPipeline/DataPipeline.jl`
+- `version`: its version, the highest the registry holds for the commit
+- `website`: its web page, or `nothing`
+- `doi`: the DOI it is cited by, as a URL, or `nothing`
+"""
+struct TraceRelease
+    name::String
+    version::VersionNumber
+    website::Union{Nothing, String}
+    doi::Union{Nothing, String}
+end
+
+function Base.show(io::IO, release::TraceRelease)
+    print(io, release.name, " ", release.version)
+    isnothing(release.doi) ||
+        print(io, ", doi:",
+              replace(release.doi, r"^https?://(dx\.)?doi\.org/" => ""))
+    return nothing
+end
+
+"""
     TraceProduct
 
 One version of a data product in a [`Trace`](@ref).
@@ -62,7 +91,8 @@ One version of a data product in a [`Trace`](@ref).
 # Fields
 - `url`: its registry URL, the key it has in the trace
 - `namespace`, `name`, `version`: what names it
-- `hash`: the SHA-1 of its file, or `nothing` for a data product with no file
+- `hash`: the SHA-1 of its file - for a code repository's release, its
+  commit - or `nothing` for a data product with no file
 - `location`: where the registry says the file is, or `nothing`
 - `description`: its description, or `nothing`
 - `format`: the extension of its file type, as `txt`, or `nothing`
@@ -105,6 +135,7 @@ A code run in a [`Trace`](@ref).
 - `repository`: the URL of the code repository it ran from, or `nothing`
 - `commit`: the commit it ran at, `<sha>-dirty` for a working tree with
   uncommitted changes, or `nothing`
+- `release`: the [`TraceRelease`](@ref) that commit is, or `nothing`
 - `config`: where the registry says its working config is, or `nothing`
 - `script`: where the registry says its submission script is, or `nothing`
 - `inputs`: the registry URLs of the data products it read that the trace
@@ -123,6 +154,7 @@ struct TraceRun
     description::String
     repository::Union{Nothing, String}
     commit::Union{Nothing, String}
+    release::Union{Nothing, TraceRelease}
     config::Union{Nothing, String}
     script::Union{Nothing, String}
     inputs::Vector{String}
@@ -238,11 +270,14 @@ function _productlabel(product::TraceProduct)
     return _dataproductname(product.namespace, product.name, product.version)
 end
 
-# What a data product's line of a tree says after its name: its file, whether
-# a newer version exists, and its source, ending the line
+# What a data product's line of a tree says after its name: its file - a code
+# repository's being its commit - whether a newer version exists, and its
+# source, ending the line
 function _printproductdetails(io::IO, product::TraceProduct)
     print(io, "  ",
           isnothing(product.hash) ? "no file" :
+          product.description == REPOSITORY_DESCRIPTION ?
+          "commit " * first(product.hash, 8) :
           "sha1 " * first(product.hash, 8))
     isnothing(product.superseded_by) ||
         print(io, "  superseded by v", product.superseded_by)
@@ -287,7 +322,8 @@ function _printupstream(io::IO, trace::Trace, url::String, indent::Int,
     return nothing
 end
 
-# A run's line of the tree: its uuid, when it ran, its repository at its commit
+# A run's line of the tree: its uuid, when it ran, its repository at its
+# commit, and the release that commit is
 function _runline(run::TraceRun)
     line = string("run ", first(run.uuid, 8), " on ",
                   Dates.format(run.date, "yyyy-mm-dd HH:MM"))
@@ -296,7 +332,8 @@ function _runline(run::TraceRun)
     commit = isnothing(run.commit) ? "" :
              string(" at ", first(run.commit, 8),
                     endswith(run.commit, "-dirty") ? "-dirty" : "")
-    return string(line, ", ", repository, commit)
+    release = isnothing(run.release) ? "" : string(", ", run.release)
+    return string(line, ", ", repository, commit, release)
 end
 
 # An issue's line of the tree, under the thing it is raised on
@@ -678,6 +715,7 @@ function _buildtrace(::Type{D}, registry::RegistryEndpoint,
                                                             AbstractTraceDirection}
     runs = Dict{String, TraceRun}()
     for (url, part) in parts.runs
+        part.repository = _repositoryobject(registry, parts, part.repository)
         entry = _cached(registry, parts, url)
         objects = [file
                    for file in (part.repository, part.config, part.script)
@@ -690,6 +728,8 @@ function _buildtrace(::Type{D}, registry::RegistryEndpoint,
                              repository.location,
                              isnothing(repository) ? nothing :
                              repository.commit,
+                             isnothing(part.repository) ? nothing :
+                             _cachedrelease(registry, parts, part.repository),
                              isnothing(part.config) ? nothing :
                              parts.files[part.config].location,
                              isnothing(part.script) ? nothing :
@@ -720,6 +760,54 @@ function _buildtrace(::Type{D}, registry::RegistryEndpoint,
     end
     return Trace{D}(registry, roots, products, runs, issues,
                     isnothing(depth) ? nothing : Int(depth))
+end
+
+# The object of a run's code repository: the report names it by its release
+# record where the object carries one, which is read for the object it is on
+_repositoryobject(::RegistryEndpoint, ::_TraceParts, ::Nothing) = nothing
+function _repositoryobject(registry::RegistryEndpoint, parts::_TraceParts,
+                           url::String)
+    occursin(r"/code_repo_release/\d+/$", url) || return url
+    object_url = _cached(registry, parts, url)["object"]
+    _filepart!(parts, registry, object_url, true)
+    return object_url
+end
+
+# The release a run's repository object stands for, found once for each object
+function _cachedrelease(registry::RegistryEndpoint, parts::_TraceParts,
+                        url::String)
+    return get!(parts.cache, "release of " * url) do
+        return _objectrelease(_cached(registry, parts, url)) do entry_url
+            return _cached(registry, parts, entry_url)
+        end
+    end
+end
+
+# The release of the code that a repository's object at a commit stands for,
+# or `nothing`: the highest version among the data products on it, with its
+# source's DOI, named by the release record where there is one and else by the
+# data product; `fetch(url)` gives a registry entry
+function _objectrelease(fetch::Function, object::AbstractDict)
+    record_url = get(object, "code_repo_release", nothing)
+    record = isnothing(record_url) ? nothing : fetch(record_url)
+    products = [fetch(url) for url in get(object, "data_products", [])]
+    if isempty(products)
+        isnothing(record) && return nothing
+        return TraceRelease(record["name"], VersionNumber(record["version"]),
+                            record["website"], nothing)
+    end
+    highest = argmax(product -> VersionNumber(product["version"]), products)
+    version = VersionNumber(highest["version"])
+    source = highest["external_object"]
+    doi = isnothing(source) ? nothing : fetch(source)["identifier"]
+    name = isnothing(record) ?
+           string(fetch(highest["namespace"])["name"], "/", highest["name"]) :
+           record["name"]
+    # The record's page is of its version, which a promoted beta's is not
+    website = !isnothing(record) &&
+              VersionNumber(record["version"]) == version ? record["website"] :
+              nothing
+    return TraceRelease(name, version, website, doi)
 end
 
 # A file type's extension: the report names a file type by its name, which
@@ -754,12 +842,16 @@ function _traceissue(registry::RegistryEndpoint, parts::_TraceParts,
         component = _cached(registry, parts, component_url)
         name = component["whole_object"] ? nothing : String(component["name"])
         object = _cached(registry, parts, component["object"])
-        if isempty(object["data_products"])
+        # A code repository's object is the code of its runs whatever release
+        # data products it carries, and is named as code as well
+        if isempty(object["data_products"]) ||
+           object["description"] == REPOSITORY_DESCRIPTION
             push!(targets,
                   TraceTarget(object["url"],
                               _objectlabel(registry, parts, object),
                               name))
-        else
+        end
+        if !isempty(object["data_products"])
             for product_url in object["data_products"]
                 product = _cached(registry, parts, product_url)
                 namespace = _cached(registry, parts, product["namespace"])["name"]

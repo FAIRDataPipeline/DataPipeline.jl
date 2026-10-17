@@ -183,10 +183,60 @@ function _openrun(mode::Rehearsal, config::Dict, config_file::String,
         @warn "the code repository has uncommitted changes ($commit): a recorded run would raise an issue against it"
     println("rehearsal: nothing is registered, and the outputs go to ",
             mode.outputs)
+    _rehearserepository(registry, config["run_metadata"])
     return _newhandle(mode, config, config_file, registry,
                       (config = nothing, script = nothing,
                        repository = nothing, datastore = nothing,
                        code_run = nothing), string(uuid4()))
+end
+
+# What a recorded run would register of the code repository at its commit,
+# said rather than done: the object the registry holds kept, or one made with
+# the authors the repository's metadata gives; its licence and keywords
+function _rehearserepository(registry::RegistryEndpoint, run_metadata::Dict)
+    metadata = _runrepositorymetadata(run_metadata)
+    commit = run_metadata["latest_commit"]
+    held = _heldrepository(registry, run_metadata).object
+    if isnothing(held)
+        authors = isempty(metadata.authors) ? "the runner" :
+                  join(metadata.authors, ", ")
+        println("would register the code repository at ", commit,
+                ", its authors ", authors,
+                isempty(metadata.files) ? "" :
+                " (from $(join(metadata.files, ", ")))")
+    else
+        println("would keep the code repository's object at ", commit, ", ",
+                held)
+    end
+    isnothing(metadata.licence) ||
+        println("  with the licence ", metadata.licence)
+    isempty(metadata.keywords) ||
+        println("  with the keywords ", join(metadata.keywords, ", "))
+    return nothing
+end
+
+# What `register_release!` would register, said rather than done, and
+# `nothing` in place of the release
+function _registerrelease(::Rehearsal, registry::RegistryEndpoint,
+                          target::NamedTuple,
+                          website::Union{Nothing, String},
+                          source::Union{Nothing, NamedTuple})
+    held = _heldrepository(registry, target.remote, target.commit).object
+    println("would register the release ", target.release, " ",
+            target.version, " of commit ", target.commit, ", its data product ",
+            _dataproductname(target.namespace, target.data_product,
+                             target.version),
+            isnothing(website) ? "" : ", its website $website")
+    if isnothing(held)
+        authors = target.metadata.authors
+        println("  on a new object for the commit, its authors ",
+                isempty(authors) ? "the runner" : join(authors, ", "))
+    else
+        println("  on the commit's object ", held)
+    end
+    isnothing(source) ||
+        println("  with the source ", source.identifier)
+    return nothing
 end
 
 # What `link_register!` would register, said rather than done, and `nothing`
@@ -305,6 +355,17 @@ function _copyjobfiles(handle::DataRegistryHandle{Rehearsal})
         isfile(file) && cp(file, joinpath(handle.mode.outputs, name),
            force = true)
     end
+    return nothing
+end
+
+# An issue raised outside a run while rehearsing: printed as what would be
+# raised, and nothing registered
+function _raiseoutsiderun(::Rehearsal, ::RegistryEndpoint, issue::PendingIssue,
+                          ::Vector{String})
+    println("rehearsing, so registering nothing: an issue of severity ",
+            issue.severity, " on ",
+            join((sprint(show, target) for target in issue.targets),
+                 ", "), ": ", issue.description)
     return nothing
 end
 

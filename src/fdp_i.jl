@@ -334,7 +334,7 @@ Read a TOML data product and return the table of `component`.
 """
 function _readtoml(handle::DataRegistryHandle, data_product::String,
                    component::String)
-    path = _readdataproduct(handle, data_product, component)
+    path = _inputpath(handle, data_product, component)
     return TOML.parsefile(path)[component]
 end
 
@@ -720,28 +720,42 @@ end
     _globregex(pattern)
 
 Return the anchored regular expression for a data product name pattern, in
-which each `*` matches one segment of the name (one or more characters other
-than `/`) and every other character is literal.
+which each `*` matches one segment of the name and every other character is
+literal. A segment is one or more characters other than `/` and the four the
+registry refuses in a name, `[`, `]`, `?` and `*`, so that no registered name
+is passed over and a pattern never matches itself.
 """
 function _globregex(pattern::AbstractString)
     occursin('*', pattern) ||
         throw(ArgumentError("a pattern needs at least one *: $pattern"))
     literal(s) = replace(s, r"([\\^\$.|?+()\[\]{}])" => s"\\\1")
-    return Regex("^" * join(map(literal, split(pattern, '*')), "[^/]+") * "\$")
+    return Regex("^" *
+                 join(map(literal, split(pattern, '*')), "[^/\\[\\]?*]+") *
+                 "\$")
 end
 
 """
     _matchingreads(handle, pattern)
 
-Return the names of the `read:` data products of the working config that
-match a pattern, sorted; throw if there is none.
+Return the names of the `read:` data products of the working config that a
+pattern stands for, sorted. Where any entry is marked with the pattern it was
+expanded from, as `wildcard:`, they are the entries marked with this one;
+otherwise those whose names match it. A name holding `*` - a pattern's own
+entry, kept by the CLI - is never one of them. None is an empty result where
+the config holds the pattern's own entry, and an error where it does not, so
+that a pattern never configured is not taken for one that matched nothing.
 """
 function _matchingreads(handle::DataRegistryHandle, pattern::AbstractString)
     regex = _globregex(pattern)
+    entries = get(handle.config, "read", [])
+    marked = any(entry -> haskey(entry, "wildcard"), entries)
     names = sort!([String(entry["data_product"])
-                   for entry in get(handle.config, "read", [])
-                   if occursin(regex, entry["data_product"])])
+                   for entry in entries
+                   if !occursin('*', entry["data_product"]) &&
+                      (marked ? get(entry, "wildcard", nothing) == pattern :
+                       occursin(regex, entry["data_product"]))])
     isempty(names) &&
+        !any(entry -> entry["data_product"] == pattern, entries) &&
         throw(ConfigFileException("no read data product matches '$pattern' - check config file"))
     return names
 end
@@ -758,8 +772,13 @@ end
 function _issuecomponents(handle::DataRegistryHandle, ::SubmissionScript)
     return [_wholeobjectcomponent(handle.registry, handle.script_obj)]
 end
-function _issuecomponents(handle::DataRegistryHandle, ::CodeRepository)
-    return [_wholeobjectcomponent(handle.registry, handle.repo_obj)]
+function _issuecomponents(handle::DataRegistryHandle, target::CodeRepository)
+    isnothing(target.commits) &&
+        return [_wholeobjectcomponent(handle.registry, handle.repo_obj)]
+    return _repositorycomponents(handle.registry, target.commits)
+end
+function _issuecomponents(registry::RegistryEndpoint, target::CodeRepository)
+    return _repositorycomponents(registry, target.commits)
 end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ConfigDataProduct)
@@ -781,7 +800,10 @@ function _issuecomponents(handle::DataRegistryHandle,
 end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ExistingDataProduct)
-    registry = handle.registry
+    return _issuecomponents(handle.registry, target)
+end
+function _issuecomponents(registry::RegistryEndpoint,
+                          target::ExistingDataProduct)
     if isnothing(target.version)
         dp_entry = _latestdataproduct(registry, target.namespace,
                                       target.data_product)
@@ -792,6 +814,17 @@ function _issuecomponents(handle::DataRegistryHandle,
                                     target.data_product, target.version)
     end
     return [_componenturl(registry, dp_entry["object"], target.component)]
+end
+
+# The whole components of the objects standing for the registered commits a
+# selection chooses, of which there must be some
+function _repositorycomponents(registry::RegistryEndpoint,
+                               commits::AbstractCommitSelection)
+    found = _identifyrepository(registry, commits)
+    isempty(found.commits) &&
+        throw(ReadWriteException("the registry holds no run of $(found.remote) from $(_describe(commits)), so there is nothing to raise the issue on"))
+    return [_wholeobjectcomponent(registry, object)
+            for commit in found.commits for object in commit.objects]
 end
 
 # The severity of the issue `supersede = true` raises on a superseded version:
@@ -818,7 +851,7 @@ function _supersede!(handle::DataRegistryHandle, namespace::String,
         push!(handle.issues,
               PendingIssue([ExistingDataProduct(superseded)],
                            "Superseded by " * label,
-                           SUPERSEDED_ISSUE_SEVERITY))
+                           SUPERSEDED_ISSUE_SEVERITY, false))
     end
     return nothing
 end
@@ -853,6 +886,162 @@ function _supersedeoutputs!(handle::DataRegistryHandle,
                         for key in keys(handle.unchanged))
         _supersede!(handle, before.namespace, before.name, before.version,
                     before.latest, unchanged)
+    end
+    return nothing
+end
+
+# The description every API gives a code repository's object
+const REPOSITORY_DESCRIPTION = "Remote code repository."
+
+# The object of the code repository at a run's commit: the one the registry
+# holds there, else one made with the authors the repository's metadata gives;
+# with its licence and keywords added either way
+function _registerrepository(registry::RegistryEndpoint, run_metadata::Dict)
+    return _registerrepository(registry, run_metadata["remote_repo"],
+                               run_metadata["latest_commit"],
+                               _runrepositorymetadata(run_metadata))
+end
+# ... at a commit of the repository at `remote`, with the metadata it gives
+function _registerrepository(registry::RegistryEndpoint,
+                             remote::AbstractString, commit::AbstractString,
+                             metadata::RepositoryMetadata)
+    held = _heldrepository(registry, remote, commit)
+    object_url = held.object
+    if isnothing(object_url)
+        repo = _repositorylocation(remote)
+        location_url = held.location
+        if isnothing(location_url)
+            root_url = _postentry(registry, "storage_root",
+                                  Dict("root" => repo.root,
+                                       "local" => false))["url"]
+            location_url = _createentry(registry, "storage_location",
+                                        Dict("path" => repo.path,
+                                             "hash" => commit,
+                                             "public" => true,
+                                             "storage_root" => root_url))["url"]
+        end
+        object_url = _createentry(registry, "object",
+                                  Dict("description" => REPOSITORY_DESCRIPTION,
+                                       "storage_location" => location_url,
+                                       "authors" =>
+                                           _repositoryauthors(registry,
+                                                              metadata)))["url"]
+    end
+    _addlicence!(registry, object_url, metadata.licence)
+    _addkeywords!(registry, object_url, metadata.keywords)
+    return object_url
+end
+
+# The storage location the registry holds for a run's commit and the object it
+# keeps there, either `nothing` where there is none
+function _heldrepository(registry::RegistryEndpoint, run_metadata::Dict)
+    return _heldrepository(registry, run_metadata["remote_repo"],
+                           run_metadata["latest_commit"])
+end
+# ... for a commit of the repository at `remote`: one location for a commit
+# under its host, whatever path it was registered with, and of several objects
+# at it, the one a release is registered on, else the oldest
+function _heldrepository(registry::RegistryEndpoint, remote::AbstractString,
+                         commit::AbstractString)
+    repo = _repositorylocation(remote)
+    root_id = _getid(registry, "storage_root", Dict("root" => repo.root))
+    isnothing(root_id) && return (location = nothing, object = nothing)
+    location_url = _geturl(registry, "storage_location",
+                           Dict("hash" => commit, "public" => true,
+                                "storage_root" => root_id))
+    isnothing(location_url) && return (location = nothing, object = nothing)
+    objects = _getentries(registry, "object",
+                          Dict("storage_location" => _extractid(location_url)))
+    isempty(objects) && return (location = location_url, object = nothing)
+    released = filter(objects) do object
+        return !isnothing(get(object, "code_repo_release", nothing))
+    end
+    kept = argmin(isempty(released) ? objects : released) do object
+        return parse(Int, _extractid(object["url"]))
+    end
+    return (location = location_url, object = kept["url"])
+end
+
+# What the run's code repository says of itself: the working tree's files for
+# a run from uncommitted changes, which are what ran, else the commit's; none,
+# with a warning, where there is no clone holding the commit to read
+function _runrepositorymetadata(run_metadata::Dict)
+    folder = get(run_metadata, "local_repo", nothing)
+    commit = run_metadata["latest_commit"]
+    nothing_read = _repositorymetadata(_ -> nothing, "nowhere")
+    top = isnothing(folder) || !isdir(folder) ? nothing : _gittoplevel(folder)
+    if isnothing(top)
+        @warn "the run names no clone of its code repository to read ($(repr(folder))), so its metadata files are not read and a new repository object takes the runner as its author"
+        return nothing_read
+    end
+    endswith(commit, "-dirty") && return _repositorymetadata(top)
+    return LibGit2.with(LibGit2.GitRepo(top)) do clone
+        LibGit2.iscommit(commit, clone) &&
+            return _repositorymetadata(clone, commit)
+        @warn "the clone at $top does not have the run's commit $commit, so its metadata files are not read and a new repository object takes the runner as its author"
+        return nothing_read
+    end
+end
+
+# The registry's authors for a repository's own, as its metadata names them,
+# an author the registry cannot name passed over with a warning; or, with
+# none, the runner
+function _repositoryauthors(registry::RegistryEndpoint,
+                            metadata::RepositoryMetadata)
+    authors = String[]
+    for name in metadata.authors
+        if !_nameable(name)
+            @warn "the registry cannot hold an author named '$name', which the repository's metadata gives: it takes none of $(join(UNNAMEABLE, " ")) in a name, so that author is passed over"
+            continue
+        end
+        identifier = get(metadata.identifiers, name, nothing)
+        url = if isnothing(identifier)
+            _namedauthorurl(registry, name) do
+                return _createentry(registry, "author",
+                                    Dict("name" => name))["url"]
+            end
+        else
+            _geturl(registry, "author", Dict("identifier" => identifier))
+        end
+        if isnothing(url)
+            url = _createentry(registry, "author",
+                               Dict("name" => name,
+                                    "identifier" => identifier))["url"]
+        end
+        url in authors || push!(authors, url)
+    end
+    return isempty(authors) ? [_getauthorurl(registry)] : authors
+end
+
+# Add a repository's licence to its object unless the object has it, a licence
+# that is neither in the SPDX list nor a URL passed over with a warning
+_addlicence!(::RegistryEndpoint, ::String, ::Nothing) = nothing
+function _addlicence!(registry::RegistryEndpoint, object_url::String,
+                      licence::String)
+    named = try
+        _licence(licence)
+    catch err
+        err isa ArgumentError || rethrow()
+        @warn "the repository's licence '$licence' is not recorded: $(err.msg)"
+        return nothing
+    end
+    query = Dict("object" => object_url, "identifier" => named.identifier)
+    isnothing(_getentry(registry, "licence", query)) &&
+        _createentry(registry, "licence",
+                     Dict("object" => object_url, "licence_info" => named.info,
+                          "identifier" => named.identifier))
+    return nothing
+end
+
+# Add a repository's keywords to its object, each unless the object has it,
+# one the registry would read as a pattern passed over
+function _addkeywords!(registry::RegistryEndpoint, object_url::String,
+                       keywords::Vector{String})
+    for keyword in keywords
+        _nameable(keyword) || continue
+        query = Dict("object" => object_url, "keyphrase" => keyword)
+        isnothing(_getentry(registry, "keyword", query)) &&
+            _createentry(registry, "keyword", query)
     end
     return nothing
 end
@@ -914,9 +1103,81 @@ function _registerissues(handle::DataRegistryHandle)
                             (_issuecomponents(handle, target)
                              for target in issue.targets),
                             init = String[])
-        entry = _postissue(handle.registry, issue.severity, issue.description,
-                           components)
+        entry = _postpendingissue(handle.registry, issue, components)
         println("issue registered as ", entry["url"])
     end
     return nothing
+end
+
+# Post a queued issue on the components its targets resolve to, and on the
+# other versions holding the same bytes if it asks, warning of them if not
+function _postpendingissue(registry::RegistryEndpoint, issue::PendingIssue,
+                           components::Vector{String})
+    components = copy(components)
+    for component in copy(components)
+        for (label, other) in _samebytesversions(registry, component)
+            if issue.all_versions
+                other in components || push!(components, other)
+            else
+                @warn "$label has the same bytes as the data product the issue is on: raise the issue on every such version too with `all_versions = true`"
+            end
+        end
+    end
+    return _postissue(registry, issue.severity, issue.description, components)
+end
+
+# Register an issue raised outside a run at once and return its URL
+function _raiseoutsiderun(::RecordedRun, registry::RegistryEndpoint,
+                          issue::PendingIssue, components::Vector{String})
+    return _postpendingissue(registry, issue, components)["url"]
+end
+
+# The mode of what the session is doing now: rehearsing, while a rehearsal is
+# prepared and not ended, and otherwise recording
+function _sessionmode()
+    session = SESSION[]
+    (isnothing(session) || session.ended || !(session.mode isa Rehearsal)) &&
+        return RecordedRun()
+    return session.mode
+end
+
+# The other versions of the data product a component belongs to that hold
+# the same bytes, each as its name and the matching component's URL; none for
+# a component of anything but a data product with a file
+function _samebytesversions(registry::RegistryEndpoint, component_url::String)
+    component = _getentry(registry, URIs.URI(component_url))
+    object = _getentry(registry, URIs.URI(component["object"]))
+    isempty(object["data_products"]) && return Tuple{String, String}[]
+    isnothing(object["storage_location"]) && return Tuple{String, String}[]
+    hash = _getentry(registry, URIs.URI(object["storage_location"]))["hash"]
+    name = component["whole_object"] ? nothing : String(component["name"])
+    found = Tuple{String, String}[]
+    for product_url in object["data_products"]
+        product = _getentry(registry, URIs.URI(product_url))
+        namespace = _getentry(registry, URIs.URI(product["namespace"]))["name"]
+        for other in _getentries(registry, "data_product",
+                                 Dict("name" => product["name"],
+                                      "namespace" =>
+                                          _extractid(product["namespace"])))
+            other["name"] == product["name"] || continue
+            other["version"] == product["version"] && continue
+            # Another version on this very object is covered already
+            other["object"] == component["object"] && continue
+            other_object = _getentry(registry, URIs.URI(other["object"]))
+            isnothing(other_object["storage_location"]) && continue
+            _getentry(registry, URIs.URI(other_object["storage_location"]))["hash"] ==
+            hash ||
+                continue
+            matching = isnothing(name) ?
+                       _wholeobjectcomponent(registry, other["object"]) :
+                       _geturl(registry, "object_component",
+                               Dict("name" => name,
+                                    "object" => _extractid(other["object"])))
+            isnothing(matching) && continue
+            push!(found,
+                  (_dataproductname(namespace, other["name"], other["version"]),
+                   matching))
+        end
+    end
+    return found
 end

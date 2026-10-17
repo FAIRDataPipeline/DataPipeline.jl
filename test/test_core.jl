@@ -56,19 +56,46 @@ Test.@testset "RegistryEndpoint() from the CLI's configuration" begin
         local_registry = DataPipeline.RegistryEndpoint()
         @test local_registry.url == "http://127.0.0.1:8123/api/"
         @test local_registry.api_version == DataPipeline.DEFAULT_API_VERSION
-        @test isnothing(local_registry.token)
+        @test isnothing(local_registry.token)        # no token file named
+        @test DataPipeline.RegistryEndpoint(token = "secret").token == "secret"
+
+        # The token is read from the file the entry names, stripped, when
+        # the file exists and holds one; a token given wins
+        token_file = joinpath(home, ".fair", "registry", "token")
+        mkpath(dirname(token_file))
+        DataPipeline.YAML.write_file(joinpath(home, ".fair", "cli",
+                                              "cli-config.yaml"),
+                                     Dict("registries" =>
+                                              Dict("local" =>
+                                                       Dict("uri" => "http://127.0.0.1:8123/api/",
+                                                            "token" =>
+                                                                token_file))))
+        @test isnothing(DataPipeline.RegistryEndpoint().token)   # not yet written
+        write(token_file, "\n")
+        @test isnothing(DataPipeline.RegistryEndpoint().token)   # empty
+        write(token_file, "localsecret\n")
+        @test DataPipeline.RegistryEndpoint().token == "localsecret"
         @test DataPipeline.RegistryEndpoint(token = "secret").token == "secret"
 
         # A remote is looked up in the project's configuration, found by
-        # walking up from the current directory
+        # walking up from the current directory, with a token file of its
+        # own: the local registry's is never sent to it
+        remote_token_file = joinpath(home, ".fair", "cli", "remotetoken.txt")
+        write(remote_token_file, "remotesecret")
         DataPipeline.YAML.write_file(joinpath(project, ".fair",
                                               "cli-config.yaml"),
                                      Dict("registries" =>
                                               Dict("origin" =>
-                                                       Dict("uri" => "https://example.org/api/"))))
+                                                       Dict("uri" => "https://example.org/api/",
+                                                            "token" =>
+                                                                remote_token_file),
+                                                   "tokenless" =>
+                                                       Dict("uri" => "https://example.net/api/"))))
         cd(joinpath(project, "sub", "dir")) do
-            @test DataPipeline.RegistryEndpoint(remote = "origin").url ==
-                  "https://example.org/api/"
+            origin = DataPipeline.RegistryEndpoint(remote = "origin")
+            @test origin.url == "https://example.org/api/"
+            @test origin.token == "remotesecret"
+            @test isnothing(DataPipeline.RegistryEndpoint(remote = "tokenless").token)
             err = try
                 DataPipeline.RegistryEndpoint(remote = "elsewhere")
             catch e
@@ -183,6 +210,14 @@ Test.@testset "_globregex()" begin
     @test !occursin(g("chelsa/bio1.2/*"), "chelsa/bio1x2/x")
     @test occursin(g("a+b(c)[d]{e}|f?^\$/*"), "a+b(c)[d]{e}|f?^\$/x")
     @test_throws ArgumentError g("era5/t2m")
+    # A segment is anything a registered name can hold but /, whether or not
+    # the naming convention allows it, and never the four characters the
+    # registry refuses, so that a pattern does not match itself
+    @test occursin(g("family/*"), "family/a b+c.d.")
+    @test !occursin(g("family/*"), "family/*")
+    for refused in ('[', ']', '?', '*')
+        @test !occursin(g("family/*"), "family/a$(refused)b")
+    end
 end
 
 Test.@testset "_repositorylocation()" begin
@@ -266,11 +301,20 @@ Test.@testset "a data product named namespace:name@version" begin
         err = @test_throws ArgumentError parse(text)
         @test occursin("is not a namespace", err.value.msg)
     end
-    for text in ("PSU:a b", "PSU:a.csv", "PSU:a:b", "PSU:a@b@1.0.0", "PSU:",
-        "PSU:/a", "PSU:a//b", "PSU:a/")
+    for text in ("PSU:a b", "PSU:a:b", "PSU:a@b@1.0.0", "PSU:", "PSU:/a",
+        "PSU:a//b", "PSU:a/", "PSU:.hidden", "PSU:a/.b", "PSU:a.", "PSU:a/b.",
+        "PSU:.", "PSU:a/..", "PSU:a/../b")
         err = @test_throws ArgumentError parse(text)
         @test occursin("is not a data product name", err.value.msg)
     end
+    # A period inside a part of a name, as a repository's name has one
+    @test parse("FAIRDataPipeline:DataPipeline.jl@v0.55.0") ==
+          (namespace = "FAIRDataPipeline", name = "DataPipeline.jl",
+           version = "0.55.0")
+    @test parse("PSU:a.b.c/d.e").name == "a.b.c/d.e"
+    @test parse("PSU:a..b").name == "a..b"
+    @test_throws ArgumentError DataPipeline._checkcomponent("a.b")
+    @test_throws ArgumentError DataPipeline._checknamespace("a.b")
     err = @test_throws ArgumentError parse("PSU:a@061")
     @test occursin("`version`", err.value.msg)
     @test_throws ArgumentError parse("PSU:a@")

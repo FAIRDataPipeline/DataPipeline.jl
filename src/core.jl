@@ -35,12 +35,17 @@ local registry, `registries.local.uri` in `~/.fair/cli/cli-config.yaml` (or
 `$DEFAULT_REGISTRY_URL` when there is no such file); or, when `remote` names
 one, that remote registry, `registries.<remote>.uri` in the
 `.fair/cli-config.yaml` of the project found by walking up from the current
-directory. The API version is the default, and the `token` is as for
-[`RegistryEndpoint`](@ref).
+directory. The API version is the default. The `token` is as for
+[`RegistryEndpoint`](@ref); given none, it is read from the file that the same
+entry names as `token` - the local registry's, written as it starts, or the
+file a remote was added with - when there is one and it exists, so that a
+registry is written to with the token the CLI holds for it and no other.
 """
 function RegistryEndpoint(; remote::Union{Nothing, AbstractString} = nothing,
                           token::Union{Nothing, AbstractString} = nothing)
-    return RegistryEndpoint(_cliregistryurl(remote), token = token)
+    entry = _cliregistry(remote)
+    return RegistryEndpoint(entry.uri,
+                            token = isnothing(token) ? entry.token : token)
 end
 
 function Base.show(io::IO, registry::RegistryEndpoint)
@@ -58,6 +63,150 @@ function Base.show(io::IO, ::MIME"text/plain", registry::RegistryEndpoint)
 end
 
 """
+    AbstractCommitSelection
+
+Commits of a git repository: which commits, of which repository, and whether
+the runs made from them with uncommitted changes are included, which the
+registry records as `<sha>-dirty`. [`identify`](@ref) and
+[`downstream`](@ref) take one in place of a file, and [`raise_issue!`](@ref)
+takes one as a target. The selections are [`AncestorCommits`](@ref),
+[`CheckedOutCommit`](@ref), [`AllCommits`](@ref) and [`NamedCommit`](@ref).
+
+Each has a `repo` field and a `dirty` field, set by its constructor's keywords
+of the same names. `repo` is the repository: the top-level folder of a clone,
+as an absolute path, or the URL of its remote, which leaves the registry's
+record alone to go by. Given, a folder must be the top level of a repository;
+left out, it is the clone of the run open in this session, else the
+repository holding the current directory. A selection that needs a clone - the
+checked-out commit, or ancestors - cannot be made with a URL.
+"""
+abstract type AbstractCommitSelection end
+
+"""
+    AncestorCommits(; of = nothing, including = true, repo = nothing,
+                    dirty = false)
+
+Select a commit and every commit it descends from - the code it grew from -
+and, if `dirty`, the runs made from them with uncommitted changes too. Finding
+ancestors needs a clone holding the commit.
+
+# Arguments
+- `of`: the commit to start from, named as [`NamedCommit`](@ref) names one: a
+  tag, a branch, a commit hash or the version of a registered release of the
+  code; or a [`RegisteredRelease`](@ref), whose commit and clone it is, so
+  that `repo` need not be given. `nothing`, the default, is the checked-out
+  commit.
+- `including`: whether that commit is selected itself; with `false`, only the
+  commits before it, and so not the runs made from it with uncommitted changes
+  either.
+- `repo`: the clone, as for every [`AbstractCommitSelection`](@ref).
+- `dirty`: whether the runs made with uncommitted changes are selected too.
+"""
+struct AncestorCommits <: AbstractCommitSelection
+    of::Union{Nothing, String}
+    including::Bool
+    repo::String
+    dirty::Bool
+
+    # `of` is not annotated: a release given there names the clone as well as
+    # the commit, which `_ancestorstart` works out and checks
+    function AncestorCommits(; of = nothing, including::Bool = true,
+                             repo::Union{Nothing, AbstractString} = nothing,
+                             dirty::Bool = false)
+        start = _ancestorstart(of, repo)
+        return new(start.of, including,
+                   _selectionrepo(start.repo, "the ancestors of a commit"),
+                   dirty)
+    end
+end
+
+"""
+    CheckedOutCommit(; repo = nothing, dirty = false)
+
+Select only the checked-out commit of a clone and, if `dirty`, the runs made
+from it with uncommitted changes too. `repo` is the clone, as for every
+[`AbstractCommitSelection`](@ref).
+"""
+struct CheckedOutCommit <: AbstractCommitSelection
+    repo::String
+    dirty::Bool
+
+    function CheckedOutCommit(; repo::Union{Nothing, AbstractString} = nothing,
+                              dirty::Bool = false)
+        return new(_selectionrepo(repo, "the checked-out commit"), dirty)
+    end
+end
+
+"""
+    AllCommits(; repo = nothing, dirty = false)
+
+Select every commit of a repository that the registry holds runs for, whether
+or not the local clone has it, and, if `dirty`, the runs made from them with
+uncommitted changes too. `repo` is a clone or the URL of its remote, as for
+every [`AbstractCommitSelection`](@ref).
+"""
+struct AllCommits <: AbstractCommitSelection
+    repo::String
+    dirty::Bool
+
+    function AllCommits(; repo::Union{Nothing, AbstractString} = nothing,
+                        dirty::Bool = false)
+        return new(_selectionrepo(repo, nothing), dirty)
+    end
+end
+
+"""
+    NamedCommit(name; repo = nothing, dirty = false)
+    NamedCommit(release; dirty = false)
+
+Select one commit by name: a full commit hash, as it is; a tag, a branch or an
+abbreviated hash, resolved by the local clone; or the version of a release of
+the code that the registry holds, with or without a leading `v`, which
+resolves with no clone at all. If `dirty`, the runs made from the commit with
+uncommitted changes too. `repo` is a clone or the URL of its remote, as for
+every [`AbstractCommitSelection`](@ref); by URL, a tag or a branch is
+resolved by asking the remote, which needs the network and a remote that
+asks for no credentials, and an abbreviated hash does not resolve. A
+[`RegisteredRelease`](@ref) names its commit, of the clone it was registered
+from, else of its remote.
+"""
+struct NamedCommit <: AbstractCommitSelection
+    name::String
+    repo::String
+    dirty::Bool
+
+    function NamedCommit(name::AbstractString;
+                         repo::Union{Nothing, AbstractString} = nothing,
+                         dirty::Bool = false)
+        return new(String(name), _selectionrepo(repo, nothing), dirty)
+    end
+end
+
+function Base.show(io::IO, selection::AbstractCommitSelection)
+    print(io, nameof(typeof(selection)), "(")
+    _showleading(io, selection)
+    selection.dirty && print(io, "dirty = true, ")
+    return print(io, "repo = ", repr(selection.repo), ")")
+end
+
+# The commit an `AncestorCommits` starts from, as its name, and the repository
+# it names, given `of` and `repo` as its constructor was: a commit's name or
+# none, with the repository given
+_ancestorstart(::Nothing, repo) = (of = nothing, repo = repo)
+_ancestorstart(of::AbstractString, repo) = (of = String(of), repo = repo)
+
+# What a selection is shown selecting, before the keywords every one has
+_showleading(::IO, ::AbstractCommitSelection) = nothing
+function _showleading(io::IO, selection::NamedCommit)
+    return print(io, repr(selection.name), ", ")
+end
+function _showleading(io::IO, selection::AncestorCommits)
+    isnothing(selection.of) || print(io, "of = ", repr(selection.of), ", ")
+    selection.including || print(io, "including = false, ")
+    return nothing
+end
+
+"""
     AbstractIssueTarget
 
 The thing a registry issue is raised against. Concrete targets are
@@ -70,33 +219,51 @@ abstract type AbstractIssueTarget end
 """
     WorkingConfig()
 
-Target for [`raise_issue`](@ref): this code run's working config file.
+Target for [`raise_issue!`](@ref): this code run's working config file.
 """
 struct WorkingConfig <: AbstractIssueTarget end
 
 """
     SubmissionScript()
 
-Target for [`raise_issue`](@ref): this code run's submission script.
+Target for [`raise_issue!`](@ref): this code run's submission script.
 """
 struct SubmissionScript <: AbstractIssueTarget end
 
 """
-    CodeRepository()
+    CodeRepository(commits = nothing)
 
-Target for [`raise_issue`](@ref): the code repository this run was made from.
+Target for [`raise_issue!`](@ref): commits of a code repository. With no
+`commits`, the commit this code run was made from. With an
+[`AbstractCommitSelection`](@ref), every commit it selects that the registry
+holds a run of, as [`identify`](@ref) finds them, which needs no run: so
+`CodeRepository(AncestorCommits(of = "v1.2", including = false))` is the code
+that came before `v1.2`. A selection given to `raise_issue!` by itself means
+this target.
 """
-struct CodeRepository <: AbstractIssueTarget end
+struct CodeRepository <: AbstractIssueTarget
+    commits::Union{Nothing, AbstractCommitSelection}
+
+    function CodeRepository(commits::Union{Nothing, AbstractCommitSelection} = nothing)
+        return new(commits)
+    end
+end
+
+function Base.show(io::IO, target::CodeRepository)
+    print(io, "CodeRepository(")
+    isnothing(target.commits) || show(io, target.commits)
+    return print(io, ")")
+end
 
 """
     ConfigDataProduct(data_product; component = nothing)
 
-Target for [`raise_issue`](@ref): a data product of this code run, named as it
+Target for [`raise_issue!`](@ref): a data product of this code run, named as it
 is in the working config's `read:` or `write:` section (the name passed to
 [`link_read!`](@ref), [`link_write!`](@ref) and the `read_*`/`write_*`
 functions), and optionally one named `component` of it. Resolved at
 [`finalise`](@ref), so it may name an output that is not yet written. A bare
-`String` given to `raise_issue` means this target.
+`String` given to `raise_issue!` means this target.
 """
 struct ConfigDataProduct <: AbstractIssueTarget
     data_product::String
@@ -112,11 +279,11 @@ end
 """
     ExistingDataProduct(data_product; component = nothing)
 
-Target for [`raise_issue`](@ref): a data product already in the registry,
+Target for [`raise_issue!`](@ref): a data product already in the registry,
 whether or not this code run uses it, named as the pipeline names one -
 `namespace:name@version`, or `namespace:name` for its newest version - and
 optionally one named `component` of it. A `String` of that form given to
-`raise_issue` means this target.
+`raise_issue!` means this target.
 """
 struct ExistingDataProduct <: AbstractIssueTarget
     namespace::String
@@ -132,11 +299,17 @@ struct ExistingDataProduct <: AbstractIssueTarget
     end
 end
 
+# What `raise_issue!` takes as a target: a target, or a data product's name
+# or a commit selection, which stand for one
+const _IssueTargetArgument = Union{AbstractIssueTarget, AbstractString,
+                                   AbstractCommitSelection}
+
 # An issue queued by `raise_issue`, registered by `finalise` once its targets exist
 struct PendingIssue
     targets::Vector{AbstractIssueTarget}
     description::String
     severity::Int
+    all_versions::Bool
 end
 
 """
@@ -353,6 +526,43 @@ const SESSION = Ref{Union{Nothing, SessionRun}}(nothing)
 
 # == Functions ==
 
+# The repository a commit selection is of, as it holds it: a URL as given,
+# refused for a selection needing a clone, which `needs_clone` describes; a
+# folder given, which must be a repository's top level; or, given none, the
+# clone of the run open in the session, else the repository holding the
+# current directory, as an absolute path either way
+function _selectionrepo(repo::AbstractString,
+                        needs_clone::Union{Nothing, String})
+    if _isremoteurl(repo)
+        isnothing(needs_clone) ||
+            throw(ArgumentError("$needs_clone needs a clone of the repository, and $repo is a URL: give the clone's folder, or select AllCommits() or a NamedCommit"))
+        return String(repo)
+    end
+    isdir(repo) || throw(ArgumentError("no folder at $repo"))
+    top = _gittoplevel(repo)
+    isnothing(top) &&
+        throw(ArgumentError("$repo is not the top level of a git repository"))
+    samefile(top, repo) ||
+        throw(ArgumentError("$repo is inside the git repository at $top: name that folder"))
+    return _foldername(top)
+end
+function _selectionrepo(::Nothing, ::Union{Nothing, String})
+    session = SESSION[]
+    open = !isnothing(session) && !isnothing(session.handle) && !session.ended
+    start = open ? session.handle.config["run_metadata"]["local_repo"] : pwd()
+    top = _gittoplevel(start)
+    isnothing(top) &&
+        throw(ArgumentError(string(open ? "the clone of this session's run, " :
+                                   "the current directory, ", start,
+                                   ", is not in a git repository: give `repo`")))
+    return _foldername(top)
+end
+
+# A folder's absolute path, with no trailing separator
+function _foldername(path::AbstractString)
+    return dirname(joinpath(normpath(abspath(path)), ""))
+end
+
 # The headers every registry request carries, with the endpoint's own token
 # when it has one
 function _headers(registry::RegistryEndpoint)
@@ -374,38 +584,49 @@ function _requiretoken(registry::RegistryEndpoint)
                                            "FDP_LOCAL_TOKEN, or pass `token`")))
 end
 
-# The URL of the local registry in the CLI's global configuration, or the CLI's
-# default when there is none
-function _cliregistryurl(::Nothing)
+# The local registry in the CLI's global configuration - its URL and the token
+# its file holds - or the CLI's default and no token when there is none
+function _cliregistry(::Nothing)
     path = joinpath(homedir(), ".fair", "cli", "cli-config.yaml")
-    isfile(path) || return DEFAULT_REGISTRY_URL
-    return _registryuri(path, "local")
+    isfile(path) || return (uri = DEFAULT_REGISTRY_URL, token = nothing)
+    return _registryentry(path, "local")
 end
 
-# The URL of the registry called `remote` in the configuration of the project
-# the current directory belongs to
-function _cliregistryurl(remote::AbstractString)
+# The registry called `remote` in the configuration of the project the current
+# directory belongs to
+function _cliregistry(remote::AbstractString)
     project = _fairroot(pwd())
     isnothing(project) &&
         throw(ConfigFileException("no `.fair` folder in $(pwd()) or above it - run `fair init` in the project"))
     path = joinpath(project, ".fair", "cli-config.yaml")
     isfile(path) ||
         throw(ConfigFileException("no CLI configuration at $path - run `fair init` in the project"))
-    return _registryuri(path, remote)
+    return _registryentry(path, remote)
 end
 
-# The `uri` of registry `name` in the CLI configuration file at `path`
-function _registryuri(path::AbstractString, name::AbstractString)
+# The registry `name` in the CLI configuration file at `path`: its `uri`, and
+# the token read from the file its `token` names
+function _registryentry(path::AbstractString, name::AbstractString)
     config = something(YAML.load_file(path), Dict())
     registries = something(get(config, "registries", nothing), Dict())
     entry = get(registries, name, nothing)
     entry isa AbstractDict && haskey(entry, "uri") &&
-        return String(entry["uri"])
+        return (uri = String(entry["uri"]), token = _tokenfromfile(entry))
     return throw(ConfigFileException(string("no registry '", name, "' in the ",
                                             "CLI configuration at ", path,
                                             ", which has: ",
                                             join(sort!(string.(keys(registries))),
                                                  ", "))))
+end
+
+# The token in the file a configuration entry names as `token`, stripped as the
+# CLI reads it, or `nothing` where the entry names none, or the file is missing
+# or empty
+function _tokenfromfile(entry::AbstractDict)
+    file = get(entry, "token", nothing)
+    file isa AbstractString && isfile(file) || return nothing
+    token = strip(read(file, String))
+    return isempty(token) ? nothing : String(token)
 end
 
 # The nearest folder at or above `dir` holding a `.fair` folder, as the CLI
@@ -446,6 +667,19 @@ function _postentry(registry::RegistryEndpoint, table::String, query::Dict)
     end
     body = JSON.json(query)
     r = HTTP.request("POST", url, headers = _headers(registry), body = body)
+    return JSON.parse(String(r.body))
+end
+
+# Change fields of a registry entry and return it changed, or `nothing` where
+# the registry has no update for its table
+function _patchentry(registry::RegistryEndpoint, url::AbstractString,
+                     data::Dict)
+    _requiretoken(registry)
+    r = HTTP.request("PATCH", URIs.URI(url), _headers(registry),
+                     JSON.json(data), status_exception = false)
+    r.status == 405 && return nothing
+    r.status == 200 ||
+        throw(ReadWriteException("the registry refused to change $url: HTTP status $(r.status), $(String(r.body))"))
     return JSON.parse(String(r.body))
 end
 

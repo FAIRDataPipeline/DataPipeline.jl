@@ -48,9 +48,9 @@ include("core.jl")
 
 include("api.jl")
 export link_read!, link_read_files!, link_write!, link_register!
-export read_array, read_table, read_distribution, read_estimate
-export write_array, write_table, write_distribution, write_estimate
-export raise_issue
+export read_array!, read_table!, read_distribution!, read_estimate!
+export write_array!, write_table!, write_distribution!, write_estimate!
+export raise_issue!
 export register_authors!, register_citations!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
@@ -73,9 +73,12 @@ public RepositoryIdentification, RegisteredCommit, CodeRunRecord
 # crate that packs files with their provenance
 public provenance, downstream, crate
 public Trace
-public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget
+public TraceProduct, TraceRun, TraceIssue, TraceSource, TraceTarget,
+       TraceRelease
 public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
+public register_release!, RegisteredRelease
 
+include("repometadata.jl")
 include("fdp_i.jl")
 include("citations.jl")
 include("authors.jl")
@@ -87,6 +90,7 @@ include("rehearse.jl")
 include("data_prod_proc.jl")    # dp file handling
 include("provenance.jl")
 include("api_audit.jl")         # DR audits
+include("releases.jl")
 include("downstream.jl")
 include("crate.jl")
 

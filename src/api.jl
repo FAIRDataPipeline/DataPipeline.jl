@@ -26,6 +26,14 @@ ended it, is a [`ReadWriteException`](@ref) - for a rehearsal, to `rehearse`
 again; for a recorded run, since a script making several runs is not
 supported.
 
+The code repository is registered at its commit as one object, kept where the
+registry holds one already. A new one has the repository's own authors, read
+from its metadata files - `codemeta.json`, `.zenodo.json`, `CITATION.cff`,
+`JuliaProject.toml`, `Project.toml`, the first that lists any - as they are at
+the commit in the clone `run_metadata.local_repo`, or in its working tree for
+a run from uncommitted changes; with none, the runner. The licence and
+keywords the files give are added to the object either way.
+
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
 that ran cannot be recovered from its commit.
@@ -68,11 +76,7 @@ function _openrun(mode::RecordedRun, config::Dict, config_file::String,
     script_url = _registerobject(registry, submission_script, datastore,
                                  "Submission script")["url"]
 
-    repo = _repositorylocation(run_metadata["remote_repo"])
-    repo_url = _registerobject(registry, repo.path, repo.root,
-                               "Remote code repository.",
-                               hash = run_metadata["latest_commit"],
-                               local_root = false, file_type = nothing)["url"]
+    repo_url = _registerrepository(registry, run_metadata)
     endswith(run_metadata["latest_commit"], "-dirty") &&
         _flagdirtyrepository(registry, repo_url, run_metadata["latest_commit"])
 
@@ -181,7 +185,9 @@ Given a pattern instead - a name with one or more `*`, each matching one
 segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
 `era5/t2m/a/b` - return the path of a temporary directory holding a symbolic
 link to the file of every `read:` data product that matches, each recorded as
-an input (the directory itself is not). A link is named after its data
+an input (the directory itself is not). Where the working config keeps the
+pattern's own entry, as a CLI may, a pattern that matches nothing gives an
+empty directory; where it does not, that is an error. A link is named after its data
 product with `/` replaced by `_`, plus the file's extension; the directory is
 named by the SHA-1 of the sorted list of link names and file hashes, so the
 same set of files gives the same name. The directory is removed when Julia
@@ -244,11 +250,12 @@ end
 Return the paths of the files behind every `read:` data product of the working
 config whose name matches `pattern`, in name order, recording each as an
 input of the code run. A pattern is a name with one or more `*`, each
-matching one segment of a name, as for [`link_read!`](@ref).
+matching one segment of a name, and one that matches nothing gives no paths
+or an error, as for [`link_read!`](@ref).
 """
 function link_read_files!(handle::DataRegistryHandle, pattern::String)
-    return [link_read!(handle, name)
-            for name in _matchingreads(handle, pattern)]
+    return String[link_read!(handle, name)
+                  for name in _matchingreads(handle, pattern)]
 end
 
 # The directory of links `link_read!` returns for a pattern
@@ -277,8 +284,8 @@ end
     canread(handle, pattern)
 
 Return whether the working config has a `read:` entry for `data_product`, or
-one that matches `pattern`: whether [`link_read!`](@ref) would find something
-to read under that name. Only the working config is consulted, and nothing is
+for `pattern`: whether [`link_read!`](@ref) would succeed. A pattern the
+config holds is readable though it matches nothing, giving an empty result. Only the working config is consulted, and nothing is
 recorded, so a script can check every name it will read before it does any
 work.
 
@@ -302,49 +309,49 @@ function _inputpath(handle::DataRegistryHandle, data_product::String,
 end
 
 """
-    read_array(handle, data_product, component)
+    read_array!(handle, data_product, component)
 
 Read `component` of an HDF5 `read:` data product of the working config as an
 array, recording it as an input.
 """
-function read_array(handle::DataRegistryHandle, data_product::String,
-                    component::String)
+function read_array!(handle::DataRegistryHandle, data_product::String,
+                     component::String)
     path = _inputpath(handle, data_product, component)
     return process_h5_file(path, false)["/$component"]
 end
 
 """
-    read_table(handle, data_product, component)
+    read_table!(handle, data_product, component)
 
 Read a table data product. Not yet implemented: returns `nothing`.
 
-See also: [`write_table`](@ref), [`read_array`](@ref).
+See also: [`write_table!`](@ref), [`read_array!`](@ref).
 """
-function read_table(handle::DataRegistryHandle, data_product::String,
-                    component::String)
+function read_table!(handle::DataRegistryHandle, data_product::String,
+                     component::String)
     return nothing
 end
 
 """
-    read_estimate(handle, data_product, component)
+    read_estimate!(handle, data_product, component)
 
 Read the value of the point estimate `component` of a TOML `read:` data
 product of the working config, recording it as an input.
 """
-function read_estimate(handle::DataRegistryHandle, data_product::String,
-                       component::String)
+function read_estimate!(handle::DataRegistryHandle, data_product::String,
+                        component::String)
     return _readtoml(handle, data_product, component)["value"]
 end
 
 """
-    read_distribution(handle, data_product, component)
+    read_distribution!(handle, data_product, component)
 
 Read the distribution `component` of a TOML `read:` data product of the
 working config as a `Dict` with `distribution`, `parameters` and `type`,
 recording it as an input.
 """
-function read_distribution(handle::DataRegistryHandle, data_product::String,
-                           component::String)
+function read_distribution!(handle::DataRegistryHandle, data_product::String,
+                            component::String)
     return _readtoml(handle, data_product, component)
 end
 
@@ -617,7 +624,7 @@ function link_register!(handle::DataRegistryHandle, data_product::String;
 end
 
 """
-    write_array(handle, data, data_product, component, description;
+    write_array!(handle, data, data_product, component, description;
                 supersede = false)
 
 Write `data` as `component` of an HDF5 `write:` data product of the working
@@ -627,12 +634,12 @@ are found to be registered already. `supersede` is as for
 [`link_write!`](@ref): the data product's new version supersedes the one
 before it.
 
-See also: [`write_table`](@ref), [`read_array`](@ref), [`read_table`](@ref)
+See also: [`write_table!`](@ref), [`read_array!`](@ref), [`read_table!`](@ref)
 """
-function write_array(handle::DataRegistryHandle, data::Array,
-                     data_product::String,
-                     component::String, description::String;
-                     supersede::Bool = false)
+function write_array!(handle::DataRegistryHandle, data::Array,
+                      data_product::String,
+                      component::String, description::String;
+                      supersede::Bool = false)
     key = (data_product, component)
     if haskey(handle.outputs, key)
         supersede && (handle.outputs[key]["supersede"] = true)
@@ -657,19 +664,19 @@ function write_array(handle::DataRegistryHandle, data::Array,
 end
 
 """
-    write_table(handle, data, data_product, component)
+    write_table!(handle, data, data_product, component)
 
 Write a table data product. Not yet implemented: returns `nothing`.
 
-See also: [`write_array`](@ref), [`read_array`](@ref), [`read_table`](@ref)
+See also: [`write_array!`](@ref), [`read_array!`](@ref), [`read_table!`](@ref)
 """
-function write_table(handle::DataRegistryHandle, data, data_product::String,
-                     component::String)
+function write_table!(handle::DataRegistryHandle, data, data_product::String,
+                      component::String)
     return nothing
 end
 
 """
-    write_estimate(handle, value, data_product, component, description;
+    write_estimate!(handle, value, data_product, component, description;
                    supersede = false)
 
 Write `value` as the point estimate `component` of a TOML `write:` data
@@ -677,9 +684,10 @@ product of the working config, recording it as an output, and return
 `(data_product, component)`. `supersede` is as for [`link_write!`](@ref):
 the data product's new version supersedes the one before it.
 """
-function write_estimate(handle::DataRegistryHandle, value, data_product::String,
-                        component::String, description::String;
-                        supersede::Bool = false)
+function write_estimate!(handle::DataRegistryHandle, value,
+                         data_product::String,
+                         component::String, description::String;
+                         supersede::Bool = false)
     key = (data_product, component)
     if haskey(handle.outputs, key)
         supersede && (handle.outputs[key]["supersede"] = true)
@@ -692,7 +700,7 @@ function write_estimate(handle::DataRegistryHandle, value, data_product::String,
 end
 
 """
-    write_distribution(handle, distribution, parameters, data_product,
+    write_distribution!(handle, distribution, parameters, data_product,
                        component, description; supersede = false)
 
 Write a `distribution` (its name, and a `Dict` of `parameters`) as
@@ -701,10 +709,10 @@ it as an output, and return `(data_product, component)`. `supersede` is as
 for [`link_write!`](@ref): the data product's new version supersedes the one
 before it.
 """
-function write_distribution(handle::DataRegistryHandle, distribution::String,
-                            parameters,
-                            data_product::String, component::String,
-                            description::String; supersede::Bool = false)
+function write_distribution!(handle::DataRegistryHandle, distribution::String,
+                             parameters,
+                             data_product::String, component::String,
+                             description::String; supersede::Bool = false)
     key = (data_product, component)
     if haskey(handle.outputs, key)
         supersede && (handle.outputs[key]["supersede"] = true)
@@ -719,8 +727,14 @@ function write_distribution(handle::DataRegistryHandle, distribution::String,
 end
 
 """
-    raise_issue(handle, target, description; severity = $DEFAULT_ISSUE_SEVERITY)
-    raise_issue(handle, targets, description; severity = $DEFAULT_ISSUE_SEVERITY)
+    raise_issue!(handle, target, description; severity = $DEFAULT_ISSUE_SEVERITY,
+                 all_versions = false)
+    raise_issue!(handle, targets, description; severity = $DEFAULT_ISSUE_SEVERITY,
+                 all_versions = false)
+    raise_issue!(target, description; remote = nothing,
+                 severity = $DEFAULT_ISSUE_SEVERITY, all_versions = false)
+    raise_issue!(registry, target, description;
+                 severity = $DEFAULT_ISSUE_SEVERITY, all_versions = false)
 
 Raise an issue with one thing, or with several at once as one registry issue.
 A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
@@ -729,39 +743,114 @@ A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
 a data product of this run by its config name, as
 [`ConfigDataProduct`](@ref) names one, or a registered data product as
 `namespace:name@version` (`namespace:name` for its newest version), as
-[`ExistingDataProduct`](@ref) names one.
+[`ExistingDataProduct`](@ref) names one; or an
+[`AbstractCommitSelection`](@ref), which stands for the
+[`CodeRepository`](@ref) of the commits it selects.
 `severity` is an integer, larger for worse, by default the registry's own
 default. Issues are queued in the handle
 and registered by [`finalise`](@ref), so an output can be named before it
 is written.
+
+A data product's bytes may be registered as other versions of the same data
+product too, which the issue would then not reach. `finalise` looks for them,
+and warns of any; with `all_versions = true` it raises the issue on every
+such version as well, as one issue over their components. There is no
+prompt, since a script may run where no one can answer.
+
+Outside a run - given a registry, or none for the CLI's local registry or its
+remote registry named `remote` - the issue is registered at once, and its URL
+returned, which [`downstream`](@ref) takes as `issue`. Only a target that names
+what it is on without a run can be raised so: an
+[`ExistingDataProduct`](@ref), or a string of its form, and commits - an
+[`AbstractCommitSelection`](@ref), or a `CodeRepository` given one; any other
+is an `ArgumentError`. So
+`raise_issue!(AncestorCommits(of = "v1.2", including = false), "Fixed in v1.2")`
+raises an issue on the code that came before `v1.2`. Registering needs the registry's token, which
+[`RegistryEndpoint`](@ref) reads from the CLI's configuration. While the
+session is rehearsing a run, the issue is printed as what would be raised,
+nothing is registered, and `nothing` is returned.
+
+# Arguments
+- `handle::DataRegistryHandle`: the code run the issue is raised in.
+- `registry::RegistryEndpoint`: the registry to raise it in, outside a run.
+- `target`, `targets`: what the issue is on, as above.
+- `description::String`: the issue.
+- `severity::Integer`: larger for worse.
+- `all_versions::Bool`: whether to raise it on the other versions of a data
+  product holding the same bytes too.
+- `remote`: with no registry given, the remote registry of that name in the
+  current project's CLI configuration, else the CLI's local registry.
 """
-function raise_issue(handle::DataRegistryHandle, targets::AbstractVector,
-                     description::String;
-                     severity::Integer = DEFAULT_ISSUE_SEVERITY)
+function raise_issue!(handle::DataRegistryHandle, targets::AbstractVector,
+                      description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
     resolved = AbstractIssueTarget[_astarget(target) for target in targets]
     for target in resolved
         _checktarget(handle, target)
     end
-    push!(handle.issues, PendingIssue(resolved, description, severity))
+    push!(handle.issues,
+          PendingIssue(resolved, description, severity, all_versions))
     return nothing
 end
-function raise_issue(handle::DataRegistryHandle,
-                     target::Union{AbstractIssueTarget, AbstractString},
-                     description::String;
-                     severity::Integer = DEFAULT_ISSUE_SEVERITY)
-    return raise_issue(handle, [target], description, severity = severity)
+function raise_issue!(handle::DataRegistryHandle,
+                      target::_IssueTargetArgument, description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(handle, [target], description; severity, all_versions)
+end
+function raise_issue!(registry::RegistryEndpoint, targets::AbstractVector,
+                      description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    resolved = AbstractIssueTarget[_astarget(target) for target in targets]
+    for target in resolved
+        _checkoutsiderun(target)
+    end
+    components = reduce(vcat,
+                        (_issuecomponents(registry, target)
+                         for target in resolved),
+                        init = String[])
+    issue = PendingIssue(resolved, description, severity, all_versions)
+    return _raiseoutsiderun(_sessionmode(), registry, issue, components)
+end
+function raise_issue!(registry::RegistryEndpoint, target::_IssueTargetArgument,
+                      description::String;
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(registry, [target], description; severity,
+                        all_versions)
+end
+function raise_issue!(targets::AbstractVector, description::String;
+                      remote::Union{Nothing, AbstractString} = nothing,
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(RegistryEndpoint(remote = remote), targets,
+                        description; severity, all_versions)
+end
+function raise_issue!(target::_IssueTargetArgument, description::String;
+                      remote::Union{Nothing, AbstractString} = nothing,
+                      severity::Integer = DEFAULT_ISSUE_SEVERITY,
+                      all_versions::Bool = false)
+    return raise_issue!(RegistryEndpoint(remote = remote), [target],
+                        description; severity, all_versions)
 end
 
 # A bare string names a data product: of this run by its config name, or a
-# registered one as `namespace:name@version`, which no config name looks like
+# registered one as `namespace:name@version`, which no config name looks like;
+# a commit selection names the commits of a code repository
 _astarget(target::AbstractIssueTarget) = target
+_astarget(commits::AbstractCommitSelection) = CodeRepository(commits)
 function _astarget(data_product::AbstractString)
     return occursin(':', data_product) ? ExistingDataProduct(data_product) :
            ConfigDataProduct(data_product)
 end
 
-# A data product named by its config name must be in the working config
+# A data product named by its config name must be in the working config, and
+# be one: a pattern names none
 function _checktarget(handle::DataRegistryHandle, target::ConfigDataProduct)
+    occursin('*', target.data_product) &&
+        throw(ArgumentError("'$(target.data_product)' is a pattern, which names no single data product: raise the issue on the names it matches"))
     for section in ("read", "write")
         any(entry["data_product"] == target.data_product
             for entry in get(handle.config, section, [])) && return nothing
@@ -769,3 +858,15 @@ function _checktarget(handle::DataRegistryHandle, target::ConfigDataProduct)
     return throw(ConfigFileException("'$(target.data_product)' not found in config file"))
 end
 _checktarget(::DataRegistryHandle, ::AbstractIssueTarget) = nothing
+
+# Throw unless a target names what it is on without a run, as an issue raised
+# outside one needs
+_checkoutsiderun(::ExistingDataProduct) = nothing
+function _checkoutsiderun(target::CodeRepository)
+    isnothing(target.commits) &&
+        throw(ArgumentError("CodeRepository() is the commit of a code run: outside a run, select commits, such as AncestorCommits()"))
+    return nothing
+end
+function _checkoutsiderun(target::AbstractIssueTarget)
+    return throw(ArgumentError("$target is part of a code run: raise it with the run's handle, as raise_issue!(handle, target, description)"))
+end

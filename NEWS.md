@@ -6,100 +6,146 @@
       `FDP_CONFIG_DIR`, or the one `rehearse` prepared; it no longer falls back
       to `./config.yaml`.
     - A file written with the bytes of its data product's highest version makes
-      no new version and is no output of the run: at `finalise` it moves from
-      `handle.outputs` to `handle.unchanged`.
+      no new version and is no output of the run: at `finalise` the file is
+      removed and moves from `handle.outputs` to `handle.unchanged`.
     - A source is one file: a second file under one identifier, title and
       release version is refused, at the call or at `finalise`.
-    - Registering a source needs `data-registry` v1.4.0 or later.
+    - Registering a source needs `data-registry` v1.4.0 or later, which is
+      checked.
+    - `initialise()` registers a commit's code repository as one object, kept
+      where the registry holds one, and gives a new one the repository's own
+      authors, from `codemeta.json`, `.zenodo.json`, `CITATION.cff` or its
+      project file, rather than the runner; its licence and keywords too.
+    - `AncestorCommits()`, `CheckedOutCommit()` and `AllCommits()` made with no
+      `repo` outside a git repository are an `ArgumentError`, since a selection
+      holds its repository.
     - `registry_audit`, `registry_audit_recursive` and `record_issues!` are
       removed: written for the registry's 2021 schema, they could not run
       against any registry since. `provenance` and `downstream` are what they
       were for.
-  - `DataPipeline.rehearse(path)` runs a script through the pipeline without
-    recording it: `fair run --ci --dirty` prepares the job for a user config
-    (a job folder, or its working config, may be given instead), the script
-    then runs unchanged in the session, and `finalise` collects the outputs in
-    a folder, registering nothing. `DataPipeline.discard` ends a rehearsal
-    without its outputs; a second `rehearse` meanwhile is an error unless
-    `restart = true` discards the first.
-  - `initialise()` opens the run that `fair run` or `rehearse` prepared, once:
-    a second call while it is open, or after it has ended, is an error.
-  - `DataPipeline.fair"pull config.yaml"` runs the CLI from Julia, its
-    arguments written as on the command line: the `fair` that `set_cli!`
-    recorded, else the one on the path, else the copy `install_cli` made.
-  - `DataPipeline.set_cli!(path)` records the `fair` to use, as a preference
-    of the active environment that holds across sessions.
-  - `DataPipeline.install_cli()` installs the package's own copy of `fair`, or
-    brings it up to date, in a scratch space, with a Python and a git that
-    MicroMamba fetches: for a Julia with no virtual environment on its path, and to set
-    the registry up from Julia with `DataPipeline.fair"registry install"`.
-    `install_cli!` records the copy as the `fair` to use as well.
-  - `finalise()` returns the folder the outputs are under: the data store's
-    root, or a rehearsal's folder.
-  - `initialise()` outside `fair run` throws a `ConfigFileException` saying
-    what sets a run up, rather than a `SystemError` or `KeyError`.
-  - `DataRegistryHandle` takes a type parameter, the run's mode, `RecordedRun`
-    or `Rehearsal`; its registry URL fields are `nothing` in a rehearsal.
-  - New dependencies: MicroMamba, Preferences and Scratch. Every standard
-    library has a compat entry.
-  - `link_write!` takes a `path`, to register a file that exists already: it is
-    hard-linked into the data store, or copied. `link_read!` takes a `path`, and
-    `force`, to make a registered file available there. `DataPipeline.canread`
-    and `DataPipeline.canwrite` say whether the working config allows a call.
-  - An output whose bytes are those of the highest version of its data product
-    is no longer registered again: no version is made, the file written is
-    removed, and it is not an output of the code run.
-  - `write_array` writes HDF5 files that record no times, so the same arrays
-    give the same file.
-  - `link_write!` takes a file's source - `doi` or `bibtex`, with `title`,
-    `primary`, `description`, `original_store`, `licence` (or `license`),
-    `release_date` and `release_version` - and `finalise` registers it, the
-    source's authors being the file's. A source is one file.
-  - `register_citations!` reads BibTeX citations for `bibtex =`. A `doi` with
-    none is looked up as DataCite's record, or CSL's, which gives what it has of
-    the title, description, licence, date, version and authors' ORCIDs.
-  - `register_authors!` registers authors with their ORCIDs or ROR ids, from
-    TOML files or `name => identifier` pairs, for citations that name them.
-  - A licence is an identifier in the SPDX licence list, checked against a copy
-    the package keeps, or a URL.
-  - `link_register!` registers something from outside the pipeline, with its
-    source, as an input of the code run: a deposit with no file, or a file.
-  - Registering a source needs `data-registry` v1.4.0 or later, which is checked.
-    Wildcard writes need `fair-cli` 0.10.0 or later, a pattern read of a family
-    written more than once 0.10.1, and reading a data product pulled from a
-    remote, or pushing or pulling a deposit with no file, 0.10.2.
-  - New dependencies: BibParser and BibInternal.
-  - The abstract supertypes `AbstractIssueTarget` and `AbstractCommitSelection`
-    are no longer `public`: they annotate arguments and are not for extending.
-  - `DataPipeline.provenance(x)` traces where a data product came from - `x` a
-    file or `namespace:name@version` - as a `Trace`, printed as a tree: each
-    run at its commit, what it read, each input's source, issues and the
-    version that supersedes it, back to the data registered from elsewhere.
-  - `DataPipeline.downstream(x)` traces the other way, to everything made from
-    a data product, from the runs of a repository with `repo = `, or from
-    everything an issue is raised on with `issue = `: what must be made again.
-  - `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
-    files, folders and data products named, as its metadata or saved as a
-    zip with `to = "paper.zip"`.
-  - `identify` of a file also reports the issues raised on anything behind it,
-    each with the run it reaches the file through, and with `superseded = true`
-    the inputs behind it that a newer version of has been registered since.
-  - A git repository is named to `identify` by `repo = folder`, or by the URL
-    of its remote with no clone; the folder by position is deprecated. `commits`
-    takes a commit by name - a tag, a branch, a hash or a registered release's
-    version - as a string or `NamedCommit`.
-  - A registered data product is named `namespace:name@version` everywhere, as
-    the CLI names one, with `namespace:name` for its newest version:
-    `link_register!` takes the form in place of its `namespace` and `version`
-    keywords, `ExistingDataProduct` takes it (the three-part constructor is
-    deprecated), `raise_issue` takes it bare, and `identify` prints it.
-  - `supersede = true` on `link_write!`, `link_register!` and the component
-    writers raises an issue on the version a new version supersedes, at
-    severity 0, so that what was made from the old version reports it; where
-    there is nothing to supersede an info message says so.
-  - Names are held to the pipeline's convention wherever the package registers
-    one: a namespace of ASCII letters, digits, `_` and `-`, a data product or
-    component name of such parts joined by `/`; any other is an `ArgumentError`.
+  - Running and rehearsing:
+    - `DataPipeline.rehearse(path)` runs a script through the pipeline without
+      recording it: `fair run --ci --dirty` prepares the job for a user config
+      (or a job folder, or its working config), the script runs unchanged in the
+      session, and `finalise` collects the outputs in a folder, registering
+      nothing.
+    - `DataPipeline.discard` ends a rehearsal without its outputs; a second
+      `rehearse` meanwhile is an error unless `restart = true` discards the first.
+    - `initialise()` opens the run that `fair run` or `rehearse` prepared, once:
+      a second call while it is open, or after it has ended, is an error.
+    - `initialise()` outside `fair run` throws a `ConfigFileException` saying
+      what sets a run up, rather than a `SystemError` or `KeyError`.
+    - `finalise()` returns the folder the outputs are under: the data store's
+      root, or a rehearsal's folder.
+    - `DataRegistryHandle` takes a type parameter, the run's mode, `RecordedRun`
+      or `Rehearsal`; its registry URL fields are `nothing` in a rehearsal.
+  - The CLI from Julia:
+    - `DataPipeline.fair"pull config.yaml"` runs the CLI from Julia, its
+      arguments written as on the command line: the `fair` that `set_cli!`
+      recorded, else the one on the path, else the copy `install_cli` made.
+    - `DataPipeline.set_cli!(path)` records the `fair` to use, as a preference
+      of the active environment that holds across sessions.
+    - `DataPipeline.install_cli()` installs the package's own copy of `fair`, or
+      updates it, in a scratch space with a Python and a git that MicroMamba
+      fetches, for a Julia with no virtual environment on its path;
+      `install_cli!` records it as the `fair` to use as well.
+    - `RegistryEndpoint(; remote)` reads the registry's token from the file the
+      CLI's configuration names beside its address, when none is given and the
+      file exists: the token the CLI holds for that registry, sent to it alone.
+  - Reading and writing:
+    - `link_write!` takes a `path`, to register a file that exists already: it is
+      hard-linked into the data store, or copied. `link_read!` takes a `path`, and
+      `force`, to make a registered file available there.
+    - `DataPipeline.canread` and `DataPipeline.canwrite` say whether the working
+      config allows a call.
+    - Every call that changes what a run registers ends in `!`: `raise_issue!`,
+      `read_array!`, `read_table!`, `read_estimate!`, `read_distribution!`,
+      `write_array!`, `write_table!`, `write_estimate!` and `write_distribution!`,
+      the old names kept as deprecations.
+    - `write_array!` writes HDF5 files that record no times, so the same arrays
+      give the same file.
+    - A repeated `read_estimate!` or `read_distribution!` no longer looks its
+      input up afresh.
+    - A `read:` pattern that matches nothing gives an empty result where the
+      working config keeps the pattern's own entry, as a later `fair-cli` will;
+      a `*` never matches `[`, `]`, `?` or `*`, which no registered name holds.
+    - `supersede = true` on `link_write!`, `link_register!` and the component
+      writers raises an issue on the version a new version supersedes, at
+      severity 0, so that what was made from the old version reports it; where
+      there is nothing to supersede an info message says so.
+    - Names are held to the pipeline's convention wherever the package registers
+      one: a namespace of ASCII letters, digits, `_` and `-`, a component name of
+      such parts joined by `/`, a data product name the same with `.` allowed
+      inside a part; any other is an `ArgumentError`.
+    - A registered data product is named `namespace:name@version` everywhere, as
+      the CLI names one, `namespace:name` for its newest version: `link_register!`
+      and `ExistingDataProduct` take it (the three-part constructor is
+      deprecated), `raise_issue!` takes it bare, and `identify` prints it.
+  - Sources, citations and authors:
+    - `link_write!` takes a file's source - `doi` or `bibtex`, with `title`,
+      `primary`, `description`, `original_store`, `licence` (or `license`),
+      `release_date` and `release_version` - and `finalise` registers it, the
+      source's authors being the file's.
+    - `register_citations!` reads BibTeX citations for `bibtex =`. A `doi` with
+      none is looked up as DataCite's record, or CSL's, which gives what it has of
+      the title, description, licence, date, version and authors' ORCIDs.
+    - `register_authors!` registers authors with their ORCIDs or ROR ids, from
+      TOML files or `name => identifier` pairs, for citations that name them.
+    - A licence is an identifier in the SPDX licence list, checked against a copy
+      the package keeps, or a URL.
+    - `link_register!` registers something from outside the pipeline, with its
+      source, as an input of the code run: a deposit with no file, or a file.
+  - Issues:
+    - `raise_issue!` warns at `finalise` when the data product's bytes are
+      registered as other versions of it too, and with `all_versions = true`
+      raises the issue on every such version.
+    - `raise_issue!(target, description)` outside a run, with a registry or the
+      CLI's, registers the issue at once and returns its URL, for an
+      `ExistingDataProduct` or a commit selection: so
+      `raise_issue!(AncestorCommits(of = "v1.2", including = false), "...")`
+      raises an issue on the code before `v1.2`.
+  - Tracing provenance:
+    - `DataPipeline.provenance(x)` traces where a data product came from - `x` a
+      file or `namespace:name@version` - as a `Trace`, printed as a tree: each
+      run at its commit, what it read, each input's source, issues and the
+      version that supersedes it, back to the data registered from elsewhere.
+    - `DataPipeline.downstream(x)` traces the other way, to everything made from
+      a data product, from the runs of selected commits, or from everything an
+      issue is raised on with `issue = `: what must be made again.
+    - `DataPipeline.crate(paths...)` fetches the registry's RO-Crate for the
+      files, folders and data products named, as its metadata or saved as a
+      zip with `to = "paper.zip"`.
+    - `identify` of a file also reports the issues raised on anything behind it,
+      each with the run it reaches the file through, and with `superseded = true`
+      the inputs behind it that a newer version of has been registered since.
+  - Commits and releases of the code:
+    - A commit selection holds its repository, `repo` - a clone's top-level
+      folder or its remote's URL, by default the open run's clone, else the
+      repository holding the current directory - and is what `identify` and
+      `downstream` take: `identify(AncestorCommits())`. The folder by position is
+      deprecated.
+    - `NamedCommit("v1.0")` selects a commit by tag, branch, hash or registered
+      release's version, resolving a tag or a branch by asking the remote when
+      its repository is a URL; `AncestorCommits(of = "v1.0", including = false)`
+      selects the commits before it.
+    - `DataPipeline.register_release!` registers a tagged commit as a release of
+      the code - the registry's release record and a data product
+      `<organisation>:<repository>@<version>` - returning a `RegisteredRelease`,
+      which `NamedCommit` and `AncestorCommits(of = release)` take.
+    - A release's DOI is its data product's source: `doi = ...`, or for a
+      repository with a `.zenodo.json` its tag's Zenodo version, looked up; a
+      release registered before Zenodo has it gets it on a second call.
+    - A run's line in `provenance` and `downstream`, and a commit's in `identify`,
+      show the release its commit is, with its DOI: `TraceRun.release` and
+      `RegisteredCommit.release`, each a `TraceRelease`.
+  - Requirements:
+    - Wildcard writes need `fair-cli` 0.10.0 or later, a pattern read of a family
+      written more than once 0.10.1, and reading a data product pulled from a
+      remote, or pushing or pulling a deposit with no file, 0.10.2.
+    - New dependencies: BibParser, BibInternal, MicroMamba, Preferences and
+      Scratch. Every standard library has a compat entry.
+    - The abstract supertypes `AbstractIssueTarget` and `AbstractCommitSelection`
+      are no longer `public`: they annotate arguments and are not for extending.
 - v0.54.1
   - `link_write!`, and the component writers, accept a data product name that a
     wildcard `write:` entry of the working config stands for, registering the
