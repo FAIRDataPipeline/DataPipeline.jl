@@ -66,6 +66,9 @@
       give the same file.
     - A repeated `read_estimate!` or `read_distribution!` no longer looks its
       input up afresh.
+    - A `read:` pattern that matches nothing gives an empty result where the
+      working config keeps the pattern's own entry, as a later `fair-cli` will;
+      a `*` never matches `[`, `]`, `?` or `*`, which no registered name holds.
     - `supersede = true` on `link_write!`, `link_register!` and the component
       writers raises an issue on the version a new version supersedes, at
       severity 0, so that what was made from the old version reports it; where

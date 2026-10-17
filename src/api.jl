@@ -185,7 +185,9 @@ Given a pattern instead - a name with one or more `*`, each matching one
 segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
 `era5/t2m/a/b` - return the path of a temporary directory holding a symbolic
 link to the file of every `read:` data product that matches, each recorded as
-an input (the directory itself is not). A link is named after its data
+an input (the directory itself is not). Where the working config keeps the
+pattern's own entry, as a CLI may, a pattern that matches nothing gives an
+empty directory; where it does not, that is an error. A link is named after its data
 product with `/` replaced by `_`, plus the file's extension; the directory is
 named by the SHA-1 of the sorted list of link names and file hashes, so the
 same set of files gives the same name. The directory is removed when Julia
@@ -248,11 +250,12 @@ end
 Return the paths of the files behind every `read:` data product of the working
 config whose name matches `pattern`, in name order, recording each as an
 input of the code run. A pattern is a name with one or more `*`, each
-matching one segment of a name, as for [`link_read!`](@ref).
+matching one segment of a name, and one that matches nothing gives no paths
+or an error, as for [`link_read!`](@ref).
 """
 function link_read_files!(handle::DataRegistryHandle, pattern::String)
-    return [link_read!(handle, name)
-            for name in _matchingreads(handle, pattern)]
+    return String[link_read!(handle, name)
+                  for name in _matchingreads(handle, pattern)]
 end
 
 # The directory of links `link_read!` returns for a pattern
@@ -281,8 +284,8 @@ end
     canread(handle, pattern)
 
 Return whether the working config has a `read:` entry for `data_product`, or
-one that matches `pattern`: whether [`link_read!`](@ref) would find something
-to read under that name. Only the working config is consulted, and nothing is
+for `pattern`: whether [`link_read!`](@ref) would succeed. A pattern the
+config holds is readable though it matches nothing, giving an empty result. Only the working config is consulted, and nothing is
 recorded, so a script can check every name it will read before it does any
 work.
 
@@ -843,8 +846,11 @@ function _astarget(data_product::AbstractString)
            ConfigDataProduct(data_product)
 end
 
-# A data product named by its config name must be in the working config
+# A data product named by its config name must be in the working config, and
+# be one: a pattern names none
 function _checktarget(handle::DataRegistryHandle, target::ConfigDataProduct)
+    occursin('*', target.data_product) &&
+        throw(ArgumentError("'$(target.data_product)' is a pattern, which names no single data product: raise the issue on the names it matches"))
     for section in ("read", "write")
         any(entry["data_product"] == target.data_product
             for entry in get(handle.config, section, [])) && return nothing

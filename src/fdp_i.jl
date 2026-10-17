@@ -720,28 +720,42 @@ end
     _globregex(pattern)
 
 Return the anchored regular expression for a data product name pattern, in
-which each `*` matches one segment of the name (one or more characters other
-than `/`) and every other character is literal.
+which each `*` matches one segment of the name and every other character is
+literal. A segment is one or more characters other than `/` and the four the
+registry refuses in a name, `[`, `]`, `?` and `*`, so that no registered name
+is passed over and a pattern never matches itself.
 """
 function _globregex(pattern::AbstractString)
     occursin('*', pattern) ||
         throw(ArgumentError("a pattern needs at least one *: $pattern"))
     literal(s) = replace(s, r"([\\^\$.|?+()\[\]{}])" => s"\\\1")
-    return Regex("^" * join(map(literal, split(pattern, '*')), "[^/]+") * "\$")
+    return Regex("^" *
+                 join(map(literal, split(pattern, '*')), "[^/\\[\\]?*]+") *
+                 "\$")
 end
 
 """
     _matchingreads(handle, pattern)
 
-Return the names of the `read:` data products of the working config that
-match a pattern, sorted; throw if there is none.
+Return the names of the `read:` data products of the working config that a
+pattern stands for, sorted. Where any entry is marked with the pattern it was
+expanded from, as `wildcard:`, they are the entries marked with this one;
+otherwise those whose names match it. A name holding `*` - a pattern's own
+entry, kept by the CLI - is never one of them. None is an empty result where
+the config holds the pattern's own entry, and an error where it does not, so
+that a pattern never configured is not taken for one that matched nothing.
 """
 function _matchingreads(handle::DataRegistryHandle, pattern::AbstractString)
     regex = _globregex(pattern)
+    entries = get(handle.config, "read", [])
+    marked = any(entry -> haskey(entry, "wildcard"), entries)
     names = sort!([String(entry["data_product"])
-                   for entry in get(handle.config, "read", [])
-                   if occursin(regex, entry["data_product"])])
+                   for entry in entries
+                   if !occursin('*', entry["data_product"]) &&
+                      (marked ? get(entry, "wildcard", nothing) == pattern :
+                       occursin(regex, entry["data_product"]))])
     isempty(names) &&
+        !any(entry -> entry["data_product"] == pattern, entries) &&
         throw(ConfigFileException("no read data product matches '$pattern' - check config file"))
     return names
 end

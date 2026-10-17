@@ -210,6 +210,14 @@ Test.@testset "_globregex()" begin
     @test !occursin(g("chelsa/bio1.2/*"), "chelsa/bio1x2/x")
     @test occursin(g("a+b(c)[d]{e}|f?^\$/*"), "a+b(c)[d]{e}|f?^\$/x")
     @test_throws ArgumentError g("era5/t2m")
+    # A segment is anything a registered name can hold but /, whether or not
+    # the naming convention allows it, and never the four characters the
+    # registry refuses, so that a pattern does not match itself
+    @test occursin(g("family/*"), "family/a b+c.d.")
+    @test !occursin(g("family/*"), "family/*")
+    for refused in ('[', ']', '?', '*')
+        @test !occursin(g("family/*"), "family/a$(refused)b")
+    end
 end
 
 Test.@testset "_repositorylocation()" begin

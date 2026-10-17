@@ -773,6 +773,71 @@ Test.@testset "link_read!() with a pattern and link_read_files!()" begin
     @test length(code_run["inputs"]) == 3
 end
 
+Test.@testset "a pattern read under each kind of working config" begin
+    written = "data_product/link_write/$uid"
+    arrays = "data_product/write_array/$uid"
+    both = "data_product/*/$uid"
+    nothing_yet = "data_product/nothing_yet/*"
+    # A working config holding these read entries, each a name, or a name
+    # with the mark of the pattern it was expanded from, or a pattern's own
+    # entry as a CLI may keep it
+    function opened(entries::Vector)
+        config = DataPipeline._createconfig(cpath)
+        for (name, mark) in entries
+            DataPipeline._addread(config, name,
+                                  use_version = occursin('*', name) ? nothing :
+                                                version)
+        end
+        data = DataPipeline.YAML.load_file(config)
+        for (entry, (_, mark)) in zip(data["read"], entries)
+            isnothing(mark) || (entry["wildcard"] = mark)
+        end
+        DataPipeline.YAML.write_file(config, data)
+        return DataPipeline.initialise(config, config)
+    end
+    path_of(handle, name) = (link_read!(handle, name);
+                             handle.inputs[(name, nothing)]["path"])
+
+    # As fair-cli 0.10.2 writes it - no pattern entries: names are matched,
+    # and a pattern that matches none is an error
+    handle = opened([written => nothing, arrays => nothing])
+    @test length(link_read_files!(handle, both)) == 2
+    @test_throws DataPipeline.ConfigFileException link_read_files!(handle,
+                                                                   nothing_yet)
+    @test !DataPipeline.canread(handle, nothing_yet)
+    DataPipeline.finalise(handle)
+
+    # With the patterns' own entries kept: still matched by name, the pattern
+    # entry not among its matches; a kept pattern that matches nothing is an
+    # empty result, and one never configured still an error
+    handle = opened([written => nothing, arrays => nothing, both => nothing,
+                        nothing_yet => nothing])
+    @test link_read_files!(handle, both) ==
+          [path_of(handle, written), path_of(handle, arrays)]
+    @test link_read_files!(handle, nothing_yet) == String[]
+    empty = link_read!(handle, nothing_yet)
+    @test isdir(empty) && isempty(readdir(empty))
+    @test DataPipeline.canread(handle, nothing_yet)
+    @test_throws DataPipeline.ConfigFileException link_read_files!(handle,
+                                                                   "data_product/never/*")
+    # A pattern names no single data product, so takes no issue
+    err = @test_throws ArgumentError raise_issue!(handle, both,
+                                                  "a pattern $uid")
+    @test occursin("is a pattern, which names no single data product",
+                   err.value.msg)
+    DataPipeline.finalise(handle)
+
+    # With the expanded entries marked: a pattern's entries are those marked
+    # with it, whatever else its matching would find - here `arrays`, which it
+    # matches but is no expansion of it - and none marked is an empty result
+    handle = opened([written => both, arrays => nothing, both => nothing,
+                        nothing_yet => nothing])
+    @test link_read_files!(handle, both) == [path_of(handle, written)]
+    @test link_read_files!(handle, nothing_yet) == String[]
+    @test DataPipeline.canread(handle, nothing_yet)
+    DataPipeline.finalise(handle)
+end
+
 Test.@testset "identify()" begin
     data_product = "data_product/identify/$uid"
     registry = handle.registry
