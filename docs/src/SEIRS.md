@@ -83,7 +83,7 @@ DataPipeline.rehearse("examples/fdp/SEIRSconfig.yaml", local_only = true)
 include("examples/fdp/seirs_sim.jl")
 ```
 
-`rehearse` has `fair run --ci` prepare the job, and the script, unchanged,
+`rehearse` has `fair` prepare the job as a run would, and the script, unchanged,
 opens a rehearsal in its `DataPipeline.initialise` and ends by collecting its
 two outputs in a folder, whose path `DataPipeline.finalise` prints and
 returns. Run after the recorded run above, it finds the results table

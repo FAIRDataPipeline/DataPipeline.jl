@@ -229,12 +229,15 @@ function _cliversion()
     return strip(read(_withenvironment(`$executable --version`), String))
 end
 
-# Run `fair` with these arguments, keeping what it prints and what it writes as
-# errors apart, with its exit status
-function _capturefair(command::Cmd, arguments::AbstractString...)
+# Run `fair` with these arguments, in the folder `dir` if one is given,
+# keeping what it prints and what it writes as errors apart, with its exit
+# status
+function _capturefair(command::Cmd, arguments::AbstractString...;
+                      dir::Union{Nothing, AbstractString} = nothing)
+    line = ignorestatus(_withenvironment(`$command $arguments`))
+    isnothing(dir) || (line = Cmd(line; dir = String(dir)))
     printed, errors = IOBuffer(), IOBuffer()
-    process = run(pipeline(ignorestatus(_withenvironment(`$command $arguments`)),
-                           stdout = printed, stderr = errors))
+    process = run(pipeline(line, stdout = printed, stderr = errors))
     return (status = process.exitcode, printed = String(take!(printed)),
             errors = String(take!(errors)))
 end

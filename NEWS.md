@@ -12,6 +12,9 @@
       `fair` that has none, they say how to stop a registry left running.
     - A local registry that does not answer is an error naming `fair registry
       start`; a remote one is no longer called local.
+    - `rehearse` prepares a job with `fair run --rehearse` where `fair` has it,
+      which stages nothing and makes no git check; otherwise with `fair run --ci
+      --dirty`, as before.
 
 - v0.55.0
   - Breaking changes:

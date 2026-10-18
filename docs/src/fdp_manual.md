@@ -30,7 +30,7 @@ time:
 ```julia
 using DataPipeline
 DataPipeline.fair"pull config.yaml"    # when inputs need registering or syncing
-DataPipeline.rehearse("config.yaml")   # fair run --ci --dirty prepares the job
+DataPipeline.rehearse("config.yaml")   # fair prepares the job as a run would
 include("script.jl")                    # or its lines, one at a time
 ```
 
