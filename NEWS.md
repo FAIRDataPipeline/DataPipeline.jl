@@ -6,6 +6,12 @@
       that exists, alone: a field it lacks stays unset rather than being filled
       from a later file, what later files say more or otherwise is told in an
       info message, and that first file being unreadable is an error.
+  - Running and rehearsing:
+    - `rehearse` keeps the local registry running until `finalise` or `discard`,
+      through a session of the CLI's where `fair` has session commands; with a
+      `fair` that has none, they say how to stop a registry left running.
+    - A local registry that does not answer is an error naming `fair registry
+      start`; a remote one is no longer called local.
 
 - v0.55.0
   - Breaking changes:

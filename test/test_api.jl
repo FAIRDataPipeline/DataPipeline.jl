@@ -1570,7 +1570,7 @@ Test.@testset "identify() a git repository" begin
     saved = DataPipeline.SESSION[]
     DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
                                                      mktempdir(), nothing,
-                                                     false)
+                                                     false, nothing)
     printed = mktemp() do path, io
         result = redirect_stdout(io) do
             return raise_issue!(registry, before, "rehearsed $uid")

@@ -35,6 +35,24 @@ Test.@testset "RegistryEndpoint" begin
     @test occursin("no token", sprint(show, registry))
 end
 
+Test.@testset "a registry that does not answer" begin
+    # One at a loopback address is the local registry, which the error says
+    # how to start; one anywhere else is not called local
+    for url in ("http://127.0.0.1:8000/api/", "http://localhost:8000/api/",
+        "http://[::1]:8000/api/")
+        msg = DataPipeline._unreachable(DataPipeline.RegistryEndpoint(url)).msg
+        @test startswith(msg, "cannot reach the local registry at $url: ")
+        @test occursin("`fair registry start`", msg)
+    end
+    @test DataPipeline._unreachable(DataPipeline.RegistryEndpoint("https://data.example.org/api/")).msg ==
+          "cannot reach the registry at https://data.example.org/api/"
+    # What a read meets where nothing listens
+    closed = DataPipeline.RegistryEndpoint("http://127.0.0.1:1/api/")
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline._getentry(closed,
+                                                                              DataPipeline.URIs.URI(closed.url))
+    @test occursin("`fair registry start`", err.value.msg)
+end
+
 Test.@testset "RegistryEndpoint() from the CLI's configuration" begin
     # A home and a project of our own, so that nothing depends on the
     # machine's configuration; `homedir()` reads USERPROFILE on Windows

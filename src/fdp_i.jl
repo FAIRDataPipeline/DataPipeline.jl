@@ -78,25 +78,29 @@ _runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
 # or the recorded run, in the folder its files are in
 function _opened(handle::DataRegistryHandle{Rehearsal})
     session = SESSION[]
-    SESSION[] = SessionRun(session.mode, session.job, handle, false)
+    SESSION[] = SessionRun(session.mode, session.job, handle, false,
+                           session.hold)
     return nothing
 end
 function _opened(handle::DataRegistryHandle{RecordedRun})
-    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false)
+    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false,
+                           nothing)
     return nothing
 end
 
 # Forget the session's run, so that `initialise` opens another: for the
 # tests, which open many runs in one process, and for whoever else knows
-# what that means - a run left open is not ended by it
-_resetsession!() = (SESSION[] = nothing; nothing)
+# what that means - a run left open is not ended by it, though its hold on
+# the registry is released
+_resetsession!() = (_releasehold!(); SESSION[] = nothing; nothing)
 
 # ... and ended, where it was the session's
 function _ended(handle::DataRegistryHandle)
     session = SESSION[]
     (!isnothing(session) && session.handle === handle) ||
         return nothing
-    SESSION[] = SessionRun(session.mode, session.job, handle, true)
+    SESSION[] = SessionRun(session.mode, session.job, handle, true,
+                           session.hold)
     return nothing
 end
 

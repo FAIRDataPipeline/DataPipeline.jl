@@ -505,22 +505,38 @@ function _showrun(io::IO, handle::DataRegistryHandle{Rehearsal})
     return println(io, "  outputs: ", handle.mode.outputs)
 end
 
+# What keeps the local registry up for a rehearsal, whose script reads it
+# after `rehearse` has returned: a session of the CLI's, opened for it by the
+# `fair` in `cli` and closed when it ends; the run that launched this process,
+# which names its session in `FDP_SESSION`; or nothing, where the CLI has no
+# session commands, and so leaves running a registry its commands start
+abstract type AbstractRegistryHold end
+struct RegistryHeldBySession <: AbstractRegistryHold
+    id::String
+    cli::Cmd
+end
+struct RegistryHeldByRun <: AbstractRegistryHold end
+struct RegistryNotHeld <: AbstractRegistryHold end
+
 """
-    SessionRun(mode, job, handle, ended)
+    SessionRun(mode, job, handle, ended, hold)
 
 The run this session is in, kept in `SESSION`: a recorded run opened by the
 script's `initialise()`, or a rehearsal from [`rehearse`](@ref) on. `mode` is
 its [`AbstractRunMode`](@ref); `job` the folder its files are in - the job
 folder a rehearsal was prepared in, known before its handle is; `handle` the
 [`DataRegistryHandle`](@ref) once `initialise` has opened one; `ended`
-whether `finalise` or `discard` has ended it. A session has one run, opened
-once: `initialise` refuses while it is open and after it has ended.
+whether `finalise` or `discard` has ended it; `hold` what keeps the local
+registry up for a rehearsal until it ends, `nothing` for a recorded run and
+once released. A session has one run, opened once: `initialise` refuses while
+it is open and after it has ended.
 """
 struct SessionRun
     mode::AbstractRunMode
     job::Union{Nothing, String}
     handle::Union{Nothing, DataRegistryHandle}
     ended::Bool
+    hold::Union{Nothing, AbstractRegistryHold}
 end
 const SESSION = Ref{Union{Nothing, SessionRun}}(nothing)
 
@@ -752,12 +768,19 @@ function _getentry(registry::RegistryEndpoint, url::URIs.URI)
         r = HTTP.request("GET", url, _headers(registry))
         return JSON.parse(String(r.body))
     catch e
-        msg = "couldn't connect to the local registry at $(registry.url) - is it running?"
-        if isa(e, Base.IOError) || isa(e, HTTP.ConnectError)
-            throw(ReadWriteException(msg))
-        end
+        (isa(e, Base.IOError) || isa(e, HTTP.ConnectError)) &&
+            throw(_unreachable(registry))
         rethrow()
     end
+end
+
+# The error for a registry that does not answer: one at a loopback address is
+# the local registry, which `fair registry start` starts and keeps running
+function _unreachable(registry::RegistryEndpoint)
+    host = URIs.URI(registry.url).host
+    host in ("127.0.0.1", "localhost", "::1") ||
+        return ReadWriteException("cannot reach the registry at $(registry.url)")
+    return ReadWriteException("cannot reach the local registry at $(registry.url): start it with `fair registry start`, or `DataPipeline.fair\"registry start\"` from Julia, and it runs until `fair registry stop`")
 end
 
 """

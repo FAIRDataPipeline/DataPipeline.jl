@@ -207,9 +207,8 @@ function _cratebytes(registry::RegistryEndpoint, url::String;
             end
             throw(ReadWriteException("the registry refused the crate: $detail"))
         end
-        if err isa Base.IOError || err isa HTTP.ConnectError
-            throw(ReadWriteException("couldn't connect to the local registry at $(registry.url) - is it running?"))
-        end
+        (err isa Base.IOError || err isa HTTP.ConnectError) &&
+            throw(_unreachable(registry))
         rethrow()
     end
 end

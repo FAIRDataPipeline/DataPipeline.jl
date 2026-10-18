@@ -31,6 +31,14 @@ its handle's files removed from the data store, and its job folder deleted if
 `fair run --ci` made it. A session that has recorded a code run cannot
 rehearse. A token in the environment is not used by a rehearsal.
 
+The rehearsal's script reads the local registry, so the rehearsal keeps it
+running until `finalise` or `discard` ends it: through a session of the
+CLI's, which ends with it, where `fair` has the session commands - and, run by
+`fair run`, through the run's own session. A `fair` without them leaves
+running any registry its `fair run --ci` started, and `finalise` and `discard`
+then say that `fair registry stop` stops it. A registry that `fair registry
+start` started runs until `fair registry stop` either way.
+
 The `fair` that prepares a user config is the one [`set_cli!`](@ref)
 recorded, else the `fair` on the path, else the copy [`install_cli`](@ref)
 made, and with none of those the call fails saying so. Julia started from an
@@ -41,18 +49,27 @@ function rehearse(path::AbstractString;
                   outputs::Union{Nothing, AbstractString} = nothing,
                   local_only::Bool = false, restart::Bool = false)
     session = SESSION[]
+    in_progress = false
     if !isnothing(session)
         session.mode isa RecordedRun &&
             throw(ReadWriteException("this session has recorded a code run: a rehearsal belongs in a session that records nothing"))
         if !session.ended
             restart ||
                 throw(ReadWriteException("a rehearsal prepared in $(session.job) is in progress: finalise or discard its handle, or call rehearse with restart = true to discard it"))
-            _discardcurrent()
+            in_progress = true
         end
     end
-    job = _jobfolder(path, local_only)
-    folder = _outputsfolder(outputs)
-    SESSION[] = SessionRun(Rehearsal(folder), job, nothing, false)
+    # Held before the rehearsal being restarted lets its hold go, so that a
+    # registry that hold started is not stopped and started again
+    hold = _holdregistry()
+    job, folder = try
+        in_progress && _discardcurrent()
+        (_jobfolder(path, local_only), _outputsfolder(outputs))
+    catch
+        _releaseregistry(hold)
+        rethrow()
+    end
+    SESSION[] = SessionRun(Rehearsal(folder), job, nothing, false, hold)
     println("rehearsing the run prepared in ", job)
     println("run the script, or its lines, in this session: ",
             "DataPipeline.finalise collects its outputs in ", folder,
@@ -104,7 +121,18 @@ function _discardcurrent()
     else
         discard(session.handle)
     end
+    _releasehold!()
     SESSION[] = nothing
+    return nothing
+end
+
+# Release the session's hold on the local registry, once
+function _releasehold!()
+    session = SESSION[]
+    (isnothing(session) || isnothing(session.hold)) && return nothing
+    SESSION[] = SessionRun(session.mode, session.job, session.handle,
+                           session.ended, nothing)
+    _releaseregistry(session.hold)
     return nothing
 end
 
@@ -398,12 +426,14 @@ function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
 end
 
 # End the session's rehearsal: delete the job folder where `fair run --ci`
-# made it, and mark the run ended, so that another `initialise()` is told to
-# rehearse again rather than finding no file
+# made it, mark the run ended, so that another `initialise()` is told to
+# rehearse again rather than finding no file, and release its hold on the
+# registry
 function _closerehearsal(handle::DataRegistryHandle{Rehearsal})
     _deletejob(handle.config_dir,
                handle.config["run_metadata"]["write_data_store"])
     _ended(handle)
+    _releasehold!()
     return nothing
 end
 

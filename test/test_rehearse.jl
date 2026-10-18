@@ -382,6 +382,20 @@ Test.@testset "rehearse() through the package's copy of fair" begin
     rm(user)
 end
 
+# What a stand-in for a fair with no session commands says to one, as such a
+# fair does: a usage error
+no_sessions = "[ \"\$1 \$2\" = \"registry session\" ] && " *
+              "{ echo \"Error: No such command 'session'.\" >&2; exit 2; }\n"
+
+# What `f` prints
+function printed_by(f::Function)
+    return mktemp() do path, io
+        redirect_stdout(f, io)
+        flush(io)
+        return read(path, String)
+    end
+end
+
 @static if !Sys.iswindows()
     Test.@testset "how rehearse() finds fair" begin
         # Stand-ins for fair: one printing a prepared job folder as fair does,
@@ -395,9 +409,11 @@ end
             return path
         end
         fake = stand_in("fair",
+                        no_sessions *
                         "echo Running run please wait\necho $prepared\n")
         failing = stand_in("failing", "echo no such thing >&2\nexit 1\n")
-        silent = stand_in("silent", "echo Running run please wait\n")
+        silent = stand_in("silent",
+                          no_sessions * "echo Running run please wait\n")
         user = user_config("fake", "rehearse/fake/$uid")
 
         # The preference first, whatever the path holds; set_cli! records
@@ -456,8 +472,8 @@ end
                                                                  cli = failing)
         @test occursin("exit status 1", err.value.msg)
 
-        # A failing fair preparing a job, recorded directly since set_cli!
-        # would refuse it: the error carries what it said
+        # A failing fair, recorded directly since set_cli! would refuse it:
+        # the error carries what it said
         DataPipeline.Preferences.set_preferences!(DataPipeline,
                                                   "cli" => failing,
                                                   force = true)
@@ -480,6 +496,122 @@ end
         end
         @test isnothing(current())
         rm(user)
+    end
+
+    Test.@testset "how rehearse() holds the registry" begin
+        # A stand-in for a fair with the session commands, logging each call
+        # and numbering the sessions it opens
+        bin = mktempdir()
+        calls_file = joinpath(bin, "calls")
+        count_file = joinpath(bin, "count")
+        sessions = joinpath(bin, "fair")
+        write(sessions,
+              """
+              #!/bin/sh
+              echo "\$*" >> $calls_file
+              case "\$1 \$2 \$3" in
+                "registry session open")
+                  n=\$((\$(cat $count_file 2>/dev/null || echo 0) + 1))
+                  echo \$n > $count_file
+                  echo "{\\"session\\": \\"s\$n\\", \\"registry_url\\": \\"http://127.0.0.1:8000/api/\\", \\"token_file\\": \\"/nowhere/token\\"}" ;;
+                "registry session close") ;;
+                *) echo "fair, version 9.9.9" ;;
+              esac
+              """)
+        chmod(sessions, 0o755)
+        calls() = isfile(calls_file) ? readlines(calls_file) : String[]
+        opening = "registry session open --pid $(getpid()) --json"
+        # Made first: making a job folder forgets the session's run
+        folder = Dict(name => job_folder("held-$name")
+                      for name in ("main", "earlier", "later", "run", "none",
+                          "none-run", "refused"))
+        @test DataPipeline.set_cli!(sessions) == sessions
+        try
+            withenv("FDP_SESSION" => nothing) do
+                # Opened by rehearse in this process's name, closed by
+                # finalise
+                DataPipeline.rehearse(folder["main"])
+                @test calls()[end] == opening
+                @test current().hold isa DataPipeline.RegistryHeldBySession
+                @test current().hold.id == "s1"
+                DataPipeline.finalise(DataPipeline.initialise())
+                @test calls()[end] == "registry session close s1"
+                @test isnothing(current().hold)
+                # Restarted, the new session opens before the old one closes,
+                # so that the registry is held throughout; discarded, it
+                # closes
+                DataPipeline.rehearse(folder["earlier"])
+                DataPipeline.rehearse(folder["later"], restart = true)
+                @test calls()[(end - 2):end] ==
+                      [opening, opening, "registry session close s2"]
+                DataPipeline._discardcurrent()
+                @test calls()[end] == "registry session close s3"
+                @test isnothing(current())
+            end
+            # A run that names its session holds the registry: nothing opened
+            withenv("FDP_SESSION" => "the-run") do
+                before = length(calls())
+                DataPipeline.rehearse(folder["run"])
+                @test current().hold isa DataPipeline.RegistryHeldByRun
+                DataPipeline._discardcurrent()
+                @test length(calls()) == before
+            end
+            # A session whose fair has gone is warned of, not an error
+            @test_logs((:warn,
+                        r"^`fair registry session close s9` failed: "),
+                       DataPipeline._releaseregistry(DataPipeline.RegistryHeldBySession("s9",
+                                                                                        Cmd([joinpath(bin,
+                                                                                                      "gone")]))))
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+
+        # A fair with no session commands holds nothing, and the end of a
+        # rehearsal says how to stop a registry it may have left running -
+        # unless this process was launched to run a job, as the tests are
+        old = joinpath(bin, "old")
+        write(old, "#!/bin/sh\n" * no_sessions * "echo fair, version 0.10.2\n")
+        chmod(old, 0o755)
+        @test DataPipeline.set_cli!(old) == old
+        try
+            withenv("FDP_SESSION" => nothing) do
+                withenv("FDP_CONFIG_DIR" => nothing) do
+                    DataPipeline.rehearse(folder["none"])
+                    @test current().hold isa DataPipeline.RegistryNotHeld
+                    @test occursin("`fair registry stop` stops it",
+                                   printed_by(DataPipeline._discardcurrent))
+                end
+                @test haskey(ENV, "FDP_CONFIG_DIR")
+                DataPipeline.rehearse(folder["none-run"])
+                @test !occursin("fair registry stop",
+                                printed_by(DataPipeline._discardcurrent))
+            end
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+
+        # A fair that has the commands and refuses, or answers with no
+        # session, stops the rehearsal before it starts
+        refusing = joinpath(bin, "refusing")
+        write(refusing,
+              "#!/bin/sh\n[ \"\$1\" = --version ] && { echo fair; exit 0; }\n" *
+              "echo 'the registry runs on another host' >&2\nexit 1\n")
+        garbled = joinpath(bin, "garbled")
+        write(garbled, "#!/bin/sh\necho not a session\n")
+        for (cli, says) in ((refusing, "runs on another host"),
+            (garbled, "printed no session"))
+            chmod(cli, 0o755)
+            DataPipeline.set_cli!(cli)
+            try
+                withenv("FDP_SESSION" => nothing) do
+                    err = @test_throws ReadWriteException DataPipeline.rehearse(folder["refused"])
+                    @test occursin(says, err.value.msg)
+                end
+                @test isnothing(current())
+            finally
+                DataPipeline.set_cli!(nothing)
+            end
+        end
     end
 end
 
