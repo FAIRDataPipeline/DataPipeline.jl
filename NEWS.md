@@ -1,5 +1,12 @@
 # NEWS
 
+- v0.56.0
+  - Breaking changes:
+    - A code repository's metadata is taken from the first of its metadata files
+      that exists, alone: a field it lacks stays unset rather than being filled
+      from a later file, what later files say more or otherwise is told in an
+      info message, and that first file being unreadable is an error.
+
 - v0.55.0
   - Breaking changes:
     - `initialise()` with no arguments reads the job folder `fair run` names in

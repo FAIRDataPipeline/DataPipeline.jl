@@ -203,7 +203,7 @@ function _rehearserepository(registry::RegistryEndpoint, run_metadata::Dict)
         println("would register the code repository at ", commit,
                 ", its authors ", authors,
                 isempty(metadata.files) ? "" :
-                " (from $(join(metadata.files, ", ")))")
+                " (from $(first(metadata.files)))")
     else
         println("would keep the code repository's object at ", commit, ", ",
                 held)

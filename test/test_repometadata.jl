@@ -159,33 +159,48 @@ keywords = ["not", "read"]
                              "JuliaProject.toml" => replace(PROJECT,
                                      "1.2.1" => "9.9.9"),
                              "Project.toml" => PROJECT))
-        # The authors are codemeta.json's; .zenodo.json adds an identifier to
-        # an author named the same way and says so; it gives another to one
-        # identified already, which is warned of and passed over; it adds no
-        # author of its own
+        # Everything is codemeta.json's; what each later file says more or
+        # otherwise is told, in one message: other authors, an identifier
+        # for an author named the same way, another licence and keywords
         meta = @test_logs((:info,
-                           r"^\.zenodo\.json gives Charles Babbage the identifier https://orcid\.org/0000-0001-5109-3700, which codemeta\.json lacks$"),
+                           r"^the repository's metadata at the working tree at .* is codemeta\.json's alone, and files trusted less say more or otherwise: \.zenodo\.json gives the authors Ada M\. Lovelace, Charles Babbage, Somebody Else, where codemeta\.json gives Ada M Lovelace, Charles Babbage, An Example Institute, No Identifier; \.zenodo\.json gives Charles Babbage the identifier https://orcid\.org/0000-0001-5109-3700, which codemeta\.json lacks; \.zenodo\.json gives the licence Apache-2\.0, where codemeta\.json gives https://spdx\.org/licenses/MIT; \.zenodo\.json gives the keywords zenodo, where codemeta\.json gives julia, examples; CITATION\.cff gives the authors Ludwig van Beethoven Jr\., An Example Entity, where .*; JuliaProject\.toml gives the authors Ada M Lovelace, Charles Babbage, where .*; Project\.toml gives the authors Ada M Lovelace, Charles Babbage, where codemeta\.json gives Ada M Lovelace, Charles Babbage, An Example Institute, No Identifier$"),
                           DataPipeline._repositorymetadata(all.dir))
         @test meta.authors == ["Ada M Lovelace", "Charles Babbage",
             "An Example Institute", "No Identifier"]
-        @test meta.identifiers["Charles Babbage"] ==
-              "https://orcid.org/0000-0001-5109-3700"
+        @test !haskey(meta.identifiers, "Charles Babbage")
         @test meta.files == ["codemeta.json", ".zenodo.json", "CITATION.cff",
             "JuliaProject.toml", "Project.toml"]
-        # Every other field is the first file's that holds it
         @test meta.licence == "https://spdx.org/licenses/MIT"
         @test meta.keywords == ["julia", "examples"]
         @test meta.title == "Example.jl"
-        # A field the first file lacks is the next one's
+        @test meta.version == "v1.2.0"
+        # A field the first file lacks stays empty, whatever a later file says
         sparse = committed(Dict("codemeta.json" => """{"name": "Sparse"}""",
                                 ".zenodo.json" => ZENODO))
-        filled = DataPipeline._repositorymetadata(sparse.dir)
-        @test filled.title == "Sparse"
-        @test filled.licence == "Apache-2.0"
-        @test filled.keywords == ["zenodo"]
-        @test filled.authors == ["Ada M. Lovelace", "Charles Babbage",
-            "Somebody Else"]
-        # A different identifier for a name identified already is warned of
+        lacking = r"^the repository's metadata at the working tree at .* is codemeta\.json's alone, and files trusted less say more or otherwise: \.zenodo\.json gives the authors Ada M\. Lovelace, Charles Babbage, Somebody Else, which codemeta\.json lacks; \.zenodo\.json gives the licence Apache-2\.0, which codemeta\.json lacks; \.zenodo\.json gives the keywords zenodo, which codemeta\.json lacks"
+        unfilled = @test_logs((:info, Regex(lacking.pattern * "\$")),
+                              DataPipeline._repositorymetadata(sparse.dir))
+        @test unfilled.title == "Sparse"
+        @test isempty(unfilled.authors) && isempty(unfilled.identifiers)
+        @test isnothing(unfilled.licence) && isempty(unfilled.keywords)
+        @test isnothing(unfilled.version) && isnothing(unfilled.description)
+        # The title is told only where it is asked for, as for a release
+        @test_logs((:info,
+                    Regex(lacking.pattern *
+                          "; \\.zenodo\\.json gives the title 'Example\\.jl from Zenodo', where codemeta\\.json gives 'Sparse'\$")),
+                   DataPipeline._repositorymetadata(sparse.dir, title = true))
+        # A later file that says nothing more or otherwise is not told of:
+        # the same authors by the same names, and a title, not asked for
+        agree = committed(Dict("codemeta.json" => CODEMETA,
+                               "Project.toml" => """
+                               name = "Example"
+                               authors = ["Ada M. Lovelace <ada@example.com>",
+                                          "Charles Babbage", "An Example Institute",
+                                          "No Identifier"]
+                               """))
+        @test_logs DataPipeline._repositorymetadata(agree.dir)
+        # A different identifier for an author is told of, the first file's
+        # kept
         clash = committed(Dict(".zenodo.json" => ZENODO,
                                "CITATION.cff" => """
                                authors:
@@ -193,8 +208,8 @@ keywords = ["not", "read"]
                                    family-names: Babbage
                                    orcid: https://orcid.org/0000-0000-0000-0000
                                """))
-        clashed = @test_logs((:warn,
-                              r"^CITATION\.cff gives Charles Babbage the identifier https://orcid\.org/0000-0000-0000-0000, and \.zenodo\.json gives https://orcid\.org/0000-0001-5109-3700, which is kept$"),
+        clashed = @test_logs((:info,
+                              r"; CITATION\.cff gives Charles Babbage the identifier https://orcid\.org/0000-0000-0000-0000, where \.zenodo\.json gives https://orcid\.org/0000-0001-5109-3700$"),
                              DataPipeline._repositorymetadata(clash.dir))
         @test clashed.identifiers["Charles Babbage"] ==
               "https://orcid.org/0000-0001-5109-3700"
@@ -209,23 +224,39 @@ keywords = ["not", "read"]
         at_commit = DataPipeline._repositorymetadata(fixture.repo, fixture.sha)
         @test at_commit.version == "1.2.1"
         @test at_commit.files == ["Project.toml"]
-        in_tree = DataPipeline._repositorymetadata(fixture.dir)
+        in_tree = @test_logs((:info,
+                              r"^the repository's metadata at the working tree at .* is \.zenodo\.json's alone, and files trusted less say more or otherwise: Project\.toml gives the authors Ada M Lovelace, Charles Babbage, where \.zenodo\.json gives Ada M\. Lovelace, Charles Babbage, Somebody Else$"),
+                             DataPipeline._repositorymetadata(fixture.dir))
         @test in_tree.version == "1.2.0"
         @test in_tree.files == [".zenodo.json", "Project.toml"]
         # No files, nothing said
         empty = DataPipeline._repositorymetadata(mktempdir())
         @test isempty(empty.authors) && isempty(empty.files)
         @test isnothing(empty.licence) && isnothing(empty.version)
-        # A file that cannot be read is warned of and passed over
+        # The first file that exists being unreadable is an error, not a
+        # reason to read the next
         broken = committed(Dict("codemeta.json" => "{ not json",
                                 "Project.toml" => PROJECT))
-        read_on = @test_logs((:warn, r"^cannot read codemeta\.json at commit "),
-                             DataPipeline._repositorymetadata(broken.repo,
-                                                              broken.sha))
-        @test read_on.files == ["Project.toml"]
-        @test read_on.version == "1.2.1"
+        unread = try
+            DataPipeline._repositorymetadata(broken.repo, broken.sha)
+        catch err
+            err
+        end
+        @test unread isa DataPipeline.ReadWriteException
+        @test startswith(unread.msg,
+                         "cannot read codemeta.json at commit $(broken.sha), the most trusted of the repository's metadata files there: ")
+        # A later file that cannot be read is warned of and passed over
+        later = committed(Dict("codemeta.json" => CODEMETA,
+                               ".zenodo.json" => "{ not json"))
+        read_on = @test_logs((:warn,
+                              r"^cannot read \.zenodo\.json at commit [0-9a-f]+, so it is passed over: "),
+                             DataPipeline._repositorymetadata(later.repo,
+                                                              later.sha))
+        @test read_on.files == ["codemeta.json"]
+        @test read_on.licence == "https://spdx.org/licenses/MIT"
         close(fixture.repo)
         close(broken.repo)
+        close(later.repo)
     end
 
     @testset "at a commit on GitHub" begin
@@ -248,6 +279,22 @@ keywords = ["not", "read"]
         elsewhere = DataPipeline._repositorymetadata("https://gitlab.com/group/sub/repo.git",
                                                      sha; fetch)
         @test isempty(asked) && isempty(elsewhere.files)
+        # A file that cannot be fetched may exist: before any is found, an
+        # error; after, warned of and passed over
+        remote = "https://github.com/FAIRDataPipeline/DataPipeline.jl.git"
+        down(url) = throw(DataPipeline.ReadWriteException("cannot reach $url: down"))
+        first_down(url) = endswith(url, "/codemeta.json") ? down(url) :
+                          endswith(url, "/Project.toml") ? PROJECT : nothing
+        @test_throws DataPipeline.ReadWriteException DataPipeline._repositorymetadata(remote,
+                                                                                      sha;
+                                                                                      fetch = first_down)
+        later_down(url) = endswith(url, "/Project.toml") ? down(url) :
+                          endswith(url, "/codemeta.json") ? CODEMETA : nothing
+        found = @test_logs((:warn,
+                            r"^cannot read Project\.toml at commit [0-9a-f]+ of .*, so it is passed over: cannot reach .*: down$"),
+                           DataPipeline._repositorymetadata(remote, sha;
+                                                            fetch = later_down))
+        @test found.files == ["codemeta.json"]
     end
 
     @testset "identifiers and names" begin

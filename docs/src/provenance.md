@@ -135,8 +135,9 @@ message says so.
 
 A run records the commit of the code it ran. `DataPipeline.register_release!`
 records that a commit is a release - its version read from the commit's tag,
-`v1.2.0` say, its authors and licence from the repository's `codemeta.json`,
-`.zenodo.json`, `CITATION.cff` or project file - as the registry's release
+`v1.2.0` say, its authors and licence from the first of the repository's
+`codemeta.json`, `.zenodo.json`, `CITATION.cff` and project file that it has -
+as the registry's release
 record and as a data product, `<organisation>:<repository>@<version>`, which
 the traces and the crate take as they take any data product. A release then
 names the code before it, so that a problem fixed in it can be raised on

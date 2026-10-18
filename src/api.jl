@@ -28,11 +28,13 @@ supported.
 
 The code repository is registered at its commit as one object, kept where the
 registry holds one already. A new one has the repository's own authors, read
-from its metadata files - `codemeta.json`, `.zenodo.json`, `CITATION.cff`,
-`JuliaProject.toml`, `Project.toml`, the first that lists any - as they are at
-the commit in the clone `run_metadata.local_repo`, or in its working tree for
-a run from uncommitted changes; with none, the runner. The licence and
-keywords the files give are added to the object either way.
+from the first of its metadata files that it has - `codemeta.json`,
+`.zenodo.json`, `CITATION.cff`, `JuliaProject.toml`, `Project.toml` - as it is
+at the commit in the clone `run_metadata.local_repo`, or in its working tree
+for a run from uncommitted changes; where that file lists none, the runner.
+The licence and keywords that file gives are added to the object either way.
+Nothing is taken from the files after it, even what it lacks, and what they
+say more or otherwise is told; that file being unreadable is an error.
 
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code

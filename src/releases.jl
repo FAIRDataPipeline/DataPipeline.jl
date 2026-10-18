@@ -295,14 +295,14 @@ function _releasetarget(registry::RegistryEndpoint,
         sha = _namedreleasecommit(registry, commit, nothing, remote)
         return _releaseat(sha, named, nothing, remote,
                           _repositorytags(remote),
-                          _repositorymetadata(remote, sha))
+                          _repositorymetadata(remote, sha, title = true))
     end
     return LibGit2.with(LibGit2.GitRepo(commit.repo)) do clone
         remote = _gitremoteurl(clone, commit.repo)
         sha = _selectedreleasecommit(registry, commit, clone, remote)
         return _releaseat(sha, named, commit.repo, remote,
                           _repositorytags(clone),
-                          _repositorymetadata(clone, sha))
+                          _repositorymetadata(clone, sha, title = true))
     end
 end
 # ... from the commit, the tags, the files and where they were read
