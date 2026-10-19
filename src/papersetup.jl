@@ -408,7 +408,11 @@ function _createenvironment(folder::AbstractString)
     mkpath(folder)
     julia = joinpath(Sys.BINDIR, Base.julia_exename())
     command = `$julia --startup-file=no --project=$folder -e 'import Pkg; Pkg.add("DataPipeline")'`
-    run(addenv(command, "JULIA_PKG_PRECOMPILE_AUTO" => "0"))
+    # A load path of its own, since the caller's may lack the standard
+    # library, as under `Pkg.test`
+    loadpath = join(["@", "@stdlib"], Sys.iswindows() ? ';' : ':')
+    run(addenv(command, "JULIA_PKG_PRECOMPILE_AUTO" => "0",
+               "JULIA_LOAD_PATH" => loadpath))
     return [joinpath(folder, "Project.toml"), joinpath(folder, "Manifest.toml")]
 end
 
