@@ -370,10 +370,8 @@ Test.@testset "new components aren't added to existing data products" begin
                                                          "symptom-delay"))
     for (writer, writing) in writers
         data_product = "data_product/$writer/$uid"
-        # A config other than that of the run that wrote the version, which a
-        # run started in the same second would otherwise be taken to be
         config = DataPipeline._createconfig(cpath)
-        DataPipeline._addwrite(config, data_product, "adding a component",
+        DataPipeline._addwrite(config, data_product, "description",
                                use_version = version)
         handle = DataPipeline.initialise(config, config)
         writing(handle, data_product)
@@ -936,6 +934,38 @@ Test.@testset "identify()" begin
     end
 end
 
+Test.@testset "initialise() opens a new code run, dated in UTC" begin
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, "data_product/new_run/$uid", "a new run",
+                           file_type = "txt", use_version = version)
+    # The code run of a handle, as the registry holds it
+    run_of(handle) = DataPipeline._getentry(handle.registry,
+                                            URIs.URI(handle.code_run_obj))
+
+    # The registry records the date to the second. Where the machine's own
+    # zone is UTC this cannot tell local time from UTC
+    before = floor(now(UTC), Second)
+    handle = DataPipeline.initialise(config, config)
+    @test before <= DateTime(first(run_of(handle)["run_date"], 19)) <= now(UTC)
+
+    # Two runs of one config started in the same second are two code runs:
+    # pairs are started until one shares a second
+    pair = nothing
+    for _ in 1:20
+        DataPipeline._resetsession!()
+        first_run = DataPipeline.initialise(config, config)
+        DataPipeline._resetsession!()
+        second_run = DataPipeline.initialise(config, config)
+        if run_of(first_run)["run_date"] == run_of(second_run)["run_date"]
+            pair = (first_run, second_run)
+            break
+        end
+    end
+    DataPipeline._resetsession!()
+    @test !isnothing(pair)
+    @test !isnothing(pair) && pair[1].code_run_uuid != pair[2].code_run_uuid
+end
+
 Test.@testset "a run from uncommitted changes" begin
     registry = handle.registry
     # What `fair run --dirty` records for a working tree with uncommitted
@@ -1237,8 +1267,8 @@ Test.@testset "identify() a git repository" begin
                                               "authors" =>
                                                   [DataPipeline._getauthorurl(registry)]))["url"]
     DataPipeline._postentry(registry, "code_run",
-                            Dict("run_date" => Dates.format(now(),
-                                              "yyyy-mm-dd HH:MM:SS"),
+                            Dict("run_date" => Dates.format(now(UTC),
+                                              "yyyy-mm-ddTHH:MM:SSZ"),
                                  "description" => "python-style run $uid",
                                  "code_repo" => object_url,
                                  "model_config" => handle.config_obj,
@@ -2105,14 +2135,11 @@ end
 Test.@testset "an output that is registered already" begin
     name = "data_product/unchanged/$uid"
     tabled = "data_product/unchanged/tabled/$uid"
-    # A config that offers both names at a version, one as text, one as TOML.
-    # A run started in the same second as one of the same config is taken to
-    # be that run, so a run whose outputs are checked takes a description of
-    # its own
-    function offering(use_version; description = "description")
+    # A config that offers both names at a version, one as text, one as TOML
+    function offering(use_version)
         config = DataPipeline._createconfig(cpath)
         for (written, file_type) in ((name, "txt"), (tabled, "toml"))
-            DataPipeline._addwrite(config, written, description,
+            DataPipeline._addwrite(config, written, "description",
                                    file_type = file_type,
                                    use_version = use_version)
         end
@@ -2174,7 +2201,7 @@ Test.@testset "an output that is registered already" begin
     # A version that exists may be written as its own file, though it is not
     # the highest: a reproduction, registered as nothing, an issue raised with
     # it being one with that version
-    handle = offering("0.0.1", description = "reproducing a version")
+    handle = offering("0.0.1")
     write(link_write!(handle, name), "written $uid\n")
     raise_issue!(handle, name, "reproduced $uid")
     DataPipeline.finalise(handle)

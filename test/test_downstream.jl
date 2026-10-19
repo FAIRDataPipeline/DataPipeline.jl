@@ -158,7 +158,7 @@ Test.@testset "downstream() of a chain" begin
     @test occursin("   made $namespace:$second@v0.0.1  sha1 $(first(first_second.hash, 8))  superseded by v0.0.2\n       issue, severity 2: downstream issue $uid\n",
                    text)
     @test occursin(Regex("\\n +made $namespace:$third@v0.0.1  sha1 "), text)
-    @test occursin("   -> run $(first(using_second.code_run_uuid, 8)) on ",
+    @test occursin(Regex("   -> run $(first(using_second.code_run_uuid, 8)) on \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC"),
                    text)
     @test occursin("      made $namespace:$fourth@v0.0.1  sha1 ", text)
     @test occursin("  (above)\n", text)

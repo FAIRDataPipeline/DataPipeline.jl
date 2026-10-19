@@ -7,8 +7,8 @@
 
 Read the working config that `fair run` wrote, register the config, the
 submission script and the code repository with the local registry, open a new
-code run, and return the [`DataRegistryHandle`](@ref) the rest of the API
-works on. The registry is `run_metadata.local_data_registry_url` (default
+code run, dated in UTC, and return the [`DataRegistryHandle`](@ref) the rest of
+the API works on. The registry is `run_metadata.local_data_registry_url` (default
 `$DEFAULT_REGISTRY_URL`) and the API version `run_metadata.api_version`
 (default `$DEFAULT_API_VERSION`). `token` is the registry's access token, which
 registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
@@ -82,13 +82,15 @@ function _openrun(mode::RecordedRun, config::Dict, config_file::String,
     endswith(run_metadata["latest_commit"], "-dirty") &&
         _flagdirtyrepository(registry, repo_url, run_metadata["latest_commit"])
 
-    run_date = Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS")
-    code_run = _postentry(registry, "code_run",
-                          Dict("run_date" => run_date,
-                               "description" => run_metadata["description"],
-                               "code_repo" => repo_url,
-                               "model_config" => config_url,
-                               "submission_script" => script_url))
+    # Always a new code run: two runs of one config may start in the same
+    # second, and an entry found by these fields would be the other's
+    run_date = Dates.format(Dates.now(Dates.UTC), "yyyy-mm-ddTHH:MM:SSZ")
+    code_run = _createentry(registry, "code_run",
+                            Dict("run_date" => run_date,
+                                 "description" => run_metadata["description"],
+                                 "code_repo" => repo_url,
+                                 "model_config" => config_url,
+                                 "submission_script" => script_url))
     println("pipeline initialised.")
 
     return _newhandle(mode, config, config_file, registry,

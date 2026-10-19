@@ -67,14 +67,14 @@ DataPipeline.provenance("testing:SEIRS_model/report/julia", depth = 2)   # two r
 
 ```
 Provenance of testing:SEIRS_model/report/julia@v0.0.1  sha1 c896cfb9
-<- run a1b118f0 on 2026-10-15 11:33, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
+<- run a1b118f0 on 2026-10-15 11:33 UTC, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
    used testing:SEIRS_model/summary/julia@v0.0.1  sha1 b6ae4389
        issue, severity 3: an issue over an input and an output
-   <- run 577160a1 on 2026-10-15 11:33, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
+   <- run 577160a1 on 2026-10-15 11:33 UTC, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
       used PSU:SEIRS_model/parameters@v1.0.0  sha1 6294a595  superseded by v1.0.1  from https://doi.org/10.1038/s41592-020-0856-2 (supplement)
           issue, severity 2: an issue on the parameters
       used testing:SEIRS_model/results/model_output/julia@v0.0.1  sha1 e8912ec2
-      <- run c30fbbdd on 2026-10-15 11:33, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
+      <- run c30fbbdd on 2026-10-15 11:33 UTC, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
          used PSU:SEIRS_model/parameters@v1.0.0  (above)
 ```
 

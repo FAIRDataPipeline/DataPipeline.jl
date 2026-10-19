@@ -15,6 +15,10 @@
     - `rehearse` prepares a job with `fair run --rehearse` where `fair` has it,
       which stages nothing and makes no git check; otherwise with `fair run --ci
       --dirty`, as before.
+    - A run's date is posted in UTC, as the registry reads it, rather than in
+      local time; the dates shown say UTC.
+    - Each `initialise` registers a new code run: two runs of one config started
+      in the same second were one.
   - Writing:
     - A `write:` entry may name a version that exists, to reproduce it: a file
       that is that version's registers nothing, and any other is refused at

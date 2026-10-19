@@ -155,7 +155,7 @@ end
 function _throughline(through::TraceRun, making::TraceProduct, input::Bool)
     return string(input ? "used by " : "in ", "run ", first(through.uuid, 8),
                   " on ", Dates.format(through.date, "yyyy-mm-dd HH:MM"),
-                  ", which made ", _productlabel(making))
+                  " UTC, which made ", _productlabel(making))
 end
 
 """
@@ -248,7 +248,7 @@ A code run the registry holds.
 
 # Fields
 - `uuid`: its uuid, by which `fair` and `coderuns.txt` refer to it
-- `run_date`: when it ran, as the registry records it
+- `run_date`: when it ran, in UTC, as the registry records it
 - `description`: its description
 - `url`: its URL in the registry
 - `outputs`: the [`DataProductRecord`](@ref)s it wrote
@@ -262,7 +262,7 @@ struct CodeRunRecord
 end
 
 function Base.show(io::IO, run::CodeRunRecord)
-    return print(io, "run ", first(run.uuid, 8), " (", run.run_date, "): ",
+    return print(io, "run ", first(run.uuid, 8), " (", run.run_date, " UTC): ",
                  run.description)
 end
 
@@ -275,7 +275,8 @@ A commit of a git repository that the registry holds runs for.
 - `sha`: the commit's hash
 - `dirty`: whether its runs were made from a working tree with uncommitted
   changes, which the registry records as `<sha>-dirty`
-- `date`: its commit date, or `nothing` when the local clone does not have it
+- `date`: its commit date, in UTC, or `nothing` when the local clone does not
+  have it
 - `objects`: the URLs of the registry objects that stand for it
 - `runs`: the [`CodeRunRecord`](@ref)s made from it, newest first
 - `issues`: the [`IssueRecord`](@ref)s raised against it
@@ -350,7 +351,7 @@ function Base.show(io::IO, ::MIME"text/plain", id::RepositoryIdentification)
     for commit in id.commits
         println(io, "  commit ", commit.sha, commit.dirty ? "-dirty" : "",
                 isnothing(commit.date) ? ", not in this clone" :
-                ", committed $(commit.date)",
+                ", committed $(commit.date) UTC",
                 commit.sha == id.head ? " (checked out)" : "",
                 isnothing(commit.release) ? "" : ", release $(commit.release)")
         for issue in commit.issues

@@ -130,7 +130,7 @@ A code run in a [`Trace`](@ref).
 # Fields
 - `url`: its registry URL, the key it has in the trace
 - `uuid`: its uuid
-- `date`: when it started
+- `date`: when it started, in UTC
 - `description`: its description
 - `repository`: the URL of the code repository it ran from, or `nothing`
 - `commit`: the commit it ran at, `<sha>-dirty` for a working tree with
@@ -326,7 +326,7 @@ end
 # commit, and the release that commit is
 function _runline(run::TraceRun)
     line = string("run ", first(run.uuid, 8), " on ",
-                  Dates.format(run.date, "yyyy-mm-dd HH:MM"))
+                  Dates.format(run.date, "yyyy-mm-dd HH:MM"), " UTC")
     isnothing(run.repository) && return line
     repository = replace(run.repository, r"^[a-z]+://" => "")
     commit = isnothing(run.commit) ? "" :
