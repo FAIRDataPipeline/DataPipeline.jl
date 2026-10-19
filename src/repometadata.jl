@@ -2,7 +2,8 @@
 
 # What a code repository says of itself in its metadata files - its authors,
 # licence, keywords, description, version and title - read from the files as
-# they are at a commit of a clone, in a working tree, or at a commit on GitHub.
+# they are at a commit of a clone, in a working tree, or at a commit on GitHub;
+# and what they say of a paper the repository holds.
 
 """
     RepositoryMetadata
@@ -65,18 +66,20 @@ function _repositorymetadata(remote::AbstractString, commit::AbstractString;
     end
 end
 
-# What the metadata files say: what the first that exists says, `text(name)`
-# giving each file's text or `nothing` where there is none, and `place` saying
-# where they are read from. The first being unreadable is an error, since
-# taking a less trusted file in its place could register what it contradicts;
-# a later one is passed over. What the later files say more or otherwise is
-# told, the title only where `title` is true
+# What the metadata files say: what the first in `order` that exists says,
+# `text(name)` giving each file's text or `nothing` where there is none, and
+# `place` saying where they are read from. The first being unreadable is an
+# error, since taking a less trusted file in its place could register what it
+# contradicts; a later one is passed over. What the later files say more or
+# otherwise is told, as of `described`, the title only where `title` is true
 function _repositorymetadata(text::Function, place::AbstractString;
-                             title::Bool = false)
+                             title::Bool = false,
+                             order::Tuple = REPOSITORY_METADATA_FILES,
+                             described::String = "the repository's metadata")
     trusted = nothing
     differences = String[]
     files = String[]
-    for (name, reader) in REPOSITORY_METADATA_FILES
+    for (name, reader) in order
         said = try
             content = text(name)
             isnothing(content) ? nothing : reader(content)
@@ -98,7 +101,7 @@ function _repositorymetadata(text::Function, place::AbstractString;
         end
     end
     isempty(differences) ||
-        @info "the repository's metadata at $place is $(first(trusted))'s alone, and files trusted less say more or otherwise: $(join(differences, "; "))"
+        @info "$described at $place is $(first(trusted))'s alone, and files trusted less say more or otherwise: $(join(differences, "; "))"
     said = isnothing(trusted) ? _filesays() : last(trusted)
     return RepositoryMetadata(said.authors, said.identifiers, said.licence,
                               said.keywords, said.description, said.version,
@@ -323,12 +326,12 @@ function _zenodosays(text::AbstractString)
                      title = _textof(get(meta, "title", nothing)))
 end
 
-# What `CITATION.cff` says: a person by `given-names`, `name-particle`,
-# `family-names` and `name-suffix`, identified by `orcid`; an entity by `name`
-function _citationcffsays(text::AbstractString)
-    meta = YAML.load(text)
-    meta isa AbstractDict ||
-        throw(ArgumentError("CITATION.cff holds no YAML mapping"))
+# What `CITATION.cff` says at its top level ...
+_citationcffsays(text::AbstractString) = _citationcffsays(_cffmapping(text))
+# ... or what one of its citations says: a person by `given-names`,
+# `name-particle`, `family-names` and `name-suffix`, identified by `orcid`; an
+# entity by `name`
+function _citationcffsays(meta::AbstractDict)
     people = _authorsof(_aslist(get(meta, "authors", nothing))) do person
         parts = [_textof(get(person, key, nothing))
                  for key in ("given-names", "name-particle", "family-names",
@@ -363,6 +366,27 @@ function _projectsays(text::AbstractString)
                      title = _textof(get(project, "name", nothing)))
 end
 
+# The text of `CITATION.cff` as a mapping
+function _cffmapping(text::AbstractString)
+    meta = YAML.load(text)
+    meta isa AbstractDict ||
+        throw(ArgumentError("CITATION.cff holds no YAML mapping"))
+    return meta
+end
+
+# The citation of a paper in `CITATION.cff`: its `preferred-citation` where it
+# has one, its top level then describing something else in the repository,
+# else its top level
+function _papercitation(meta::AbstractDict)
+    preferred = get(meta, "preferred-citation", nothing)
+    return preferred isa AbstractDict ? preferred : meta
+end
+
+# What `CITATION.cff` says of a paper
+function _papercitationsays(text::AbstractString)
+    return _citationcffsays(_papercitation(_cffmapping(text)))
+end
+
 # The files a repository's metadata is read from, most trusted first, with the
 # reader of each; a Julia project file under either name Pkg reads it by, in
 # Pkg's order
@@ -371,3 +395,40 @@ const REPOSITORY_METADATA_FILES = ("codemeta.json" => _codemetasays,
                                    "CITATION.cff" => _citationcffsays,
                                    "JuliaProject.toml" => _projectsays,
                                    "Project.toml" => _projectsays)
+
+# The files a paper's metadata is read from, most trusted first: those that
+# describe what is to be cited before those that describe code
+const PAPER_METADATA_FILES = ("CITATION.cff" => _papercitationsays,
+                              ".zenodo.json" => _zenodosays,
+                              "codemeta.json" => _codemetasays,
+                              "JuliaProject.toml" => _projectsays,
+                              "Project.toml" => _projectsays)
+
+# What the metadata files in the working tree at `folder`, its top level, say
+# of the paper it holds, in the order of `PAPER_METADATA_FILES`. Where
+# `CITATION.cff` has a `preferred-citation`, that is the paper's and the other
+# files describe something else, so they are neither read nor compared with it
+function _papermetadata(folder::AbstractString)
+    citation = joinpath(folder, "CITATION.cff")
+    if isfile(citation)
+        meta = try
+            _cffmapping(read(citation, String))
+        catch err
+            err isa InterruptException && rethrow()
+            throw(ReadWriteException("cannot read CITATION.cff in the working tree at $folder, the most trusted of the paper's metadata files: $(sprint(showerror, err))"))
+        end
+        if get(meta, "preferred-citation", nothing) isa AbstractDict
+            said = _citationcffsays(_papercitation(meta))
+            return RepositoryMetadata(said.authors, said.identifiers,
+                                      said.licence, said.keywords,
+                                      said.description, said.version,
+                                      said.title, ["CITATION.cff"])
+        end
+    end
+    return _repositorymetadata("the working tree at $folder", title = true,
+                               order = PAPER_METADATA_FILES,
+                               described = "the paper's metadata") do name
+        path = joinpath(folder, name)
+        return isfile(path) ? read(path, String) : nothing
+    end
+end

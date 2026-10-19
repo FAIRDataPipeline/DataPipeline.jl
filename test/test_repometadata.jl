@@ -53,7 +53,7 @@ const ZENODO = """
     "keywords": ["zenodo"],
     "creators": [
         {"name": "Lovelace, Ada M.", "orcid": "0000-0002-1825-0097"},
-        {"name": "Babbage, Charles", "orcid": "0000-0001-5109-3700",
+        {"name": "Babbage, Charles", "orcid": "0000-0000-0000-0002",
          "affiliation": "Somewhere"},
         {"name": "Somebody Else"}
     ]
@@ -72,7 +72,7 @@ authors:
     name-particle: van
     family-names: Beethoven
     name-suffix: Jr.
-    orcid: "http://orcid.org/0000-0002-9079-593X"
+    orcid: "http://orcid.org/0000-0000-0000-003X"
   - name: An Example Entity
 """
 
@@ -117,7 +117,7 @@ keywords = ["not", "read"]
             "Somebody Else"]
         @test zenodo.identifiers ==
               Dict("Ada M. Lovelace" => "https://orcid.org/0000-0002-1825-0097",
-                   "Charles Babbage" => "https://orcid.org/0000-0001-5109-3700")
+                   "Charles Babbage" => "https://orcid.org/0000-0000-0000-0002")
         @test zenodo.licence == "Apache-2.0"
         @test zenodo.keywords == ["zenodo"]
         @test zenodo.description == "Zenodo's description"
@@ -129,7 +129,7 @@ keywords = ["not", "read"]
         cff = meta("CITATION.cff", CITATION_CFF)
         @test cff.authors == ["Ludwig van Beethoven Jr.", "An Example Entity"]
         @test cff.identifiers ==
-              Dict("Ludwig van Beethoven Jr." => "https://orcid.org/0000-0002-9079-593X")
+              Dict("Ludwig van Beethoven Jr." => "https://orcid.org/0000-0000-0000-003X")
         @test cff.licence == "GPL-3.0-only"
         @test cff.keywords == ["cff", "citation"]
         @test cff.description == "CFF's abstract"
@@ -163,7 +163,7 @@ keywords = ["not", "read"]
         # otherwise is told, in one message: other authors, an identifier
         # for an author named the same way, another licence and keywords
         meta = @test_logs((:info,
-                           r"^the repository's metadata at the working tree at .* is codemeta\.json's alone, and files trusted less say more or otherwise: \.zenodo\.json gives the authors Ada M\. Lovelace, Charles Babbage, Somebody Else, where codemeta\.json gives Ada M Lovelace, Charles Babbage, An Example Institute, No Identifier; \.zenodo\.json gives Charles Babbage the identifier https://orcid\.org/0000-0001-5109-3700, which codemeta\.json lacks; \.zenodo\.json gives the licence Apache-2\.0, where codemeta\.json gives https://spdx\.org/licenses/MIT; \.zenodo\.json gives the keywords zenodo, where codemeta\.json gives julia, examples; CITATION\.cff gives the authors Ludwig van Beethoven Jr\., An Example Entity, where .*; JuliaProject\.toml gives the authors Ada M Lovelace, Charles Babbage, where .*; Project\.toml gives the authors Ada M Lovelace, Charles Babbage, where codemeta\.json gives Ada M Lovelace, Charles Babbage, An Example Institute, No Identifier$"),
+                           r"^the repository's metadata at the working tree at .* is codemeta\.json's alone, and files trusted less say more or otherwise: \.zenodo\.json gives the authors Ada M\. Lovelace, Charles Babbage, Somebody Else, where codemeta\.json gives Ada M Lovelace, Charles Babbage, An Example Institute, No Identifier; \.zenodo\.json gives Charles Babbage the identifier https://orcid\.org/0000-0000-0000-0002, which codemeta\.json lacks; \.zenodo\.json gives the licence Apache-2\.0, where codemeta\.json gives https://spdx\.org/licenses/MIT; \.zenodo\.json gives the keywords zenodo, where codemeta\.json gives julia, examples; CITATION\.cff gives the authors Ludwig van Beethoven Jr\., An Example Entity, where .*; JuliaProject\.toml gives the authors Ada M Lovelace, Charles Babbage, where .*; Project\.toml gives the authors Ada M Lovelace, Charles Babbage, where codemeta\.json gives Ada M Lovelace, Charles Babbage, An Example Institute, No Identifier$"),
                           DataPipeline._repositorymetadata(all.dir))
         @test meta.authors == ["Ada M Lovelace", "Charles Babbage",
             "An Example Institute", "No Identifier"]
@@ -209,10 +209,10 @@ keywords = ["not", "read"]
                                    orcid: https://orcid.org/0000-0000-0000-0000
                                """))
         clashed = @test_logs((:info,
-                              r"; CITATION\.cff gives Charles Babbage the identifier https://orcid\.org/0000-0000-0000-0000, where \.zenodo\.json gives https://orcid\.org/0000-0001-5109-3700$"),
+                              r"; CITATION\.cff gives Charles Babbage the identifier https://orcid\.org/0000-0000-0000-0000, where \.zenodo\.json gives https://orcid\.org/0000-0000-0000-0002$"),
                              DataPipeline._repositorymetadata(clash.dir))
         @test clashed.identifiers["Charles Babbage"] ==
-              "https://orcid.org/0000-0001-5109-3700"
+              "https://orcid.org/0000-0000-0000-0002"
     end
 
     @testset "where the files are read" begin
@@ -304,8 +304,69 @@ keywords = ["not", "read"]
               "https://ror.org/000000000"
         @test isnothing(DataPipeline._authoridentifier("https://example.com/me"))
         @test isnothing(DataPipeline._authoridentifier(42))
-        @test DataPipeline._namekey("Martin J. Burke") ==
-              DataPipeline._namekey("martin  j burke")
+        @test DataPipeline._namekey("Erno T. Vasko") ==
+              DataPipeline._namekey("erno  t vasko")
+    end
+
+    @testset "a paper's metadata" begin
+        # A working tree holding `files`, a name to its text
+        function tree(files::AbstractDict)
+            dir = mktempdir()
+            for (name, text) in files
+                write(joinpath(dir, name), text)
+            end
+            return dir
+        end
+        preferred = CITATION_CFF * """
+        preferred-citation:
+          type: article
+          title: A paper
+          license: CC-BY-4.0
+          authors:
+            - given-names: Ada M.
+              family-names: Lovelace
+              orcid: "https://orcid.org/0000-0002-1825-0097"
+            - given-names: Charles
+              family-names: Babbage
+        """
+
+        # CITATION.cff comes first for a paper, where codemeta.json does for
+        # code, and the message names the paper
+        found = @test_logs((:info,
+                            r"^the paper's metadata at the working tree at .* is CITATION\.cff's alone"),
+                           DataPipeline._papermetadata(tree(Dict("CITATION.cff" =>
+                                                                     CITATION_CFF,
+                                                                 "codemeta.json" =>
+                                                                     CODEMETA))))
+        @test found.title == "Example.jl from CFF"
+        @test found.files == ["CITATION.cff", "codemeta.json"]
+        # ... and .zenodo.json before codemeta.json
+        found = @test_logs((:info, r"is \.zenodo\.json's alone"),
+                           DataPipeline._papermetadata(tree(Dict(".zenodo.json" =>
+                                                                     ZENODO,
+                                                                 "codemeta.json" =>
+                                                                     CODEMETA))))
+        @test found.title == "Example.jl from Zenodo"
+
+        # A preferred-citation is the paper's, and the other files describe
+        # something else: neither its top level nor they are read or compared
+        found = @test_logs DataPipeline._papermetadata(tree(Dict("CITATION.cff" =>
+                                                                     preferred,
+                                                                 ".zenodo.json" =>
+                                                                     ZENODO)))
+        @test found.title == "A paper"
+        @test found.authors == ["Ada M. Lovelace", "Charles Babbage"]
+        @test found.identifiers ==
+              Dict("Ada M. Lovelace" => "https://orcid.org/0000-0002-1825-0097")
+        @test found.licence == "CC-BY-4.0"
+        @test isempty(found.keywords)
+        @test found.files == ["CITATION.cff"]
+
+        # The most trusted file being unreadable is an error
+        err = @test_throws DataPipeline.ReadWriteException DataPipeline._papermetadata(tree(Dict("CITATION.cff" => "- a list",
+                                                                                                 ".zenodo.json" =>
+                                                                                                     ZENODO)))
+        @test occursin("CITATION.cff", err.value.msg)
     end
 end
 

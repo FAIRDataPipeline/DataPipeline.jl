@@ -81,6 +81,8 @@ public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
 public register_release!, RegisteredRelease
 
 include("repometadata.jl")
+include("latex.jl")
+include("citationfile.jl")
 include("fdp_i.jl")
 include("citations.jl")
 include("authors.jl")
