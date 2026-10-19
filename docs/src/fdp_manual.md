@@ -41,11 +41,11 @@ in, and the handle once opened. The script's `initialise()` opens a
 rehearsal rather than a code run: it reads what the registry holds, writes to
 the data store, holds no registry token, and registers nothing, saying
 instead what `link_register!` and `register_authors!` would have registered.
-Its `finalise` checks the outputs as a recorded run would, saying which hold
-the bytes of the registered highest version already, moves them to the
-outputs folder as `<namespace>/<data product>/<version>.<extension>` with
-the working config beside them, prints the issues a recorded run would have
-raised, deletes the job folder, and returns the folder. `discard` ends a
+Its `finalise` checks the outputs as a recorded run would, saying which are
+registered already, unchanged, moves them to the outputs folder as
+`<namespace>/<data product>/<version>.<extension>` with the working config
+beside them, prints the issues a recorded run would have raised, deletes the
+job folder, and returns the folder. `discard` ends a
 rehearsal without collecting anything.
 
 A session has one run, opened once: `initialise()` is an error while a run
@@ -138,6 +138,11 @@ read:
 older = link_read!(handle, "temperature/older")
 newer = link_read!(handle, "temperature/newer")
 ```
+
+A `write:` entry may name a version that exists, to reproduce it: the file
+written must then be that version's - its bytes, with the same source,
+authors and licence - and nothing is registered for it. Any other file is an
+error at `finalise`, before anything is registered.
 
 ## Data that comes from elsewhere
 

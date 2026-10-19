@@ -129,10 +129,14 @@ A file whose bytes are those of the highest version of its data product
 already registered is not registered again: no version is made, the file
 written is removed, and it is not an output of the code run. Where a link
 call named its source, the source, authors and licence registered with that
-version must be the same as well.
+version must be the same as well. A file written as a version that is
+registered already must be that version's in the same way - a reproduction,
+likewise not registered again - or nothing is registered, and the call is an
+error naming the version.
 """
 function finalise(handle::DataRegistryHandle{RecordedRun})
     _checksources(handle)
+    _checkversions(handle)
     previous = _previousversions(handle)
     # In name order, so which of two identical outputs keeps its file, and the
     # order of the code run's inputs and outputs, are the same on every machine
@@ -379,10 +383,12 @@ second name, so the file must not be written to afterwards.
 A file whose bytes are those of the highest version of the data product
 already registered is not registered again: no version is made and it is not
 an output of the code run. Where the call names a source, the source, authors
-and licence registered with that version must be the same as well. With a
-`path` this is found as the call is made, and the path returned is that of
-the registered file; a file that is written afterwards is found so by
-`finalise`.
+and licence registered with that version must be the same as well. The
+version the `write:` entry names may be one registered already, when the file
+must be that version's in the same way - a reproduction, likewise not
+registered again - or it is an error. With a `path` this is found as the call
+is made, and the path returned is that of the registered file; a file that is
+written afterwards is found so by `finalise`, before it registers anything.
 
 A file that comes from somewhere else is registered with its source. The
 source is named by its `doi`, or by `bibtex`, the key of a citation that
@@ -433,9 +439,9 @@ everything made from that: once the new version is registered at
 [`finalise`](@ref), an issue reading `Superseded by namespace:name@vX.Y.Z` is
 raised on the highest version before it, at severity 0, the lowest, so that
 [`identify`](@ref) of anything made from the old version reports it. Where
-there is nothing to supersede - the file is the highest version's and
-unchanged, the name has no version before, or the version written is not
-above the highest - nothing is raised, and an info message says so.
+there is nothing to supersede - the file is registered already, unchanged,
+the name has no version before, or the version written is not above the
+highest - nothing is raised, and an info message says so.
 
 See also: [`canwrite`](@ref)
 """
@@ -513,12 +519,14 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
     end
 
     _checkonefile(handle, source, hash, data_product)
-    unchanged = _unchangedfile(handle.registry, _writenamespace(handle, wmd),
-                               name, hash, source)
+    namespace = _writenamespace(handle, wmd)
+    version = String(get(wmd, "use", Dict())["version"])
+    unchanged = _heldfile(handle.registry, namespace, name, version, hash,
+                          source)
     if !isnothing(unchanged)
         println("data product unchanged: ", name, " (", unchanged.version, ")")
         supersede &&
-            @info "nothing to supersede: $(_dataproductname(_writenamespace(handle, wmd), name, unchanged.version)) is the highest version already, unchanged"
+            @info "nothing to supersede: the file written as $(_dataproductname(namespace, name, version)) is registered already, unchanged"
         whole = _wholeobjectcomponent(handle.registry, unchanged.object)
         found = Dict("path" => unchanged.path,
                      "object_url" => unchanged.object,

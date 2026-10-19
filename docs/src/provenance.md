@@ -127,7 +127,7 @@ link_write!(handle, "era5/t2m/2021", path = "cache/era5_t2m_2021.nc", doi = era5
             primary = false, supersede = true)
 ```
 
-Where there is nothing to supersede - the file is the highest version's and
+Where there is nothing to supersede - the file is registered already,
 unchanged, or the name has no version before - nothing is raised and an info
 message says so.
 

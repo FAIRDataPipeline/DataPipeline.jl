@@ -551,6 +551,15 @@ Test.@testset "the version of a file with a source" begin
     @test source_of(registered(name, "0.0.3"))["url"] == second_source["url"]
     @test licences_of(object_of(registered(name, "0.0.3"))) ==
           [("CC0-1.0", spdx * "CC0-1.0")]
+    # ... but written as the version that holds them under no licence they
+    # are refused, since a version that exists may only be reproduced
+    handle = offering(name => "0.0.2")
+    msg = message_of(ReadWriteException) do
+        return link_write!(handle, name; path = changed,
+                           of(release_version = "2.2", licence = "CC0-1.0")...)
+    end
+    @test startswith(msg, "$namespace:$name@v0.0.2 is registered already")
+    @test isempty(handle.outputs)
     # ... and so are they with other authors, the organisation now having an
     # identifier
     handle = offering(name => "0.0.4")
@@ -820,9 +829,9 @@ Test.@testset "link_register!() with supersede = true" begin
                                              issue.description))
     @test posted["component_issues"] == [whole(registered(name, "0.0.1"))]
     handle = offering()
-    @test_logs (:info, r"highest version already, unchanged") match_mode=:any link_register!(handle,
-                                                                                             name;
-                                                                                             of(licence = "CC0-1.0")...)
+    @test_logs (:info, r"registered already, unchanged") match_mode=:any link_register!(handle,
+                                                                                        name;
+                                                                                        of(licence = "CC0-1.0")...)
     @test isempty(handle.issues)
     DataPipeline.finalise(handle)
 end

@@ -165,6 +165,61 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     @test occursin("rehearse again", err.value.msg)
 end
 
+Test.@testset "a rehearsal writing a version that exists" begin
+    versioned = "rehearse/versions/$uid"
+    placed = "rehearse/placed/$uid"
+    # Two versions of a name, recorded
+    for (version, text) in (("0.0.1", "first"), ("0.0.2", "second"))
+        config = DataPipeline._createconfig(joinpath("coderun", datetime,
+                                                     "rehearse-versions",
+                                                     "$version.yaml"))
+        DataPipeline._addwrite(config, versioned, "a recorded version",
+                               file_type = "txt", use_version = version)
+        recorded = DataPipeline.initialise(config, config)
+        write(link_write!(recorded, versioned), "$text $uid\n")
+        DataPipeline.finalise(recorded)
+    end
+    # A rehearsal that writes the first version again, with a new file whose
+    # label sorts before it, which finalise places first
+    function rehearsing(name)
+        job = job_folder(name)
+        working = joinpath(job, "config.yaml")
+        DataPipeline._addwrite(working, "reproduced", "the first version",
+                               file_type = "txt", use_data_product = versioned,
+                               use_version = "0.0.1")
+        DataPipeline._addwrite(working, "placed", "a new file",
+                               file_type = "txt", use_data_product = placed,
+                               use_version = "0.0.1")
+        DataPipeline.rehearse(job, outputs = mktempdir())
+        handle = DataPipeline.initialise()
+        write(link_write!(handle, "placed"), "placed $name $uid\n")
+        return handle
+    end
+    before = counts()
+
+    # The same bytes are a reproduction, though not of the highest version,
+    # placed as that version
+    handle = rehearsing("reproduced")
+    write(link_write!(handle, "reproduced"), "first $uid\n")
+    DataPipeline.finalise(handle)
+    @test haskey(handle.unchanged, ("reproduced", nothing))
+    @test read(joinpath(handle.mode.outputs, namespace, versioned, "0.0.1.txt"),
+               String) == "first $uid\n"
+    @test isfile(joinpath(handle.mode.outputs, namespace, placed, "0.0.1.txt"))
+
+    # Other bytes are refused at finalise, before anything is placed, leaving
+    # the rehearsal to be discarded
+    handle = rehearsing("changed")
+    write(link_write!(handle, "reproduced"), "second $uid\n")
+    err = @test_throws ReadWriteException DataPipeline.finalise(handle)
+    @test startswith(err.value.msg,
+                     "$namespace:$versioned@v0.0.1 is registered already")
+    @test isempty(readdir(handle.mode.outputs))
+    @test !current().ended
+    DataPipeline.discard(handle)
+    @test counts() == before
+end
+
 Test.@testset "a rehearsal repeated into the same folder replaces its files" begin
     job = job_folder("again")
     working = joinpath(job, "config.yaml")

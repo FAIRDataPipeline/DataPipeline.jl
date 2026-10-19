@@ -344,9 +344,10 @@ _unregisteredauthor(name::AbstractString) = "unregistered author: " * name
     finalise(handle::DataRegistryHandle{Rehearsal})
 
 End a rehearsal, registering nothing. The outputs are checked as a recorded
-run checks them - that each source is one file, and whether each file is the
-one registered as the highest version of its data product, which is reported
-- and moved to the outputs folder as
+run checks them: that each source is one file, that each written as a version
+registered already reproduces it, and whether each file is the one
+registered as the highest version of its data product, which is reported.
+They are then moved to the outputs folder as
 `<namespace>/<data product>/<version>.<extension>`, replacing what is there,
 with the working config and the script copied beside them. The issues raised
 are printed, the data store's empty directories pruned, the job folder deleted
@@ -358,6 +359,7 @@ function finalise(handle::DataRegistryHandle{Rehearsal})
     _sessionsopen(handle) ||
         throw(ReadWriteException("this handle's rehearsal has ended: rehearse again for another"))
     _checksources(handle)
+    _checkversions(handle)
     previous = _previousversions(handle)
     for (data_product, component) in sort(collect(keys(handle.outputs)),
                                           by = string)
@@ -396,9 +398,9 @@ function _placeoutput(handle::DataRegistryHandle{Rehearsal},
         hash = get(wmd, "hash") do
             return _getfilehash(filepath)
         end
-        held = _unchangedfile(handle.registry, wmd["use_namespace"],
-                              use_data_product, hash,
-                              _outputsource(handle, data_product))
+        held = _heldfile(handle.registry, wmd["use_namespace"],
+                         use_data_product, String(wmd["use_version"]), hash,
+                         _outputsource(handle, data_product))
         unchanged = !isnothing(held)
         unchanged && println("data product unchanged: ", use_data_product,
                 " (", held.version,

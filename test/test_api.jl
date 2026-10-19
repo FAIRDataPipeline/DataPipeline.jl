@@ -345,70 +345,54 @@ Test.@testset "read_distribution!()" begin
     @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
-# If an attempt is made to write a new component to a data product that was createtd in 
-# a previous Code Run, then an error should be thrown.
+# A version that exists may be written again only as the file it is, so a
+# component added to one is refused - not at the write, whose file is not
+# finished, but at finalise, before anything is registered
 Test.@testset "new components aren't added to existing data products" begin
+    registry = handle.registry
+    writers = ("write_array" =>
+                   (handle, name) -> write_array!(handle, data1,
+                                                  name,
+                                                  component3,
+                                                  "description3"),
+               "write_estimate" =>
+                   (handle, name) -> write_estimate!(handle,
+                                                     estimate1,
+                                                     name,
+                                                     component3,
+                                                     "description3"),
+               "write_distribution" =>
+                   (handle, name) -> write_distribution!(handle,
+                                                         distribution["distribution"],
+                                                         distribution["parameters"],
+                                                         name,
+                                                         component3,
+                                                         "symptom-delay"))
+    for (writer, writing) in writers
+        data_product = "data_product/$writer/$uid"
+        # A config other than that of the run that wrote the version, which a
+        # run started in the same second would otherwise be taken to be
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, data_product, "adding a component",
+                               use_version = version)
+        handle = DataPipeline.initialise(config, config)
+        writing(handle, data_product)
+        @test length(handle.outputs) == 1
+        err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(handle)
+        @test startswith(err.value.msg,
+                         "$namespace:$data_product@v$version is registered already")
 
-    # write_array!() -------------------------------------------------------------------
-
-    data_product = "data_product/write_array/$uid"
-
-    # Create working config.yaml
-    config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description",
-                           use_version = version)
-    handle = DataPipeline.initialise(config, config)
-
-    # Write component
-    msg = string("data product already exists in registry: ", data_product,
-                 " :-(ns: ",
-                 namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_array!(handle,
-                                                                   data1,
-                                                                   data_product,
-                                                                   component3,
-                                                                   "description3")
-
-    # write_estimate!() ----------------------------------------------------------------
-
-    data_product = "data_product/write_estimate/$uid"
-
-    # Create working config.yaml
-    config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description",
-                           use_version = version)
-    handle = DataPipeline.initialise(config, config)
-
-    # Write component
-    msg = string("data product already exists in registry: ", data_product,
-                 " :-(ns: ",
-                 namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_estimate!(handle,
-                                                                      estimate1,
-                                                                      data_product,
-                                                                      component3,
-                                                                      "description3")
-
-    # write_distribution!() ------------------------------------------------------------
-
-    data_product = "data_product/write_distribution/$uid"
-
-    # Create working config.yaml
-    config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description",
-                           use_version = version)
-    handle = DataPipeline.initialise(config, config)
-
-    # Write component
-    msg = string("data product already exists in registry: ", data_product,
-                 " :-(ns: ",
-                 namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_distribution!(handle,
-                                                                          distribution["distribution"],
-                                                                          distribution["parameters"],
-                                                                          data_product,
-                                                                          component3,
-                                                                          "symptom-delay")
+        # The version is as it was, and the code run has no outputs
+        entries = DataPipeline._getentries(registry, "data_product",
+                                           Dict("name" => data_product))
+        @test [entry["version"] for entry in entries] == [version]
+        object = DataPipeline._extractid(only(entries)["object"])
+        @test isnothing(DataPipeline._getentry(registry, "object_component",
+                                               Dict("object" => object,
+                                                    "name" => component3)))
+        @test isempty(DataPipeline._getentry(registry,
+                                             URIs.URI(handle.code_run_obj))["outputs"])
+    end
 end
 
 # The issues of a component, as the registry holds them
@@ -502,15 +486,15 @@ Test.@testset "supersede = true" begin
     third = writing(name, "0.0.3")
     write(link_write!(third, name, supersede = true),
           "supersede second $uid\n")
-    @test_logs (:info, r"highest version already, unchanged") match_mode=:any DataPipeline.finalise(third)
+    @test_logs (:info, r"registered already, unchanged") match_mode=:any DataPipeline.finalise(third)
     @test isempty(third.issues)
     same = joinpath(mktempdir(), "same.txt")
     write(same, "supersede second $uid\n")
     by_path = writing(name, "0.0.3")
-    @test_logs (:info, r"highest version already, unchanged") match_mode=:any link_write!(by_path,
-                                                                                          name,
-                                                                                          path = same,
-                                                                                          supersede = true)
+    @test_logs (:info, r"registered already, unchanged") match_mode=:any link_write!(by_path,
+                                                                                     name,
+                                                                                     path = same,
+                                                                                     supersede = true)
     DataPipeline._resetsession!()
     # A version above the highest supersedes it; one below does not
     above = writing(name, "0.1.0")
@@ -1763,6 +1747,26 @@ Test.@testset "link_write!() with a wildcard entry" begin
     @test err isa DataPipeline.ConfigFileException
     @test occursin("data_product/two/$uid/*", err.msg) &&
           occursin("data_product/*/$uid/both", err.msg)
+
+    # Under the pattern alone, at the version its names now have, the same
+    # bytes are a reproduction of each, and other bytes are refused at
+    # finalise
+    function rewriting(text)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, pattern, "wildcard description",
+                               file_type = "txt", use_version = version,
+                               use_data_product = pattern)
+        handle = DataPipeline.initialise(config, config)
+        write(link_write!(handle, covered), text)
+        return handle
+    end
+    again = rewriting("covered $uid\n")
+    DataPipeline.finalise(again)
+    @test isempty(again.outputs) && haskey(again.unchanged, (covered, nothing))
+    changed = rewriting("covered again $uid\n")
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(changed)
+    @test startswith(err.value.msg,
+                     "$namespace:$covered@v$version is registered already")
 end
 
 Test.@testset "\${{RUN_ID}} in a wildcard-covered name" begin
@@ -2030,13 +2034,22 @@ Test.@testset "link_write!() with a path" begin
     @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
     @test read(registered, String) == "fetched $uid\n"
 
-    # A version that exists is refused, as for any write
-    handle = offering("0.0.2")
-    @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
-                                                             path = other)
+    # A version that exists may be written as its own file, though it is not
+    # the highest - a reproduction, and the registered file is returned - and
+    # other bytes as it are refused at the call
+    handle = offering("0.0.1")
+    @test link_write!(handle, name, path = again) == registered
     @test isempty(handle.outputs)
+    DataPipeline.finalise(handle)
+    handle = offering("0.0.2")
+    err = @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
+                                                                   path = other)
+    @test startswith(err.value.msg,
+                     "$namespace:$name@v0.0.2 is registered already")
+    @test isempty(handle.outputs)
+    @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
 
-    # It is the highest version that a file is compared with, so the first
+    # A new version is compared with the highest only, so the first
     # version's bytes are now a third version. They are in the store already,
     # so the link made for them is removed, which leaves the original alone
     handle = offering("0.0.3")
@@ -2092,11 +2105,14 @@ end
 Test.@testset "an output that is registered already" begin
     name = "data_product/unchanged/$uid"
     tabled = "data_product/unchanged/tabled/$uid"
-    # A config that offers both names at a version, one as text, one as TOML
-    function offering(use_version)
+    # A config that offers both names at a version, one as text, one as TOML.
+    # A run started in the same second as one of the same config is taken to
+    # be that run, so a run whose outputs are checked takes a description of
+    # its own
+    function offering(use_version; description = "description")
         config = DataPipeline._createconfig(cpath)
         for (written, file_type) in ((name, "txt"), (tabled, "toml"))
-            DataPipeline._addwrite(config, written, "description",
+            DataPipeline._addwrite(config, written, description,
                                    file_type = file_type,
                                    use_version = use_version)
         end
@@ -2154,6 +2170,40 @@ Test.@testset "an output that is registered already" begin
     DataPipeline.finalise(handle)
     @test raised(newer) == ["given again $uid"]
     @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+
+    # A version that exists may be written as its own file, though it is not
+    # the highest: a reproduction, registered as nothing, an issue raised with
+    # it being one with that version
+    handle = offering("0.0.1", description = "reproducing a version")
+    write(link_write!(handle, name), "written $uid\n")
+    raise_issue!(handle, name, "reproduced $uid")
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test isempty(handle.outputs)
+    @test handle.unchanged[(name, nothing)]["path"] == registered
+    @test isempty(code_run_of(handle)["outputs"])
+    @test sort(raised(component)) ==
+          sort(["written twice $uid", "reproduced $uid"])
+
+    # Other bytes as a version that exists are refused at finalise, naming
+    # it, before any output is registered - a new name included, which
+    # finalise would otherwise register first, in name order
+    first_written = "data_product/unchanged-first/$uid"
+    @test string((first_written, nothing)) < string((name, nothing))
+    config = DataPipeline._createconfig(cpath)
+    for written in (first_written, name)
+        DataPipeline._addwrite(config, written, "description",
+                               file_type = "txt", use_version = "0.0.1")
+    end
+    handle = DataPipeline.initialise(config, config)
+    write(link_write!(handle, first_written), "written first $uid\n")
+    write(link_write!(handle, name), "not the first version $uid\n")
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(handle)
+    @test startswith(err.value.msg,
+                     "$namespace:$name@v0.0.1 is registered already")
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test isempty(registered_versions(registry, first_written))
+    @test isempty(code_run_of(handle)["outputs"])
 
     # A data product written by its components is one file, and all of them
     # are found unchanged with it

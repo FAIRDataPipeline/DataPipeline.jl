@@ -15,6 +15,10 @@
     - `rehearse` prepares a job with `fair run --rehearse` where `fair` has it,
       which stages nothing and makes no git check; otherwise with `fair run --ci
       --dirty`, as before.
+  - Writing:
+    - A `write:` entry may name a version that exists, to reproduce it: a file
+      that is that version's registers nothing, and any other is refused at
+      `finalise`, or at the call given a `path`, rather than at the first write.
 
 - v0.55.0
   - Breaking changes:

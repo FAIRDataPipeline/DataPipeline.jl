@@ -462,13 +462,63 @@ function _unchangedfile(registry::RegistryEndpoint, namespace::String,
                         source::Union{Nothing, SourceRecord})
     latest = _latestdataproduct(registry, namespace, data_product)
     isnothing(latest) && return nothing
-    object = _getentry(registry, URIs.URI(latest["object"]))
+    return _registeredfile(registry, latest, hash, source)
+end
+
+# The path, the version and the object's URL of the file a registered data
+# product holds, as `(path, version, object)`, if it is this file - these
+# bytes, with what `source` says of it registered with it; else `nothing`, as
+# for a data product with no file
+function _registeredfile(registry::RegistryEndpoint, data_product::AbstractDict,
+                         hash::String, source::Union{Nothing, SourceRecord})
+    object = _getentry(registry, URIs.URI(data_product["object"]))
     isnothing(object["storage_location"]) && return nothing
-    location = _getstoragelocation(registry, latest["object"])
+    location = _getstoragelocation(registry, data_product["object"])
     location.hash == hash || return nothing
-    _recordssource(registry, latest, object, source) || return nothing
-    return (path = location.path, version = String(latest["version"]),
-            object = String(latest["object"]))
+    _recordssource(registry, data_product, object, source) || return nothing
+    return (path = location.path, version = String(data_product["version"]),
+            object = String(data_product["object"]))
+end
+
+# What the registry holds of an output of these bytes written as `version`, as
+# `(path, version, object)`, or `nothing` for an output that is a new version.
+# Where that version exists it must be this file - a version is registered
+# once, so a run may reproduce it and not change it - or this is an error;
+# where it does not, the highest version is the output if it is this file
+function _heldfile(registry::RegistryEndpoint, namespace::String,
+                   data_product::String, version::String, hash::String,
+                   source::Union{Nothing, SourceRecord})
+    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
+    existing = isnothing(namespace_id) ? nothing :
+               _getentry(registry, "data_product",
+                         Dict("name" => data_product, "version" => version,
+                              "namespace" => namespace_id))
+    isnothing(existing) &&
+        return _unchangedfile(registry, namespace, data_product, hash, source)
+    held = _registeredfile(registry, existing, hash, source)
+    isnothing(held) &&
+        throw(ReadWriteException("$(_dataproductname(namespace, data_product, version)) is registered already, as another file or with another source, authors or licence: a run may reproduce a version that exists, byte for byte, and not change it"))
+    return held
+end
+
+# Check, before a code run registers any output, that each written as a
+# version that exists reproduces it, keeping the hash it was checked by
+function _checkversions(handle::DataRegistryHandle)
+    checked = Set{String}()
+    for key in sort(collect(keys(handle.outputs)), by = string)
+        metadata = handle.outputs[key]
+        (key[1] in checked || !isfile(metadata["path"])) && continue
+        push!(checked, key[1])
+        hash = get!(metadata, "hash") do
+            return _getfilehash(metadata["path"])
+        end
+        _heldfile(handle.registry, metadata["use_namespace"],
+                  replace(metadata["use_dp"],
+                          RUN_ID_PLACEHOLDER => handle.code_run_uuid),
+                  String(metadata["use_version"]), hash,
+                  _outputsource(handle, key[1]))
+    end
+    return nothing
 end
 
 # Make the file at `source` available at `destination`, which must not exist:
@@ -541,8 +591,8 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
             return _getfilehash(filepath)
         end
         source = _outputsource(handle, data_product)
-        held = _unchangedfile(registry, wmd["use_namespace"], use_data_product,
-                              hash, source)
+        held = _heldfile(registry, wmd["use_namespace"], use_data_product,
+                         String(wmd["use_version"]), hash, source)
         unchanged = !isnothing(held)
         if unchanged
             println("data product unchanged: ", use_data_product, " (",
@@ -636,23 +686,12 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])
 
-    # A data product written to earlier in this code run keeps its file
+    # A data product written to earlier in this code run keeps its file. One
+    # written as a version that exists is compared with it at `finalise`, when
+    # its bytes are known
     paths = unique(value["path"]
                    for (key, value) in handle.outputs if key[1] == data_product)
     if isempty(paths)
-        namespace_id = _getid(handle.registry, "namespace",
-                              Dict("name" => use_namespace))
-        exists = isnothing(namespace_id) ? nothing :
-                 _getentry(handle.registry, "data_product",
-                           Dict("name" => use_data_product,
-                                "version" => use_version,
-                                "namespace" => namespace_id))
-        if !isnothing(exists)
-            msg = string("data product already exists in registry: ",
-                         use_data_product,
-                         " :-(ns: ", use_namespace, " - v: ", use_version, ")")
-            throw(ReadWriteException(msg))
-        end
         directory = joinpath(data_store, use_namespace, use_data_product)
         mkpath(directory)
         path = joinpath(directory, "dat-$(_randomhash()).$file_type")
@@ -838,14 +877,14 @@ const SUPERSEDED_ISSUE_SEVERITY = 0
 # What `supersede = true` does once a data product's version is settled: queue
 # the issue on the version it supersedes - the highest before, `previous` as
 # the registry holds it or `nothing` - or say that there was nothing to
-# supersede: the highest version was unchanged, there was none before, or the
-# version is not above it
+# supersede: the file was registered already, unchanged, there was no version
+# before, or the version is not above the highest
 function _supersede!(handle::DataRegistryHandle, namespace::String,
                      name::String, version::String,
                      previous::Union{Nothing, AbstractDict}, unchanged::Bool)
     label = _dataproductname(namespace, name, version)
     if unchanged
-        @info "nothing to supersede: $label is the highest version already, unchanged"
+        @info "nothing to supersede: the file written as $label is registered already, unchanged"
     elseif isnothing(previous)
         @info "nothing to supersede: $label is the first version of its name"
     elseif VersionNumber(previous["version"]) >= VersionNumber(version)
