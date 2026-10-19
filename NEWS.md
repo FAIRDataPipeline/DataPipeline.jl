@@ -25,6 +25,11 @@
     - A `write:` entry may name a version that exists, to reproduce it: a file
       that is that version's registers nothing, and any other is refused at
       `finalise`, or at the call given a `path`, rather than at the first write.
+  - Building a paper:
+    - `build_paper!(handle, paper)` builds a LaTeX paper with `latexmk` in a code
+      run: the files it uses from its pipeline folder are its inputs, and the PDF
+      its output, with the authors, licence and keywords of the paper's metadata,
+      which the PDF holds too. `LaTeXPaper` describes a paper.
 
 - v0.55.0
   - Breaking changes:

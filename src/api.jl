@@ -475,7 +475,8 @@ end
 
 # A new file in the data store, for the caller to write
 function _linkwrite!(handle::DataRegistryHandle, data_product::String,
-                     ::Nothing, source::Union{Nothing, SourceRecord},
+                     ::Nothing,
+                     source::Union{Nothing, SourceRecord, OutputDescription},
                      supersede::Bool)
     key = (data_product, nothing)
     if haskey(handle.outputs, key)
@@ -495,7 +496,8 @@ end
 # A file that exists already, linked or copied into the data store
 function _linkwrite!(handle::DataRegistryHandle, data_product::String,
                      path::AbstractString,
-                     source::Union{Nothing, SourceRecord}, supersede::Bool)
+                     source::Union{Nothing, SourceRecord, OutputDescription},
+                     supersede::Bool)
     path = String(path)
     isfile(path) || throw(ReadWriteException("no file to register at $path"))
     wmd, name = _writemetadata(handle, data_product)

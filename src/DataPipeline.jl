@@ -54,6 +54,7 @@ export read_array!, read_table!, read_distribution!, read_estimate!
 export write_array!, write_table!, write_distribution!, write_estimate!
 export raise_issue!
 export register_authors!, register_citations!
+export build_paper!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
 public initialise, finalise, rehearse, discard, install_cli, install_cli!,
@@ -61,6 +62,7 @@ public initialise, finalise, rehearse, discard, install_cli, install_cli!,
 public @fair_str
 public DataRegistryHandle, RecordedRun, Rehearsal
 public RegistryEndpoint
+public LaTeXPaper, PdfLaTeXEngine, LuaLaTeXEngine, XeLaTeXEngine
 public ReadWriteException, ConfigFileException
 public WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
@@ -83,6 +85,7 @@ public register_release!, RegisteredRelease
 include("repometadata.jl")
 include("latex.jl")
 include("citationfile.jl")
+include("paper.jl")
 include("fdp_i.jl")
 include("citations.jl")
 include("authors.jl")

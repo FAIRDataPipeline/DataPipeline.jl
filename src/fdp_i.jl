@@ -461,7 +461,7 @@ differs, if that version has no file, or if the name is not registered.
 """
 function _unchangedfile(registry::RegistryEndpoint, namespace::String,
                         data_product::String, hash::String,
-                        source::Union{Nothing, SourceRecord})
+                        source::Union{Nothing, SourceRecord, OutputDescription})
     latest = _latestdataproduct(registry, namespace, data_product)
     isnothing(latest) && return nothing
     return _registeredfile(registry, latest, hash, source)
@@ -472,7 +472,9 @@ end
 # bytes, with what `source` says of it registered with it; else `nothing`, as
 # for a data product with no file
 function _registeredfile(registry::RegistryEndpoint, data_product::AbstractDict,
-                         hash::String, source::Union{Nothing, SourceRecord})
+                         hash::String,
+                         source::Union{Nothing, SourceRecord,
+                                       OutputDescription})
     object = _getentry(registry, URIs.URI(data_product["object"]))
     isnothing(object["storage_location"]) && return nothing
     location = _getstoragelocation(registry, data_product["object"])
@@ -489,7 +491,7 @@ end
 # where it does not, the highest version is the output if it is this file
 function _heldfile(registry::RegistryEndpoint, namespace::String,
                    data_product::String, version::String, hash::String,
-                   source::Union{Nothing, SourceRecord})
+                   source::Union{Nothing, SourceRecord, OutputDescription})
     namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
     existing = isnothing(namespace_id) ? nothing :
                _getentry(registry, "data_product",
@@ -629,7 +631,8 @@ end
 # its object, its data product and its source. Return the file's path and
 # the object's URL, as `(path, object)`.
 function _registerfile(handle::DataRegistryHandle, wmd::AbstractDict,
-                       hash::String, source::Union{Nothing, SourceRecord})
+                       hash::String,
+                       source::Union{Nothing, SourceRecord, OutputDescription})
     registry = handle.registry
     datastore = handle.config["run_metadata"]["write_data_store"]
     filepath = wmd["path"]

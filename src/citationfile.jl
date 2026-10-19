@@ -157,7 +157,13 @@ _authorkey(name::AbstractString) = _namekey(Base.Unicode.normalize(name, :NFC))
 # does not; whether the names the two share are in another order; whether names are both added and removed, which may be
 # a renaming; and the authors the file gives no ORCID
 function _comparecitation(text::AbstractString, front::NamedTuple)
-    said = _citationcffsays(_papercitation(_cffmapping(text)))
+    return _comparecitation(_citationcffsays(_papercitation(_cffmapping(text))),
+                            front)
+end
+# ... or how what metadata says of the paper - its authors, their identifiers
+# and its title - differs from it
+function _comparecitation(said::Union{NamedTuple, RepositoryMetadata},
+                          front::NamedTuple)
     filekeys = _authorkey.(said.authors)
     latexkeys = _authorkey.(front.authors)
     added = [name

@@ -189,6 +189,36 @@ register_authors!
 link_register!
 ```
 
+## Building a paper
+
+A LaTeX paper whose figures and tables come from pipeline runs can be built in
+a code run of its own, so that the PDF is a data product whose provenance runs
+through what it uses to the data behind it. The files the paper uses from its
+pipeline folder must be registered outputs of other runs, which the working
+config's `read:` block offers; its own files, such as the `.tex`, the
+bibliography and any drawings, are recorded with the repository's commit. The
+PDF is registered with the authors, licence and keywords of the paper's
+metadata, `CITATION.cff` first, and holds them in its document information
+too. The run's script is an ordinary one:
+
+```julia
+import Pkg
+Pkg.activate("pipeline")
+Pkg.instantiate()
+using DataPipeline
+handle = DataPipeline.initialise()
+build_paper!(handle, "paper.tex")
+DataPipeline.finalise(handle)
+```
+
+```@docs
+build_paper!
+DataPipeline.LaTeXPaper
+DataPipeline.PdfLaTeXEngine
+DataPipeline.LuaLaTeXEngine
+DataPipeline.XeLaTeXEngine
+```
+
 ## Raising issues
 
 An issue records a problem found in something registered, so that

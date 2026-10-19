@@ -111,8 +111,19 @@ function _checksamesource(handle::DataRegistryHandle,
     return nothing
 end
 
+function _checksamesource(handle::DataRegistryHandle,
+                          data_product::AbstractString,
+                          described::OutputDescription)
+    held = _outputsource(handle, data_product)
+    (held isa OutputDescription &&
+     all(getfield(held, field) == getfield(described, field)
+         for field in fieldnames(OutputDescription))) ||
+        throw(ReadWriteException("'$data_product' is already being written by this code run, described otherwise"))
+    return nothing
+end
+
 # The source that a code run's link call gave for a data product it is
-# writing, or `nothing`
+# writing, or the description of one with none; `nothing` with neither
 function _outputsource(handle::DataRegistryHandle, data_product::AbstractString)
     for (key, metadata) in handle.outputs
         key[1] == data_product && haskey(metadata, "source") &&
@@ -129,9 +140,10 @@ release version - is that of a file other than the one with this `hash`: one
 the registry holds, or one that this code run is registering under another
 name. A source is one file, which any number of data products may hold;
 `data_product` is the one being registered. With no source there is nothing
-to check.
+to check, nor with an `OutputDescription`, which is no source.
 """
-function _checkonefile(::DataRegistryHandle, ::Nothing, ::AbstractString,
+function _checkonefile(::DataRegistryHandle,
+                       ::Union{Nothing, OutputDescription}, ::AbstractString,
                        ::AbstractString)
     return nothing
 end
@@ -156,7 +168,7 @@ function _checkonefile(handle::DataRegistryHandle, source::SourceRecord,
     for key in sort(collect(keys(handle.outputs)), by = string)
         metadata = handle.outputs[key]
         other = get(metadata, "source", nothing)
-        (key[1] == data_product || isnothing(other)) && continue
+        (key[1] == data_product || !(other isa SourceRecord)) && continue
         (_identity(other) == _identity(source) && isfile(metadata["path"])) ||
             continue
         _getfilehash(metadata["path"]) == hash ||
@@ -192,18 +204,36 @@ function _recordssource(registry::RegistryEndpoint, data_product::AbstractDict,
     held = _getentry(registry, URIs.URI(url))
     (held["identifier"], held["title"], held["version"]) == _identity(source) ||
         return false
-    # The registry keeps an object's authors in no order
-    sort(object["authors"]) == sort(source.authors) || return false
-    licences = [(info = licence["licence_info"],
-                 identifier = licence["identifier"])
-                for licence in (_getentry(registry, URIs.URI(licence_url))
-                                for licence_url in object["licences"])]
-    return licences == (isnothing(source.licence) ? [] : [source.licence])
+    return _recordsauthorship(registry, object, source.authors, source.licence)
+end
+# ... and a file described with no source, which the registered one must not
+# have either
+function _recordssource(registry::RegistryEndpoint, data_product::AbstractDict,
+                        object::AbstractDict, described::OutputDescription)
+    isnothing(get(data_product, "external_object", nothing)) || return false
+    return _recordsauthorship(registry, object, described.authors,
+                              described.licence)
 end
 
-# The authors of a registered file: its source's, or with no source the user
+# Whether a registered object has these authors, in any order, as the
+# registry keeps them in none, and this licence alone, or none
+function _recordsauthorship(registry::RegistryEndpoint, object::AbstractDict,
+                            authors::Vector{String},
+                            licence::Union{Nothing, NamedTuple})
+    sort(object["authors"]) == sort(authors) || return false
+    licences = [(info = held["licence_info"], identifier = held["identifier"])
+                for held in (_getentry(registry, URIs.URI(licence_url))
+                             for licence_url in object["licences"])]
+    return licences == (isnothing(licence) ? [] : [licence])
+end
+
+# The authors of a registered file: its source's or its description's, or
+# with neither the user
 _fileauthors(registry::RegistryEndpoint, ::Nothing) = [_getauthorurl(registry)]
 _fileauthors(::RegistryEndpoint, source::SourceRecord) = source.authors
+function _fileauthors(::RegistryEndpoint, described::OutputDescription)
+    return described.authors
+end
 
 """
     _registersource(registry, source, data_product_url, object_url, hash,
@@ -217,6 +247,20 @@ the licence on the file's object. With no source nothing is registered.
 function _registersource(::RegistryEndpoint, ::Nothing, ::AbstractString,
                          ::AbstractString, ::Union{Nothing, AbstractString},
                          ::Bool)
+    return nothing
+end
+# ... and for a file described with no source, its licence and keywords on its
+# object
+function _registersource(registry::RegistryEndpoint,
+                         described::OutputDescription, ::AbstractString,
+                         object_url::AbstractString,
+                         ::Union{Nothing, AbstractString}, ::Bool)
+    isnothing(described.licence) ||
+        _createentry(registry, "licence",
+                     Dict("object" => object_url,
+                          "licence_info" => described.licence.info,
+                          "identifier" => described.licence.identifier))
+    _addkeywords!(registry, String(object_url), described.keywords)
     return nothing
 end
 function _registersource(registry::RegistryEndpoint, source::SourceRecord,

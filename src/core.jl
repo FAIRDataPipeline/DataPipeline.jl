@@ -381,6 +381,25 @@ struct SourceRecord
 end
 
 """
+    OutputDescription
+
+What the registry is to record of a file a code run writes that has no source
+but its own authors, licence and keywords, as a paper built in a run has them
+from its repository's metadata.
+
+# Fields
+- `authors`: registry URLs of its authors
+- `licence`: the licence's name and the URL that identifies it, as a
+  `SourceRecord`'s, or `nothing` with no licence
+- `keywords`: its keywords
+"""
+struct OutputDescription
+    authors::Vector{String}
+    licence::Union{Nothing, @NamedTuple{info::String, identifier::String}}
+    keywords::Vector{String}
+end
+
+"""
     AbstractRunMode
 
 The way a code run is being made, which decides what the API registers. A

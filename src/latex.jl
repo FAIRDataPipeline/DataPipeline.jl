@@ -37,12 +37,14 @@ _latexmkflag(::XeLaTeXEngine) = "-pdfxe"
 
 # Build the document `tex` with `latexmk` and `engine` into the folder `outdir`,
 # running in the folder holding `tex` and naming the PDF by its stem, with
-# `options` added to the command. Return the files the build used, as absolute
-# paths in the order `latexmk -deps-out` lists them, and the PDF's path, as
-# `(files, pdf)`
+# `options` added to the command and the folder `texinputs`, where there is
+# one, searched for TeX's input files before the others. Return the files the
+# build used, as absolute paths in the order `latexmk -deps-out` lists them,
+# and the PDF's path, as `(files, pdf)`
 function _latexmk(tex::AbstractString, outdir::AbstractString,
                   engine::AbstractLaTeXEngine;
-                  options::Vector{String} = String[])
+                  options::Vector{String} = String[],
+                  texinputs::Union{Nothing, AbstractString} = nothing)
     latexmk = Sys.which("latexmk")
     isnothing(latexmk) &&
         throw(ReadWriteException("no `latexmk` on the path: building a paper needs a TeX distribution that has it, such as TeX Live or MiKTeX"))
@@ -56,6 +58,14 @@ function _latexmk(tex::AbstractString, outdir::AbstractString,
     log = joinpath(outdir, "$stem.latexmk.log")
     command = Cmd(`$latexmk $(_latexmkflag(engine)) -interaction=nonstopmode -halt-on-error -outdir=$outdir -deps-out=$listing -jobname=$stem $options $(basename(tex))`,
                   dir = folder)
+    if !isnothing(texinputs)
+        # A trailing separator keeps TeX's own search path after the folder
+        separator = Sys.iswindows() ? ";" : ":"
+        command = addenv(command,
+                         "TEXINPUTS" =>
+                             abspath(texinputs) * separator *
+                             get(ENV, "TEXINPUTS", ""))
+    end
     built = open(log, "w") do io
         return success(pipeline(command, stdout = io, stderr = io))
     end
