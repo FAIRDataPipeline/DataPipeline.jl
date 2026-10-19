@@ -19,6 +19,8 @@
       local time; the dates shown say UTC.
     - Each `initialise` registers a new code run: two runs of one config started
       in the same second were one.
+    - `initialise()` takes the submission script the working config names, so a
+      user config may give its `shell:`, `julia` say; it looked for `script.sh`.
   - Writing:
     - A `write:` entry may name a version that exists, to reproduce it: a file
       that is that version's registers nothing, and any other is refused at

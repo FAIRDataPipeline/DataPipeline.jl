@@ -2,7 +2,7 @@
 
 """
     initialise(config_file = \$FDP_CONFIG_DIR/config.yaml,
-               submission_script = \$FDP_CONFIG_DIR/script.sh;
+               submission_script = its run_metadata.script_path;
                token = \$FDP_LOCAL_TOKEN)
 
 Read the working config that `fair run` wrote, register the config, the
@@ -16,7 +16,10 @@ registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 With no arguments, the files are those in the folder `fair run` names in
 `FDP_CONFIG_DIR` when it launches a script: a call with that unset, or with a
 file that is not a working config, throws a [`ConfigFileException`](@ref)
-saying so. After [`rehearse`](@ref) the same call opens a
+saying so. The submission script is the one the working config names as
+`run_metadata.script_path` - the copy `fair run` wrote in that folder,
+`script.sh`, or `script.jl` for a user config with `shell: julia`, and so on -
+else `script.sh` (`script.bat` on Windows) in the folder. After [`rehearse`](@ref) the same call opens a
 [`Rehearsal`](@ref) instead, from the job folder it prepared: nothing is
 registered, and the handle holds no token, whatever is given or set.
 
@@ -44,13 +47,15 @@ function initialise(config_file::Union{Nothing, String} = nothing,
                     submission_script::Union{Nothing, String} = nothing;
                     token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
     mode = _runmode(SESSION[])
+    job = nothing
     if isnothing(config_file)
-        config_file, submission_script = _launchedfiles()
-    elseif isnothing(submission_script)
-        submission_script = _launchedscript()
+        job = _launchedjob()
+        config_file = joinpath(job, "config.yaml")
     end
     println("processing config file: ", config_file)
     config = _workingconfig(config_file)
+    isnothing(submission_script) &&
+        (submission_script = _submissionscript(config, job))
     run_metadata = config["run_metadata"]
     registry = RegistryEndpoint(get(run_metadata, "local_data_registry_url",
                                     DEFAULT_REGISTRY_URL),

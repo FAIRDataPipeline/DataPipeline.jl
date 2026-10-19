@@ -425,10 +425,11 @@ end
 # Copy the working config and the script from the job folder to the outputs
 # folder, so that the outputs keep what they were made under
 function _copyjobfiles(handle::DataRegistryHandle{Rehearsal})
-    for name in ("config.yaml", FDP_SUBMISSION_SCRIPT)
-        file = joinpath(handle.config_dir, name)
-        isfile(file) && cp(file, joinpath(handle.mode.outputs, name),
-           force = true)
+    for file in (joinpath(handle.config_dir, "config.yaml"),
+                 _submissionscript(handle.config, handle.config_dir))
+        isfile(file) &&
+            cp(file, joinpath(handle.mode.outputs, basename(file)),
+               force = true)
     end
     return nothing
 end

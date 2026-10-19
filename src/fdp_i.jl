@@ -29,16 +29,13 @@ end
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
-# The working config and the submission script of the run this script is in,
-# as `(config, script)`: the session's rehearsal's, else those `fair run`
-# launched this script with, in the folder it names in FDP_CONFIG_DIR; with
-# neither, no run was prepared
-function _launchedfiles()
+# The job folder of the run this script is in: the session's rehearsal's, else
+# the one `fair run` launched this script with and names in FDP_CONFIG_DIR;
+# with neither, no run was prepared
+function _launchedjob()
     job = _sessionjob()
     isnothing(job) && haskey(ENV, "FDP_CONFIG_DIR") && (job = FDP_CONFIG_DIR())
-    isnothing(job) ||
-        return (config = joinpath(job, "config.yaml"),
-                script = joinpath(job, FDP_SUBMISSION_SCRIPT))
+    isnothing(job) || return job
     return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
                                             "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
                                             "run the script with `fair run`, prepare a rehearsal with ",
@@ -104,11 +101,16 @@ function _ended(handle::DataRegistryHandle)
     return nothing
 end
 
-# The submission script `fair run` launched this script with, wanted when a
-# working config was given alone
-function _launchedscript()
+# The submission script of a working config: the copy in its job folder that
+# `fair run` names as `run_metadata.script_path`, whatever shell runs it. For a
+# config naming none, `script.sh` (`script.bat` on Windows) in its job folder
+# `job`, or with none known, in FDP_CONFIG_DIR
+function _submissionscript(config::AbstractDict, job::Union{Nothing, String})
+    path = get(config["run_metadata"], "script_path", nothing)
+    isnothing(path) || return String(path)
+    isnothing(job) || return joinpath(job, FDP_SUBMISSION_SCRIPT)
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_SUBMISSION()
-    return throw(ConfigFileException(string("initialise was given a working config and no submission script, ",
+    return throw(ConfigFileException(string("initialise was given a working config that names no submission script, ",
                                             "and FDP_CONFIG_DIR is not set to find one beside it: give both")))
 end
 

@@ -966,6 +966,49 @@ Test.@testset "initialise() opens a new code run, dated in UTC" begin
     @test !isnothing(pair) && pair[1].code_run_uuid != pair[2].code_run_uuid
 end
 
+Test.@testset "initialise() takes the script the working config names" begin
+    job = joinpath(datastore, "coderun", datetime, "another-shell")
+    script = joinpath(job, "script.jl")
+    config = DataPipeline._createconfig(joinpath("coderun", datetime,
+                                                 "another-shell",
+                                                 "config.yaml"),
+                                        script_path = script)
+    write(script, "println(\"a script in another shell $uid\")\n")
+    # The hash of the script a handle's run registered
+    script_hash(handle) = DataPipeline._getstoragelocation(handle.registry,
+                                                           handle.script_obj).hash
+
+    # Launched by fair run, or given the working config alone, the script is
+    # the one the working config names, not script.sh beside it
+    handle = withenv("FDP_CONFIG_DIR" => job) do
+        return DataPipeline.initialise()
+    end
+    @test script_hash(handle) == DataPipeline._getfilehash(script)
+    DataPipeline._resetsession!()
+    handle = withenv("FDP_CONFIG_DIR" => nothing) do
+        return DataPipeline.initialise(config)
+    end
+    @test script_hash(handle) == DataPipeline._getfilehash(script)
+
+    # A working config naming none has script.sh (script.bat on Windows)
+    # beside it, and given alone with no FDP_CONFIG_DIR is an error
+    data = DataPipeline.YAML.load_file(config)
+    delete!(data["run_metadata"], "script_path")
+    DataPipeline.YAML.write_file(config, data)
+    beside = joinpath(job, DataPipeline.FDP_SUBMISSION_SCRIPT)
+    write(beside, "a script beside its config $uid\n")
+    DataPipeline._resetsession!()
+    handle = withenv("FDP_CONFIG_DIR" => job) do
+        return DataPipeline.initialise()
+    end
+    @test script_hash(handle) == DataPipeline._getfilehash(beside)
+    DataPipeline._resetsession!()
+    withenv("FDP_CONFIG_DIR" => nothing) do
+        @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config)
+    end
+    DataPipeline._resetsession!()
+end
+
 Test.@testset "a run from uncommitted changes" begin
     registry = handle.registry
     # What `fair run --dirty` records for a working tree with uncommitted
@@ -2498,9 +2541,10 @@ end
         @test occursin("fair run", err.value.msg)
         @test occursin("FDP_CONFIG_DIR", err.value.msg)
 
-        # A working config given alone has no script to go with it
-        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config)
-        @test occursin("submission script", err.value.msg)
+        # A working config given alone takes the script it names, and with no
+        # token goes no further than the first registration
+        err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config)
+        @test occursin("no token", err.value.msg)
 
         # A job folder that is gone
         withenv("FDP_CONFIG_DIR" => mktempdir()) do

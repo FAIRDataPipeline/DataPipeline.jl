@@ -34,6 +34,8 @@ const DEFAULT_API_VERSION = "1.0.0"
 # The severity the registry gives an issue when none is set
 const DEFAULT_ISSUE_SEVERITY = 1
 FDP_CONFIG_DIR() = get(ENV, "FDP_CONFIG_DIR", ".")
+# The submission script of a working config that names none in its
+# `run_metadata.script_path`
 @static if Sys.iswindows()
     const FDP_SUBMISSION_SCRIPT = "script.bat"
 else

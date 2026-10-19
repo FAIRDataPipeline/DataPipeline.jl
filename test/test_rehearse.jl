@@ -359,15 +359,18 @@ Test.@testset "what rehearse() accepts" begin
 end
 
 # A user config inside the project, as a user's would be, reading the SEIRS
-# parameters and writing one text file
-function user_config(name::AbstractString, data_product::AbstractString)
+# parameters and writing one text file, its script run by `shell` where one is
+# given
+function user_config(name::AbstractString, data_product::AbstractString;
+                     shell = nothing, script = "julia script.jl")
     path = joinpath(pwd(), "rehearse-$name-$uid.yaml")
+    run_metadata = Dict("description" => "A rehearsed run $uid",
+                        "script" => script,
+                        "default_input_namespace" => "testing",
+                        "default_output_namespace" => "testing")
+    isnothing(shell) || (run_metadata["shell"] = shell)
     DataPipeline.YAML.write_file(path,
-                                 Dict("run_metadata" =>
-                                          Dict("description" => "A rehearsed run $uid",
-                                               "script" => "julia script.jl",
-                                               "default_input_namespace" => "testing",
-                                               "default_output_namespace" => "testing"),
+                                 Dict("run_metadata" => run_metadata,
                                       "read" =>
                                           [Dict("data_product" => "parameters",
                                                 "use" =>
@@ -420,6 +423,22 @@ Test.@testset "rehearse() from a user config, through fair" begin
     DataPipeline._discardcurrent()
     @test !isdir(second)
     @test isnothing(current())
+    rm(user)
+end
+
+Test.@testset "rehearse() of a script in another shell, through fair" begin
+    name = "rehearse/via-fair-julia/$uid"
+    user = user_config("julia", name, shell = "julia",
+                       script = "println(\"a rehearsed Julia script $uid\")\n")
+    outputs = mktempdir()
+    # fair writes the script as script.jl, which the working config names
+    job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
+    @test isfile(joinpath(job, "script.jl"))
+    handle = DataPipeline.initialise()
+    write(link_write!(handle, name), "rehearsed in another shell $uid\n")
+    @test DataPipeline.finalise(handle) == outputs
+    @test occursin("a rehearsed Julia script $uid",
+                   read(joinpath(outputs, "script.jl"), String))
     rm(user)
 end
 
