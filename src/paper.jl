@@ -197,22 +197,29 @@ function _checkfrontmatter(mode::AbstractRunMode, meta::RepositoryMetadata,
         return _paperproblem(mode,
                              "no CITATION.cff or other metadata file in $top gives the paper's authors")
     end
-    compared = _comparecitation(meta, front)
-    differences = String[]
-    isnothing(compared.title) ||
-        push!(differences,
-              "the title is $(repr(compared.title.latex)) in the LaTeX and $(repr(compared.title.file)) in $(first(meta.files))")
-    isempty(compared.added) ||
-        push!(differences,
-              "$(join(compared.added, ", ")) in the LaTeX and not in $(first(meta.files))")
-    isempty(compared.removed) ||
-        push!(differences,
-              "$(join(compared.removed, ", ")) in $(first(meta.files)) and not in the LaTeX")
-    compared.reordered &&
-        push!(differences, "the authors are in another order")
+    differences = _frontmatterdifferences(_comparecitation(meta, front),
+                                          first(meta.files))
     isempty(differences) && return nothing
     return _paperproblem(mode,
                          "the paper's LaTeX and its metadata differ: $(join(differences, "; ")) - bring $(first(meta.files)) into line with the LaTeX before building")
+end
+
+# How the paper's title and authors differ between its LaTeX and the metadata
+# file `source`, as `_comparecitation` compared them, each difference said
+function _frontmatterdifferences(compared::NamedTuple, source::AbstractString)
+    differences = String[]
+    isnothing(compared.title) ||
+        push!(differences,
+              "the title is $(repr(compared.title.latex)) in the LaTeX and $(repr(compared.title.file)) in $source")
+    isempty(compared.added) ||
+        push!(differences,
+              "$(join(compared.added, ", ")) in the LaTeX and not in $source")
+    isempty(compared.removed) ||
+        push!(differences,
+              "$(join(compared.removed, ", ")) in $source and not in the LaTeX")
+    compared.reordered &&
+        push!(differences, "the authors are in another order")
+    return differences
 end
 
 # What the registry is to record of the PDF: the authors of the paper's
@@ -263,8 +270,12 @@ const METADATA_TEX = "datapipeline-metadata.tex"
 # one for each `.tex` file and a rehearsal's apart, so that a recorded run only
 # registers a PDF it built itself
 function _paperfolder(mode::AbstractRunMode, paper::LaTeXPaper)
+    return _paperfolder(paper) * _foldersuffix(mode)
+end
+# ... and the path such folders start with, each adding a suffix of its own
+function _paperfolder(paper::LaTeXPaper)
     key = first(bytes2hex(SHA.sha1(_resolved(paper.tex))), 16)
-    return joinpath(@get_scratch!("papers"), key * _foldersuffix(mode))
+    return joinpath(@get_scratch!("papers"), key)
 end
 _foldersuffix(::RecordedRun) = ""
 _foldersuffix(::Rehearsal) = "-rehearsal"

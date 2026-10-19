@@ -28,10 +28,13 @@ macro fair_str(text)
 end
 
 # Run `fair` with these arguments - `cli` naming the one to run, else the one
-# found - and throw on an exit status other than 0
+# found - in the folder `dir` if one is given, and throw on an exit status
+# other than 0
 function _fair(arguments::AbstractString...;
-               cli::Union{Nothing, AbstractString, Cmd} = nothing)
+               cli::Union{Nothing, AbstractString, Cmd} = nothing,
+               dir::Union{Nothing, AbstractString} = nothing)
     command = _withenvironment(`$(_faircommand(cli)) $arguments`)
+    isnothing(dir) || (command = Cmd(command; dir = String(dir)))
     process = run(ignorestatus(command))
     success(process) ||
         throw(ReadWriteException("`fair $(join(arguments, " "))` failed with exit status $(process.exitcode)"))

@@ -211,8 +211,30 @@ build_paper!(handle, "paper.tex")
 DataPipeline.finalise(handle)
 ```
 
+Outside any run, [`DataPipeline.setup_paper`](@ref) prepares a paper once,
+drafting its `CITATION.cff` from the LaTeX, the template of the config that
+builds it, holding that script, and the script's environment in the pipeline
+folder. Before each build, [`DataPipeline.check_paper`](@ref) reports what is
+missing or out of date, and [`DataPipeline.update_paper`](@ref) brings
+`CITATION.cff` and the config up to date, with `newest = true` bringing in the
+newest version of each file from the pipeline too:
+
+```julia
+DataPipeline.setup_paper("paper.tex")
+DataPipeline.check_paper("paper.tex")
+DataPipeline.update_paper("paper.tex", newest = true)
+```
+
+The files changed are then committed, after `fair pull paper.yaml` where the
+local registry lacks a version the config names, and the paper is built with
+`fair run paper.yaml`.
+
 ```@docs
 build_paper!
+DataPipeline.setup_paper
+DataPipeline.check_paper
+DataPipeline.update_paper
+DataPipeline.PaperCheck
 DataPipeline.LaTeXPaper
 DataPipeline.PdfLaTeXEngine
 DataPipeline.LuaLaTeXEngine

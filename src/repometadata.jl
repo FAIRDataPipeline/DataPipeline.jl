@@ -71,11 +71,13 @@ end
 # `place` saying where they are read from. The first being unreadable is an
 # error, since taking a less trusted file in its place could register what it
 # contradicts; a later one is passed over. What the later files say more or
-# otherwise is told, as of `described`, the title only where `title` is true
+# otherwise is told, as of `described`, the title only where `title` is true,
+# or where `told` is given added to it instead
 function _repositorymetadata(text::Function, place::AbstractString;
                              title::Bool = false,
                              order::Tuple = REPOSITORY_METADATA_FILES,
-                             described::String = "the repository's metadata")
+                             described::String = "the repository's metadata",
+                             told::Union{Nothing, Vector{String}} = nothing)
     trusted = nothing
     differences = String[]
     files = String[]
@@ -100,8 +102,11 @@ function _repositorymetadata(text::Function, place::AbstractString;
             _metadatadifferences!(differences, trusted, name => said, title)
         end
     end
-    isempty(differences) ||
+    if !isnothing(told)
+        append!(told, differences)
+    elseif !isempty(differences)
         @info "$described at $place is $(first(trusted))'s alone, and files trusted less say more or otherwise: $(join(differences, "; "))"
+    end
     said = isnothing(trusted) ? _filesays() : last(trusted)
     return RepositoryMetadata(said.authors, said.identifiers, said.licence,
                               said.keywords, said.description, said.version,
@@ -407,8 +412,10 @@ const PAPER_METADATA_FILES = ("CITATION.cff" => _papercitationsays,
 # What the metadata files in the working tree at `folder`, its top level, say
 # of the paper it holds, in the order of `PAPER_METADATA_FILES`. Where
 # `CITATION.cff` has a `preferred-citation`, that is the paper's and the other
-# files describe something else, so they are neither read nor compared with it
-function _papermetadata(folder::AbstractString)
+# files describe something else, so they are neither read nor compared with it.
+# What the others say more or otherwise is told, or added to `told`
+function _papermetadata(folder::AbstractString;
+                        told::Union{Nothing, Vector{String}} = nothing)
     citation = joinpath(folder, "CITATION.cff")
     if isfile(citation)
         meta = try
@@ -427,7 +434,8 @@ function _papermetadata(folder::AbstractString)
     end
     return _repositorymetadata("the working tree at $folder", title = true,
                                order = PAPER_METADATA_FILES,
-                               described = "the paper's metadata") do name
+                               described = "the paper's metadata",
+                               told = told) do name
         path = joinpath(folder, name)
         return isfile(path) ? read(path, String) : nothing
     end

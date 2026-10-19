@@ -63,6 +63,7 @@ public @fair_str
 public DataRegistryHandle, RecordedRun, Rehearsal
 public RegistryEndpoint, registry_session
 public LaTeXPaper, PdfLaTeXEngine, LuaLaTeXEngine, XeLaTeXEngine
+public setup_paper, check_paper, update_paper, PaperCheck
 public ReadWriteException, ConfigFileException
 public WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
@@ -86,6 +87,7 @@ include("repometadata.jl")
 include("latex.jl")
 include("citationfile.jl")
 include("paper.jl")
+include("papersetup.jl")
 include("fdp_i.jl")
 include("citations.jl")
 include("authors.jl")

@@ -631,12 +631,12 @@ function _cliregistry(::Nothing)
     return _registryentry(path, "local")
 end
 
-# The registry called `remote` in the configuration of the project the current
-# directory belongs to
-function _cliregistry(remote::AbstractString)
-    project = _fairroot(pwd())
+# The registry called `remote` in the configuration of the project the folder
+# `dir` belongs to
+function _cliregistry(remote::AbstractString, dir::AbstractString = pwd())
+    project = _fairroot(dir)
     isnothing(project) &&
-        throw(ConfigFileException("no `.fair` folder in $(pwd()) or above it - run `fair init` in the project"))
+        throw(ConfigFileException("no `.fair` folder in $dir or above it - run `fair init` in the project"))
     path = joinpath(project, ".fair", "cli-config.yaml")
     isfile(path) ||
         throw(ConfigFileException("no CLI configuration at $path - run `fair init` in the project"))

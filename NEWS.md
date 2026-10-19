@@ -34,6 +34,10 @@
       run: the files it uses from its pipeline folder are its inputs, and the PDF
       its output, with the authors, licence and keywords of the paper's metadata,
       which the PDF holds too. `LaTeXPaper` describes a paper.
+    - `setup_paper` drafts a paper's `CITATION.cff`, its config's template and its
+      build's environment, once; `check_paper` reports what is out of date or
+      missing; `update_paper` brings `CITATION.cff` and the config's `read:` block
+      up to date, and with `newest = true` the files from the pipeline.
 
 - v0.55.0
   - Breaking changes:

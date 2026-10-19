@@ -8,6 +8,7 @@ using Test
 
 const LibGit2 = DataPipeline.LibGit2
 const URIs = DataPipeline.URIs
+const YAML = DataPipeline.YAML
 const ReadWriteException = DataPipeline.ReadWriteException
 
 uid = DataPipeline._randomhash()
@@ -161,6 +162,95 @@ end
                           for (key, value) in DataPipeline._documentinfo(meta))
             end
         end
+    end
+
+    @testset "a paper's template and config" begin
+        top = mktempdir()
+        mkpath(joinpath(top, "paper"))
+        tex = joinpath(top, "paper", "article.tex")
+        write(tex, "\\documentclass{article}\n")
+        repo = LibGit2.init(top)
+        close(LibGit2.GitRemote(repo, "origin",
+                                "git@github.com:example/My-Study.git"))
+        paper = DataPipeline.LaTeXPaper(tex)
+        front = (title = "An invented study", authors = ["Ines A. Valcourt"],
+                 affiliations = [String[]])
+
+        # The PDF named by the repository and the paper, and the paper by its
+        # path unless it is built otherwise than by default
+        @test DataPipeline._paperdataproduct(paper, top) == "My-Study/article"
+        @test DataPipeline._paperargument(paper, top) == "\"paper/article.tex\""
+        other = DataPipeline.LaTeXPaper(tex, pipeline = "figures",
+                                        engine = DataPipeline.LuaLaTeXEngine())
+        @test DataPipeline._paperargument(other, top) ==
+              "DataPipeline.LaTeXPaper(\"paper/article.tex\", pipeline = \"figures\", engine = DataPipeline.LuaLaTeXEngine())"
+
+        # The template: a Julia script building the paper in the pipeline
+        # folder's environment, or else a temporary one, and the PDF's entry
+        template = DataPipeline._drafttemplate(paper, top, front, true)
+        drafted = YAML.load(template)
+        @test drafted["run_metadata"]["shell"] == "julia"
+        script = drafted["run_metadata"]["script"]
+        @test startswith(script,
+                         "import Pkg\nPkg.activate(\"paper/pipeline\")\nPkg.instantiate()\n")
+        @test occursin("DataPipeline.build_paper!(handle, \"paper/article.tex\")\n",
+                       script)
+        @test drafted["write"] ==
+              [Dict("data_product" => "My-Study/article",
+                    "description" => "The paper An invented study, built from paper/article.tex",
+                    "file_type" => "pdf")]
+        temporary = YAML.load(DataPipeline._drafttemplate(paper, top, front,
+                                                          false))
+        @test startswith(temporary["run_metadata"]["script"],
+                         "import Pkg\nPkg.activate(temp = true)\nPkg.add(\"DataPipeline\")\n")
+
+        # The config: the template as it is, then a read: block pinning each
+        # data product, labelled by its namespace too where two share a name
+        entries = [
+            (namespace = "alpha", name = "maps/rain", version = v"1.0.0",
+             files = ["paper/pipeline/rain.pdf"], current = true),
+            (namespace = "beta", name = "maps/rain", version = v"0.2.0",
+             files = ["paper/pipeline/rain-b.pdf"], current = true),
+            (namespace = "beta", name = "tables/one", version = v"0.0.1",
+             files = ["paper/pipeline/one.tex", "paper/pipeline/same.tex"],
+             current = true)]
+        text = DataPipeline._paperconfigtext(paper, template, entries)
+        @test startswith(text,
+                         "# Written by DataPipeline.update_paper from article.template.yaml")
+        @test occursin(template, text)
+        @test occursin("# paper/pipeline/one.tex\n# paper/pipeline/same.tex\n- data_product: \"tables/one\"",
+                       text)
+        @test YAML.load(text)["read"] ==
+              [
+            Dict("data_product" => "alpha/maps/rain",
+                 "use" => Dict("data_product" => "maps/rain",
+                      "namespace" => "alpha",
+                      "version" => "1.0.0")),
+            Dict("data_product" => "beta/maps/rain",
+                 "use" => Dict("data_product" => "maps/rain",
+                      "namespace" => "beta", "version" => "0.2.0")),
+            Dict("data_product" => "tables/one",
+                 "use" => Dict("namespace" => "beta", "version" => "0.0.1"))]
+        @test YAML.load(DataPipeline._paperconfigtext(paper, template, []))["read"] ==
+              []
+        # A template with a read: block of its own is refused
+        write(paper.template, template * "read: []\n")
+        @test occursin("has a read: block",
+                       message_of(() -> DataPipeline._templatetext(paper),
+                                  DataPipeline.ConfigFileException))
+
+        # The pipeline folder's files, but for the environment there and what
+        # git ignores
+        for name in ("Project.toml", "Manifest.toml", "a.tex", "b.log",
+            "sub/c.tex", "sub/Project.toml")
+            mkpath(dirname(joinpath(paper.pipeline, name)))
+            write(joinpath(paper.pipeline, name), "$name\n")
+        end
+        write(joinpath(top, ".gitignore"), "*.log\n")
+        @test DataPipeline._pipelinefolderfiles(top, paper.pipeline) ==
+              ["paper/pipeline/a.tex", "paper/pipeline/sub/Project.toml",
+            "paper/pipeline/sub/c.tex"]
+        close(repo)
     end
 
     if !can_build("pdflatex")
@@ -386,6 +476,370 @@ end
             DataPipeline.finalise(handle)
             @test versions() == ["0.0.1", "0.0.3"]
             close(repo)
+        end
+
+        @testset "setting a paper up, checking it and updating it" begin
+            # A paper in a folder of its repository, using two tables from the
+            # pipeline and notes of its own
+            top = mktempdir()
+            folder = joinpath(top, "paper")
+            article = """
+                      \\documentclass{article}
+                      \\title{An invented study of setups}
+                      \\author{Ines A. Valcourt \\and Oskar Lindqvist}
+                      \\begin{document}
+                      \\maketitle
+                      \\input{pipeline/table}
+                      \\input{pipeline/results}
+                      \\input{drawings/notes}
+                      \\end{document}
+                      """
+            texts = Dict("paper/article.tex" => article,
+                         "paper/pipeline/table.tex" => "A table for the paper setup, run $uid.\n",
+                         "paper/pipeline/results.tex" => "Results for the paper setup, run $uid.\n",
+                         "paper/drawings/notes.tex" => "Notes of the paper's own, run $uid.\n")
+            for (name, text) in texts
+                mkpath(dirname(joinpath(top, name)))
+                write(joinpath(top, name), text)
+            end
+            repo = LibGit2.init(top)
+            signature = LibGit2.Signature("Test", "test@example.com",
+                                          1_000_000_000, 0)
+            # Commit everything there is
+            function commit!(message)
+                LibGit2.add!(repo, ".")
+                return LibGit2.commit(repo, message, author = signature,
+                                      committer = signature)
+            end
+            commit!("paper setup $uid")
+            paper = DataPipeline.LaTeXPaper(joinpath(folder, "article.tex"))
+            citation = joinpath(top, "CITATION.cff")
+
+            # A version of a table registered by a run of its own, from a copy
+            # of its text, so that the paper's file is not linked to the data
+            # store's
+            inputs = "paper-setup/$uid"
+            function register!(part, text, version; file_type = "tex")
+                config = DataPipeline._createconfig(cpath("setup-$part-$version"))
+                DataPipeline._addwrite(config, "$inputs/$part", "a $part",
+                                       file_type = file_type,
+                                       use_version = version)
+                handle = DataPipeline.initialise(config, config)
+                copy = joinpath(mktempdir(), "$part.$file_type")
+                write(copy, text)
+                link_write!(handle, "$inputs/$part", path = copy)
+                return DataPipeline.finalise(handle)
+            end
+            label(part, version) = "$namespace:$inputs/$part@v$version"
+            pinned() = Dict(entry["data_product"] => entry["use"]["version"]
+                            for entry in YAML.load_file(paper.config)["read"])
+
+            # Set up before the tables are registered: CITATION.cff and the
+            # template drafted, and the config left for later
+            early = DataPipeline.setup_paper(registry, paper, project = false,
+                                             remote = nothing)
+            @test early.created == [citation, paper.template]
+            @test isempty(early.kept)
+            @test isnothing(early.config) && !isfile(paper.config)
+            @test sort(early.unregistered) ==
+                  ["paper/pipeline/results.tex", "paper/pipeline/table.tex"]
+            @test occursin("  - family-names: \"Valcourt\"\n    given-names: \"Ines A.\"\n",
+                           read(citation, String))
+
+            # Set up again once they are: what is there kept as it is, and the
+            # config written, pinned to the versions the files are
+            register!("table", texts["paper/pipeline/table.tex"], "0.0.1")
+            register!("results", texts["paper/pipeline/results.tex"], "0.0.1")
+            for file in (citation, paper.template)
+                write(file, "# Kept by setup_paper\n" * read(file, String))
+            end
+            set = DataPipeline.setup_paper(registry, paper, project = false,
+                                           remote = nothing)
+            @test isempty(set.created)
+            @test set.kept == [citation, paper.template]
+            @test all(startswith(read(file, String), "# Kept by setup_paper\n")
+                      for file in (citation, paper.template))
+            @test set.config == paper.config && isempty(set.unregistered)
+            @test pinned() ==
+                  Dict("$inputs/results" => "0.0.1", "$inputs/table" => "0.0.1")
+
+            # Checked: every file registered and current, the repository not
+            # initialised for the pipeline, no licence and no ORCIDs
+            commit!("set up")
+            check = DataPipeline.check_paper(registry, paper, remote = nothing)
+            @test any(contains("not initialised for the pipeline"), check.setup)
+            @test sort(check.uses.pipeline) ==
+                  ["paper/pipeline/results.tex", "paper/pipeline/table.tex"]
+            @test sort(check.uses.own) ==
+                  ["paper/article.tex", "paper/drawings/notes.tex"]
+            @test check.metadata == "the top level of CITATION.cff"
+            @test "paper/pipeline/table.tex is $(label("table", "0.0.1")), its newest version" in
+                  check.notes
+            @test length(check.actions) == 1
+            @test contains(only(check.actions),
+                           "the top level of CITATION.cff gives no licence")
+            @test any(contains("no ORCID for Ines A. Valcourt, Oskar Lindqvist"),
+                      check.notes)
+            @test occursin("\n  to do:\n    - the top level of CITATION.cff gives no licence",
+                           sprint(show, MIME"text/plain"(), check))
+            @test sprint(show, check) ==
+                  "PaperCheck(\"article.tex\": $(length(check.setup)) missing from the setup, 1 to do)"
+
+            # A newer table, files in the wrong places, the environment in the
+            # pipeline folder, and the authors reordered
+            register!("table", "A newer table for the paper setup, run $uid.\n",
+                      "0.0.2")
+            write(joinpath(folder, "pipeline", "unused.txt"),
+                  "Not from the pipeline, run $uid.\n")
+            write(joinpath(folder, "pipeline", "Project.toml"), "[deps]\n")
+            write(joinpath(folder, "drawings", "notes.tex"),
+                  texts["paper/pipeline/results.tex"])
+            reordered = replace(article,
+                                "Ines A. Valcourt \\and Oskar Lindqvist" => "Oskar Lindqvist \\and Ines A. Valcourt")
+            write(paper.tex, reordered)
+            check = DataPipeline.check_paper(registry, paper, remote = nothing)
+            @test any(contains("paper/pipeline/table.tex is $(label("table", "0.0.1")), and v0.0.2 is newer - `update_paper(newest = true)` brings it in"),
+                      check.actions)
+            @test any(contains("paper/drawings/notes.tex has the bytes of $(label("results", "0.0.1")), but is outside the pipeline folder"),
+                      check.actions)
+            @test any(contains("paper/pipeline/unused.txt is in the pipeline folder and registered as no data product"),
+                      check.actions)
+            @test !any(contains("Project.toml"), check.actions)
+            @test any(contains("the authors are in another order - `update_paper` would bring CITATION.cff into line"),
+                      check.actions)
+            @test any(contains("paper/article.tex (changed since the commit)"),
+                      check.actions)
+
+            # Updated to the newest versions: the newer table copied in, the
+            # config pinning it, and CITATION.cff in the LaTeX's order
+            write(joinpath(folder, "drawings", "notes.tex"),
+                  texts["paper/drawings/notes.tex"])
+            rm(joinpath(folder, "pipeline", "unused.txt"))
+            updated = DataPipeline.update_paper(registry, paper, newest = true,
+                                                remote = nothing)
+            @test updated.config == paper.config
+            @test updated.files ==
+                  ["paper/pipeline/table.tex" => label("table", "0.0.2")]
+            @test read(joinpath(folder, "pipeline", "table.tex"), String) ==
+                  "A newer table for the paper setup, run $uid.\n"
+            @test pinned()["$inputs/table"] == "0.0.2"
+            @test updated.citation == ["authors put in the LaTeX's order"]
+            @test DataPipeline._papermetadata(top).authors ==
+                  ["Oskar Lindqvist", "Ines A. Valcourt"]
+            commit!("updated")
+            check = DataPipeline.check_paper(registry, paper, remote = nothing)
+            @test "paper/pipeline/table.tex is $(label("table", "0.0.2")), its newest version" in
+                  check.notes
+            @test length(check.actions) == 1
+            @test contains(only(check.actions), "gives no licence")
+
+            # The authors compared with those of the PDF's version registered
+            # last, the template naming its namespace
+            template = read(paper.template, String)
+            pdf = "$(basename(top))/article"
+            write(paper.template,
+                  template * "  use:\n    namespace: $namespace\n")
+            config = DataPipeline._createconfig(cpath("setup-pdf"))
+            DataPipeline._addwrite(config, pdf, "a made-up PDF",
+                                   file_type = "pdf", use_version = "0.0.1")
+            handle = DataPipeline.initialise(config, config)
+            made = joinpath(mktempdir(), "article.pdf")
+            write(made, "%PDF-1.4 made up for the paper setup, run $uid\n")
+            link_write!(handle, pdf, path = made)
+            DataPipeline.finalise(handle)
+            check = DataPipeline.check_paper(registry, paper, remote = nothing)
+            @test any(contains("the authors differ from those of $namespace:$pdf@v0.0.1, the PDF's version registered last: Oskar Lindqvist, Ines A. Valcourt added"),
+                      check.notes)
+            # ... and the config not what the changed template gives
+            @test any(contains("the config at paper/article.yaml is not what `update_paper` would write"),
+                      check.actions)
+            write(paper.template, template)
+
+            if Sys.iswindows()
+                @info "the stand-in for fair is a shell script: not pulling through the project's remote on Windows"
+            else
+                # Through the project's remote, `origin` - here the suite's own
+                # registry - `fair pull` is run in the repository with the
+                # config, and the newest table then copied in
+                mkpath(joinpath(top, ".fair"))
+                token = joinpath(top, ".fair", "token")
+                write(token, ENV["FDP_LOCAL_TOKEN"] * "\n")
+                # The same registry by another name, to tell the paper's
+                # project's configuration from any other
+                origin = replace(registry.url, "127.0.0.1" => "localhost")
+                write(joinpath(top, ".fair", "cli-config.yaml"),
+                      "registries:\n  origin:\n    uri: $origin\n    token: $token\n")
+                @test DataPipeline._paperremote("origin", top).url == origin
+                bin = mktempdir()
+                calls = joinpath(bin, "calls")
+                standin = joinpath(bin, "fair")
+                write(standin,
+                      "#!/bin/sh\necho \"\$(pwd -P) \$*\" >> $calls\necho \"fair, version 9.9.9\"\n")
+                chmod(standin, 0o755)
+                register!("table",
+                          "The newest table for the paper setup, run $uid.\n",
+                          "0.0.3")
+                DataPipeline.set_cli!(standin)
+                try
+                    updated = DataPipeline.update_paper(registry, paper,
+                                                        newest = true)
+                    @test "$(realpath(top)) pull $(paper.config)" in
+                          readlines(calls)
+                    @test updated.files ==
+                          ["paper/pipeline/table.tex" =>
+                        label("table", "0.0.3")]
+                    check = DataPipeline.check_paper(registry, paper)
+                    @test isempty(check.setup)
+                    @test !any(contains("does not hold"), check.actions)
+                    rm(token)
+                    check = DataPipeline.check_paper(registry, paper)
+                    @test any(contains("there is no token for the remote registry 'origin' in $token"),
+                              check.setup)
+                    write(token, ENV["FDP_LOCAL_TOKEN"] * "\n")
+
+                    # A pull that fails leaves the config and the files as
+                    # they were
+                    failing = joinpath(bin, "failing")
+                    write(failing,
+                          "#!/bin/sh\n[ \"\$1\" = pull ] && exit 1\necho \"fair, version 9.9.9\"\n")
+                    chmod(failing, 0o755)
+                    DataPipeline.set_cli!(failing)
+                    register!("table",
+                              "A table newer still for the paper setup, run $uid.\n",
+                              "0.0.4")
+                    kept = read(paper.config, String)
+                    @test contains(message_of(() -> DataPipeline.update_paper(registry,
+                                                                              paper,
+                                                                              newest = true),
+                                              ReadWriteException),
+                                   "`fair pull")
+                    @test read(paper.config, String) == kept
+                    @test read(joinpath(folder, "pipeline", "table.tex"),
+                               String) ==
+                          "The newest table for the paper setup, run $uid.\n"
+                finally
+                    DataPipeline.set_cli!(nothing)
+                end
+            end
+
+            # Refused, the config left as it was: the newest from a remote not
+            # `origin`, no template, a template with a read: block, a file not
+            # registered, and a newest version of another file type
+            before = read(paper.config, String)
+            @test_throws ArgumentError DataPipeline.update_paper(registry,
+                                                                 paper,
+                                                                 newest = true,
+                                                                 remote = "elsewhere")
+            mv(paper.template, paper.template * ".away")
+            @test contains(message_of(() -> DataPipeline.update_paper(registry,
+                                                                      paper,
+                                                                      remote = nothing),
+                                      DataPipeline.ConfigFileException),
+                           "run `DataPipeline.setup_paper` to draft one")
+            mv(paper.template * ".away", paper.template)
+            write(paper.template, template * "read: []\n")
+            @test contains(message_of(() -> DataPipeline.update_paper(registry,
+                                                                      paper,
+                                                                      remote = nothing),
+                                      DataPipeline.ConfigFileException),
+                           "has a read: block")
+            write(paper.template, template)
+            write(joinpath(folder, "pipeline", "results.tex"),
+                  "Results not registered, run $uid.\n")
+            @test contains(message_of(() -> DataPipeline.update_paper(registry,
+                                                                      paper,
+                                                                      remote = nothing),
+                                      ReadWriteException),
+                           "registered as no data product: paper/pipeline/results.tex")
+            write(joinpath(folder, "pipeline", "results.tex"),
+                  texts["paper/pipeline/results.tex"])
+            register!("results", "Results as a table, run $uid.\n", "0.0.2",
+                      file_type = "csv")
+            @test contains(message_of(() -> DataPipeline.update_paper(registry,
+                                                                      paper,
+                                                                      newest = true,
+                                                                      remote = nothing),
+                                      ReadWriteException),
+                           "is a csv file")
+            @test read(paper.config, String) == before
+            check = DataPipeline.check_paper(registry, paper, remote = nothing)
+            @test any(contains("and v0.0.2 is newer - it is a csv file, so replace this one by hand"),
+                      check.actions)
+
+            # What a file trusted less than CITATION.cff says otherwise is
+            # noted
+            write(joinpath(top, ".zenodo.json"),
+                  "{\"creators\": [{\"name\": \"Else, Somebody\"}]}\n")
+            check = DataPipeline.check_paper(registry, paper, remote = nothing)
+            @test any(contains(".zenodo.json gives the authors Somebody Else"),
+                      check.notes)
+
+            # A registry that answers, and an address where none does
+            @test DataPipeline._answers(registry)
+            @test !DataPipeline._answers(DataPipeline.RegistryEndpoint("http://127.0.0.1:1/api/"))
+            close(repo)
+        end
+
+        @testset "a paper beside a package" begin
+            # A repository holding a package and a paper using nothing from
+            # the pipeline
+            top = mktempdir()
+            write(joinpath(top, "Project.toml"),
+                  """
+                  name = "InventedPackage"
+                  uuid = "8f5a1c2e-3b4d-4e6f-9a7b-1c2d3e4f5a6b"
+                  authors = ["Tobias Quennell <tq@example.org>"]
+                  """)
+            write(joinpath(top, "paper.tex"),
+                  """
+                  \\documentclass{article}
+                  \\title{A paper beside a package}
+                  \\author{Morag Fairlie \\and Tobias Quennell}
+                  \\begin{document}
+                  \\maketitle
+                  Nothing from the pipeline, run $uid.
+                  \\end{document}
+                  """)
+            close(LibGit2.init(top))
+            paper = DataPipeline.LaTeXPaper(joinpath(top, "paper.tex"))
+            citation = joinpath(top, "CITATION.cff")
+
+            # Set up with the build's environment: the package at the top
+            # level of CITATION.cff and the paper its preferred-citation
+            set = DataPipeline.setup_paper(registry, paper, remote = nothing)
+            environment = joinpath(top, "pipeline", "Project.toml")
+            @test set.created ==
+                  [citation, paper.template, environment,
+                joinpath(top, "pipeline", "Manifest.toml")]
+            @test haskey(DataPipeline.TOML.parsefile(environment)["deps"],
+                         "DataPipeline")
+            @test startswith(YAML.load_file(paper.template)["run_metadata"]["script"],
+                             "import Pkg\nPkg.activate(\"pipeline\")\nPkg.instantiate()\n")
+            @test set.config == paper.config
+            @test YAML.load_file(paper.config)["read"] == []
+            cff = YAML.load_file(citation)
+            @test cff["title"] == "InventedPackage"
+            @test length(cff["authors"]) == 1
+            @test cff["preferred-citation"]["title"] ==
+                  "A paper beside a package"
+            @test DataPipeline.check_paper(registry, paper,
+                                           remote = nothing).metadata ==
+                  "the preferred-citation of CITATION.cff"
+
+            # A CITATION.cff of the package's alone is not updated, but has
+            # the paper's citation added by setup_paper
+            write(citation,
+                  "cff-version: 1.2.0\nmessage: \"Cite the package.\"\ntitle: \"InventedPackage\"\nauthors:\n  - family-names: Quennell\n    given-names: Tobias\n")
+            @test contains(message_of(() -> DataPipeline.update_paper(registry,
+                                                                      paper,
+                                                                      remote = nothing),
+                                      DataPipeline.ConfigFileException),
+                           "has no preferred-citation for the paper")
+            again = DataPipeline.setup_paper(registry, paper, remote = nothing)
+            @test citation in again.created && environment in again.kept
+            cff = YAML.load_file(citation)
+            @test length(cff["authors"]) == 1
+            @test length(cff["preferred-citation"]["authors"]) == 2
         end
     end
 end
