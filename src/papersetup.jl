@@ -447,9 +447,14 @@ end
 function _refusals(found::NamedTuple)
     refused = copy(found.problems)
     isempty(found.unregistered) ||
-        pushfirst!(refused,
-                   "files the paper uses from the pipeline are registered as no data product: $(join(found.unregistered, ", ")) - register each from the run that makes it, or move one that is the paper's own out of the pipeline folder")
+        pushfirst!(refused, _unregisteredsaid(found.unregistered))
     return refused
+end
+
+# What is said of files the paper uses from the pipeline that are registered as
+# no data product
+function _unregisteredsaid(files::AbstractVector{String})
+    return "files the paper uses from the pipeline are registered as no data product, so the build would refuse them: $(join(files, ", ")) - register each from the run that makes it, or move one that is the paper's own out of the pipeline folder"
 end
 
 # Update a paper's files, as `update_paper` says, `withlocal(f)` calling `f`
@@ -832,10 +837,13 @@ function _checkpaper(paper::LaTeXPaper,
                   "the files from the pipeline - what each is registered as, newer versions, issues and what lies behind them - the config's read: block, and which files in and out of the pipeline folder are registered: $why")
         else
             holding = isnothing(remote) ? nothing : registry
+            unregistered = String[]
             for file in uses.pipeline
-                _checkpipelinefile!(actions, notes, identifying, holding,
-                                    paper, top, file)
+                _checkpipelinefile!(actions, notes, unregistered, identifying,
+                                    holding, paper, top, file)
             end
+            isempty(unregistered) ||
+                push!(actions, _unregisteredsaid(unregistered))
             if !isnothing(remote) && isnothing(registry)
                 push!(unchecked,
                       "whether the local registry holds the files from the pipeline: $localwhy")
@@ -1012,8 +1020,10 @@ end
 # uses from the pipeline, `file` from the top level `top`: what it is
 # registered as, whether a newer version exists, the issues on it and behind
 # it, and the inputs behind it superseded since; and where `holding`, the
-# local registry, is given, whether that holds it
+# local registry, is given, whether that holds it. A file registered as no data
+# product is added to `unregistered`, to be said with the others
 function _checkpipelinefile!(actions::Vector{String}, notes::Vector{String},
+                             unregistered::Vector{String},
                              identifying::RegistryEndpoint,
                              holding::Union{Nothing, RegistryEndpoint},
                              paper::LaTeXPaper, top::AbstractString,
@@ -1022,8 +1032,7 @@ function _checkpipelinefile!(actions::Vector{String}, notes::Vector{String},
     records = [record
                for object in found.objects for record in object.data_products]
     if isempty(records)
-        push!(actions,
-              "$file is registered as no data product, so the build would refuse it - register it from the run that makes it, or move it out of the pipeline folder if it is the paper's own")
+        push!(unregistered, file)
         return nothing
     end
     names = unique((record.namespace, record.name) for record in records)
@@ -1107,12 +1116,13 @@ function _checkplacement!(actions::Vector{String},
               "$file has the bytes of $(join(labels, ", ")), but is outside the pipeline folder, so the build takes it as the paper's own, with no provenance - move it into $folder")
     end
     used = Set(uses.pipeline)
-    for file in _pipelinefolderfiles(top, paper.pipeline)
-        file in used && continue
-        isempty(_productrecords(identifying, joinpath(top, file))) || continue
+    unused = [file
+              for file in _pipelinefolderfiles(top, paper.pipeline)
+              if !(file in used) &&
+        isempty(_productrecords(identifying, joinpath(top, file)))]
+    isempty(unused) ||
         push!(actions,
-              "$file is in the pipeline folder and registered as no data product, and the paper does not use it - the folder is for files from the pipeline, so move it out, to the drawings folder if the paper is to use it")
-    end
+              "files in the pipeline folder are registered as no data product and the paper does not use them: $(join(unused, ", ")) - the folder is for files from the pipeline, so move them out, to the drawings folder for any the paper is to use")
     return nothing
 end
 

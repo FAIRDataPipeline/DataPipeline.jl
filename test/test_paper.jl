@@ -602,7 +602,7 @@ end
                       check.actions)
             @test any(contains("paper/drawings/notes.tex has the bytes of $(label("results", "0.0.1")), but is outside the pipeline folder"),
                       check.actions)
-            @test any(contains("paper/pipeline/unused.txt is in the pipeline folder and registered as no data product"),
+            @test any(contains("files in the pipeline folder are registered as no data product and the paper does not use them: paper/pipeline/unused.txt -"),
                       check.actions)
             @test !any(contains("Project.toml"), check.actions)
             @test any(contains("the authors are in another order - `update_paper` would bring CITATION.cff into line"),
@@ -750,7 +750,10 @@ end
                                                                       paper,
                                                                       remote = nothing),
                                       ReadWriteException),
-                           "registered as no data product: paper/pipeline/results.tex")
+                           "registered as no data product, so the build would refuse them: paper/pipeline/results.tex -")
+            @test any(contains("registered as no data product, so the build would refuse them: paper/pipeline/results.tex -"),
+                      DataPipeline.check_paper(registry, paper,
+                                               remote = nothing).actions)
             write(joinpath(folder, "pipeline", "results.tex"),
                   texts["paper/pipeline/results.tex"])
             register!("results", "Results as a table, run $uid.\n", "0.0.2",
