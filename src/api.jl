@@ -87,21 +87,30 @@ function _openrun(mode::RecordedRun, config::Dict, config_file::String,
     endswith(run_metadata["latest_commit"], "-dirty") &&
         _flagdirtyrepository(registry, repo_url, run_metadata["latest_commit"])
 
-    # Always a new code run: two runs of one config may start in the same
-    # second, and an entry found by these fields would be the other's
-    run_date = Dates.format(Dates.now(Dates.UTC), "yyyy-mm-ddTHH:MM:SSZ")
-    code_run = _createentry(registry, "code_run",
-                            Dict("run_date" => run_date,
-                                 "description" => run_metadata["description"],
-                                 "code_repo" => repo_url,
-                                 "model_config" => config_url,
-                                 "submission_script" => script_url))
+    code_run = _newcoderun(registry, run_metadata["description"], repo_url,
+                           config_url, script_url)
     println("pipeline initialised.")
 
     return _newhandle(mode, config, config_file, registry,
                       (config = config_url, script = script_url,
                        repository = repo_url, datastore = datastore_url,
                        code_run = code_run["url"]), code_run["uuid"])
+end
+
+# Register a new code run started at `run_date`, in UTC, and return its entry:
+# always a new one, since two runs of one config may start in the same second,
+# and an entry found by these fields would be the other's
+function _newcoderun(registry::RegistryEndpoint, description::AbstractString,
+                     repo_url::AbstractString, config_url::AbstractString,
+                     script_url::AbstractString;
+                     run_date::DateTime = Dates.now(Dates.UTC))
+    return _createentry(registry, "code_run",
+                        Dict("run_date" => Dates.format(run_date,
+                                          "yyyy-mm-ddTHH:MM:SSZ"),
+                             "description" => description,
+                             "code_repo" => repo_url,
+                             "model_config" => config_url,
+                             "submission_script" => script_url))
 end
 
 # A handle at the start of a run: the mode, the config and where it was read

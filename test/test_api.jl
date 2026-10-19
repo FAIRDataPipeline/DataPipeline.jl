@@ -948,22 +948,15 @@ Test.@testset "initialise() opens a new code run, dated in UTC" begin
     handle = DataPipeline.initialise(config, config)
     @test before <= DateTime(first(run_of(handle)["run_date"], 19)) <= now(UTC)
 
-    # Two runs of one config started in the same second are two code runs:
-    # pairs are started until one shares a second
-    pair = nothing
-    for _ in 1:20
-        DataPipeline._resetsession!()
-        first_run = DataPipeline.initialise(config, config)
-        DataPipeline._resetsession!()
-        second_run = DataPipeline.initialise(config, config)
-        if run_of(first_run)["run_date"] == run_of(second_run)["run_date"]
-            pair = (first_run, second_run)
-            break
-        end
-    end
+    # Two runs of one config started in the same second are two code runs
+    moment = floor(now(UTC), Second)
+    runs = [DataPipeline._newcoderun(handle.registry, "one second $uid",
+                                     handle.repo_obj, handle.config_obj,
+                                     handle.script_obj, run_date = moment)
+            for _ in 1:2]
+    @test runs[1]["run_date"] == runs[2]["run_date"]
+    @test runs[1]["uuid"] != runs[2]["uuid"]
     DataPipeline._resetsession!()
-    @test !isnothing(pair)
-    @test !isnothing(pair) && pair[1].code_run_uuid != pair[2].code_run_uuid
 end
 
 Test.@testset "initialise() takes the script the working config names" begin
