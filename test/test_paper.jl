@@ -374,6 +374,17 @@ end
             DataPipeline.finalise(rehearsal)
             @test isfile(joinpath(outputs, namespace, pdf, "0.0.3.pdf"))
             @test versions() == ["0.0.1"]
+
+            # A run from uncommitted changes, as `fair run --dirty` records
+            # one, takes the paper's files as they are, and names them
+            config = offering("dirty", clean * "-dirty", "0.0.3")
+            handle = DataPipeline.initialise(config, config)
+            @test_logs((:info,
+                        r"^the run is from uncommitted changes, so these files the paper uses are taken as they are: paper\.tex \(changed since the commit\)"),
+                       match_mode=:any,
+                       build_paper!(handle, joinpath(top, "paper.tex")))
+            DataPipeline.finalise(handle)
+            @test versions() == ["0.0.1", "0.0.3"]
             close(repo)
         end
     end

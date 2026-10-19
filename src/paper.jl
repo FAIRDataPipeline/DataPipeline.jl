@@ -75,7 +75,9 @@ return the PDF's path, as [`link_write!`](@ref) does with a `path`.
 
 The paper must be in the run's repository, checked out at the run's commit,
 and every file the build uses from the repository must be as that commit has
-it, as must the metadata files read. Its title and authors, in order, must be
+it, as must the metadata files read, unless the run is from uncommitted
+changes, as `fair run --dirty` records one, when they are taken as they are
+and an info message names them. Its title and authors, in order, must be
 those its metadata gives - the citation of the paper in `CITATION.cff`, its
 `preferred-citation` where it has one, else the first of `.zenodo.json`,
 `codemeta.json` and its project file that exists. Each file it uses from the
@@ -101,7 +103,8 @@ function build_paper!(handle::DataRegistryHandle, paper::LaTeXPaper;
     front = _frontmatter(_latexsource(paper.tex))
     meta = _papermetadata(top)
     # The metadata is the commit's only where its files are, as the build's are
-    _checkcommitted(mode, top, meta.files)
+    dirty = endswith(handle.config["run_metadata"]["latest_commit"], "-dirty")
+    _checkcommitted(mode, top, meta.files, dirty)
     _checkfrontmatter(mode, meta, front, top)
     described = _paperdescription(handle, meta)
 
@@ -111,7 +114,7 @@ function build_paper!(handle::DataRegistryHandle, paper::LaTeXPaper;
                      options = ["-usepretex=\\input{$METADATA_TEX}"],
                      texinputs = folder)
     sorted = _sortdependencies(built.files, top, paper.pipeline)
-    _checkcommitted(mode, top, vcat(sorted.own, sorted.pipeline))
+    _checkcommitted(mode, top, vcat(sorted.own, sorted.pipeline), dirty)
     inputs = _pipelineinputs(handle, top, sorted.pipeline)
     _checkdocumentinfo(mode, paper.engine, built.pdf, meta)
 
@@ -346,13 +349,19 @@ function _pdfhexstring(text::AbstractString)
 end
 
 # Check that files of the repository the paper is made from - its metadata
-# files, and after the build those it uses - are as the run's commit has them
+# files, and after the build those it uses - are as the run's commit has them;
+# in a run from uncommitted changes, `dirty`, say which are not
 function _checkcommitted(mode::AbstractRunMode, top::AbstractString,
-                         paths::AbstractVector{String})
+                         paths::AbstractVector{String}, dirty::Bool)
     found = _uncommitted(top, paths)
     isempty(found) && return nothing
+    listed = join(("$path ($state)" for (path, state) in found), ", ")
+    if dirty
+        @info "the run is from uncommitted changes, so these files the paper uses are taken as they are: $listed"
+        return nothing
+    end
     return _paperproblem(mode,
-                         "files the paper uses are not as the run's commit has them: $(join(("$path ($state)" for (path, state) in found), ", ")) - commit them before building")
+                         "files the paper uses are not as the run's commit has them: $listed - commit them before building, or run from uncommitted changes with `fair run --dirty`")
 end
 
 # Each file the paper uses from the pipeline folder, as a path from the top
