@@ -242,9 +242,13 @@ function _capturefair(command::Cmd, arguments::AbstractString...;
             errors = String(take!(errors)))
 end
 
-# Hold the local registry for a rehearsal: through the session that the run
-# which launched this process names in `FDP_SESSION`; else through a session
-# of the CLI's, owned by this process; else, from a CLI with no session
+# The `fair` commands found to have no session commands, so that each is asked
+# once in a process rather than at every use of the registry
+const SESSIONLESS_CLIS = Set{Vector{String}}()
+
+# Hold the local registry while this process uses it: through the session that
+# the run which launched this process names in `FDP_SESSION`; else through a
+# session of the CLI's, owned by this process; else, from a CLI with no session
 # commands, not at all. With no `fair` to be found, nothing holds it. A CLI
 # without the commands is told by its usage error, so that a refusal from one
 # that has them - on another host, say - is an error here too
@@ -256,12 +260,15 @@ function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
         err isa ArgumentError || rethrow()
         return nothing
     end
+    command.exec in SESSIONLESS_CLIS && return RegistryNotHeld()
     opened = _capturefair(command, "registry", "session", "open", "--pid",
                           string(getpid()), "--json")
     if opened.status != 0
-        (opened.status == 2 &&
-         occursin("No such command 'session'", opened.errors)) &&
+        if opened.status == 2 &&
+           occursin("No such command 'session'", opened.errors)
+            push!(SESSIONLESS_CLIS, command.exec)
             return RegistryNotHeld()
+        end
         throw(ReadWriteException("`fair registry session open` failed with exit status $(opened.status): $(strip(opened.errors))"))
     end
     reply = try
@@ -270,11 +277,64 @@ function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
         err isa InterruptException && rethrow()
         nothing
     end
-    (reply isa AbstractDict && haskey(reply, "session")) ||
+    (reply isa AbstractDict &&
+     all(haskey(reply, key)
+         for key in ("session", "registry_url", "token_file"))) ||
         throw(ReadWriteException("`fair registry session open` printed no session: $(strip(opened.printed))"))
     _closeatexit()
-    return RegistryHeldBySession(string(reply["session"]), command)
+    return RegistryHeldBySession(string(reply["session"]), command,
+                                 string(reply["registry_url"]),
+                                 string(reply["token_file"]))
 end
+
+"""
+    registry_session(f; remote = nothing)
+
+Call `f` with the [`RegistryEndpoint`](@ref) of the local registry, held up
+for as long as `f` runs through a session of the FAIR CLI's, which this
+process owns and closes when `f` returns or throws, and return what `f`
+returns. The endpoint is the registry the session names, with the token in the
+file it names. A session starts the registry where nothing holds it, and the
+last to close stops one a session started; a registry started by `fair
+registry start` runs until `fair registry stop`.
+
+Each function that reads or writes a registry outside a run - [`identify`](@ref),
+[`provenance`](@ref), [`downstream`](@ref), [`crate`](@ref),
+[`register_release!`](@ref), [`raise_issue!`](@ref) outside a run - holds a
+session for the call when given no endpoint, and takes this endpoint first to
+share one:
+
+```julia
+DataPipeline.registry_session() do registry
+    DataPipeline.identify(registry, "figures/summary.pdf")
+    DataPipeline.provenance(registry, "figures/summary.pdf")
+end
+```
+
+With `remote`, the name of a remote in the project's CLI configuration, `f` is
+given that remote's endpoint instead, holding nothing. Under `fair run`, whose
+own session holds the registry, and with a `fair` that has no session commands,
+nothing is opened, and `f` is given the endpoint the CLI's configuration names.
+"""
+function registry_session(f::Function;
+                          remote::Union{Nothing, AbstractString} = nothing)
+    isnothing(remote) || return f(RegistryEndpoint(remote = remote))
+    hold = _holdregistry()
+    try
+        return f(_heldendpoint(hold))
+    finally
+        hold isa RegistryHeldBySession && _releaseregistry(hold)
+    end
+end
+
+# The endpoint of the local registry as what holds it names it: a session's
+# address and the token in its file; otherwise the CLI's configuration's
+function _heldendpoint(hold::RegistryHeldBySession)
+    return RegistryEndpoint(hold.registry_url,
+                            token = _tokenfromfile(Dict("token" =>
+                                                            hold.token_file)))
+end
+_heldendpoint(::Union{Nothing, AbstractRegistryHold}) = RegistryEndpoint()
 
 # Release what held the local registry for a rehearsal: a session of the
 # CLI's is closed, which stops a registry it started where it was the last,

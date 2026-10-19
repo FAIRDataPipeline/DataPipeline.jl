@@ -61,7 +61,7 @@ public initialise, finalise, rehearse, discard, install_cli, install_cli!,
        set_cli!
 public @fair_str
 public DataRegistryHandle, RecordedRun, Rehearsal
-public RegistryEndpoint
+public RegistryEndpoint, registry_session
 public LaTeXPaper, PdfLaTeXEngine, LuaLaTeXEngine, XeLaTeXEngine
 public ReadWriteException, ConfigFileException
 public WorkingConfig, SubmissionScript, CodeRepository

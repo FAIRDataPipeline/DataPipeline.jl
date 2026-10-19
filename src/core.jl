@@ -524,15 +524,19 @@ function _showrun(io::IO, handle::DataRegistryHandle{Rehearsal})
     return println(io, "  outputs: ", handle.mode.outputs)
 end
 
-# What keeps the local registry up for a rehearsal, whose script reads it
-# after `rehearse` has returned: a session of the CLI's, opened for it by the
-# `fair` in `cli` and closed when it ends; the run that launched this process,
-# which names its session in `FDP_SESSION`; or nothing, where the CLI has no
-# session commands, and so leaves running a registry its commands start
+# What keeps the local registry up while this process uses it - for a
+# rehearsal, whose script reads it after `rehearse` has returned, a recorded
+# run, or a block of calls outside a run: a session of the CLI's, opened by the
+# `fair` in `cli`, which named the registry's address and its token's file, and
+# closed when the use ends; the run that launched this process, which names its
+# session in `FDP_SESSION`; or nothing, where the CLI has no session commands,
+# and so leaves running a registry its commands start
 abstract type AbstractRegistryHold end
 struct RegistryHeldBySession <: AbstractRegistryHold
     id::String
     cli::Cmd
+    registry_url::String
+    token_file::String
 end
 struct RegistryHeldByRun <: AbstractRegistryHold end
 struct RegistryNotHeld <: AbstractRegistryHold end

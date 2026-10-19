@@ -646,7 +646,9 @@ end
                         r"^`fair registry session close s9` failed: "),
                        DataPipeline._releaseregistry(DataPipeline.RegistryHeldBySession("s9",
                                                                                         Cmd([joinpath(bin,
-                                                                                                      "gone")]))))
+                                                                                                      "gone")]),
+                                                                                        "http://127.0.0.1:8000/api/",
+                                                                                        "/nowhere/token")))
         finally
             DataPipeline.set_cli!(nothing)
         end

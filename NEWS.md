@@ -21,6 +21,10 @@
       in the same second were one.
     - `initialise()` takes the submission script the working config names, so a
       user config may give its `shell:`, `julia` say; it looked for `script.sh`.
+    - Outside a run, `identify`, `provenance`, `downstream`, `crate`,
+      `register_release!` and `raise_issue!` hold the local registry through a
+      session of the CLI's, where `fair` has them; `registry_session` shares one
+      between calls, and `initialise()` outside `fair run` holds one to `finalise`.
   - Writing:
     - A `write:` entry may name a version that exists, to reproduce it: a file
       that is that version's registers nothing, and any other is refused at

@@ -382,7 +382,9 @@ end
 function provenance(x::AbstractString;
                     remote::Union{Nothing, AbstractString} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
-    return provenance(RegistryEndpoint(remote = remote), x; depth)
+    return registry_session(remote = remote) do registry
+        return provenance(registry, x; depth)
+    end
 end
 
 # `depth` is a number of runs, 1 or more, when given

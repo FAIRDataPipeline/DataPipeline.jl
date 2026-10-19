@@ -155,8 +155,9 @@ function register_release!(commit::Union{CheckedOutCommit, NamedCommit} = Checke
                            website::Union{Nothing, AbstractString} = nothing,
                            doi::Union{Nothing, AbstractString} = nothing,
                            remote::Union{Nothing, AbstractString} = nothing)
-    return register_release!(RegistryEndpoint(remote = remote), commit;
-                             website, doi)
+    return registry_session(remote = remote) do registry
+        return register_release!(registry, commit; website, doi)
+    end
 end
 
 # The tags of a clone, by name, each with the commit it names

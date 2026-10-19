@@ -7,6 +7,27 @@ made from it, how one version supersedes another, and the crate that packs the
 files of a paper with the provenance of each. None of it needs a token, so it
 all works outside `fair run`, against the local registry or a remote one.
 
+## Holding the local registry
+
+Outside a run, each of these functions holds the local registry up through a
+session of the FAIR CLI's while it works, where `fair` has session commands: a
+session starts the registry where nothing holds it, and the last to close
+stops one a session started. Calls in a `DataPipeline.registry_session` block
+share its session, given its endpoint first; `fair registry start` keeps the
+registry running until `fair registry stop`, which a `fair` without session
+commands needs.
+
+```julia
+DataPipeline.registry_session() do registry
+    DataPipeline.identify(registry, "results.csv")
+    DataPipeline.provenance(registry, "results.csv")
+end
+```
+
+```@docs
+DataPipeline.registry_session
+```
+
 ## Asking what the registry knows about a file or a repository
 
 `DataPipeline.identify` takes a file, or commits of a git repository, and asks

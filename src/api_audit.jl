@@ -489,8 +489,9 @@ function identify(path::String;
                   remote::Union{Nothing, AbstractString} = nothing,
                   commits::Union{Nothing, AbstractCommitSelection} = nothing,
                   superseded::Bool = false)
-    return identify(RegistryEndpoint(remote = remote), path; commits,
-                    superseded)
+    return registry_session(remote = remote) do registry
+        return identify(registry, path; commits, superseded)
+    end
 end
 function identify(registry::RegistryEndpoint, commits::AbstractCommitSelection)
     return _identifyrepository(registry, commits)
@@ -500,7 +501,9 @@ function identify(handle::DataRegistryHandle, commits::AbstractCommitSelection)
 end
 function identify(commits::AbstractCommitSelection;
                   remote::Union{Nothing, AbstractString} = nothing)
-    return identify(RegistryEndpoint(remote = remote), commits)
+    return registry_session(remote = remote) do registry
+        return identify(registry, commits)
+    end
 end
 
 # What a registry knows about the file at `path`, by its hash: what it is

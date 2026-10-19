@@ -76,8 +76,9 @@ function crate(paths::AbstractString...;
                pack::Union{Nothing, AbstractString} = nothing,
                to::Union{Nothing, AbstractString} = nothing,
                strict::Bool = true)
-    return crate(RegistryEndpoint(remote = remote), paths...; depth, level,
-                 pack, to, strict)
+    return registry_session(remote = remote) do registry
+        return crate(registry, paths...; depth, level, pack, to, strict)
+    end
 end
 
 # The data products the crate is for: those the files among `paths` are

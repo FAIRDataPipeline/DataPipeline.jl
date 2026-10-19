@@ -83,4 +83,120 @@ Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
     # an environment whose interpreter no longer runs, which is rebuilt
 end
 
+Test.@testset "registry_session() and the registry outside a run" begin
+    if Sys.iswindows()
+        @info "the stand-ins for fair are shell scripts: not on Windows"
+    else
+        # A stand-in for a fair with the session commands, logging each call,
+        # its session naming the suite's own registry and a file of its token
+        bin = mktempdir()
+        calls_file = joinpath(bin, "calls")
+        token_file = joinpath(bin, "token")
+        write(token_file, ENV["FDP_LOCAL_TOKEN"] * "\n")
+        url = DataPipeline.RegistryEndpoint().url
+        sessions = joinpath(bin, "fair")
+        write(sessions,
+              """
+              #!/bin/sh
+              echo "\$*" >> $calls_file
+              case "\$1 \$2 \$3" in
+                "registry session open")
+                  echo '{"session": "s1", "registry_url": "$url", "token_file": "$token_file"}' ;;
+                "registry session close") ;;
+                *) echo "fair, version 9.9.9" ;;
+              esac
+              """)
+        chmod(sessions, 0o755)
+        calls() = isfile(calls_file) ? readlines(calls_file) : String[]
+        opening = "registry session open --pid $(getpid()) --json"
+        unregistered = joinpath(bin, "unregistered.txt")
+        write(unregistered, "registered nowhere $uid\n")
+        config = DataPipeline._createconfig(joinpath("coderun",
+                                                     "cli-session-$uid",
+                                                     "config.yaml"))
+        @test DataPipeline.set_cli!(sessions) == sessions
+        # Recording the stand-in asks its version, which is no session call
+        rm(calls_file)
+        # A session's endpoint is the address and token it names, not the
+        # configuration's
+        named = DataPipeline._heldendpoint(DataPipeline.RegistryHeldBySession("s0",
+                                                                              Cmd([sessions]),
+                                                                              "http://example.org/api",
+                                                                              token_file))
+        @test named.url == "http://example.org/api/"
+        @test named.token == ENV["FDP_LOCAL_TOKEN"]
+        try
+            withenv("FDP_SESSION" => nothing) do
+                # The block is given the registry the session names, with
+                # the token its file holds, and the session closes when the
+                # block returns, or throws
+                found = DataPipeline.registry_session() do registry
+                    @test calls() == [opening]
+                    @test registry.url == url
+                    @test registry.token == ENV["FDP_LOCAL_TOKEN"]
+                    return 42
+                end
+                @test found == 42
+                @test calls() == [opening, "registry session close s1"]
+                @test_throws ErrorException DataPipeline.registry_session() do _
+                    return error("inside the block")
+                end
+                @test calls()[end] == "registry session close s1"
+
+                # A function outside a run given no endpoint holds a session
+                # for the call
+                before = length(calls())
+                @test isempty(DataPipeline.identify(unregistered).objects)
+                @test calls()[(before + 1):end] ==
+                      [opening, "registry session close s1"]
+
+                # A run initialise() opens outside fair run, as in a job that
+                # `fair run --ci` prepared, holds one until finalise
+                before = length(calls())
+                handle = DataPipeline.initialise(config, config)
+                @test calls()[(before + 1):end] == [opening]
+                DataPipeline.finalise(handle)
+                @test calls()[end] == "registry session close s1"
+            end
+            # Under fair run, whose own session holds the registry, nothing is
+            # opened, and the block has the configuration's registry
+            withenv("FDP_SESSION" => "the-run") do
+                before = length(calls())
+                DataPipeline.registry_session() do registry
+                    @test registry.url == url
+                end
+                DataPipeline._resetsession!()
+                DataPipeline.finalise(DataPipeline.initialise(config, config))
+                @test length(calls()) == before
+            end
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+
+        # A fair with no session commands is asked once, and the block has the
+        # configuration's registry
+        old = joinpath(bin, "old")
+        write(old,
+              "#!/bin/sh\necho \"\$*\" >> $calls_file\n" *
+              "[ \"\$1 \$2\" = \"registry session\" ] && " *
+              "{ echo \"Error: No such command 'session'.\" >&2; exit 2; }\n" *
+              "echo \"fair, version 0.10.2\"\n")
+        chmod(old, 0o755)
+        @test DataPipeline.set_cli!(old) == old
+        try
+            withenv("FDP_SESSION" => nothing) do
+                before = length(calls())
+                for _ in 1:2
+                    DataPipeline.registry_session() do registry
+                        @test registry.url == url
+                    end
+                end
+                @test length(calls()) == before + 1
+            end
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+    end
+end
+
 end

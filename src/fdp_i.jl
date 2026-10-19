@@ -73,15 +73,16 @@ _runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
 
 # The session's run once `initialise` has opened one: the rehearsal's handle,
 # or the recorded run, in the folder its files are in
-function _opened(handle::DataRegistryHandle{Rehearsal})
+function _opened(handle::DataRegistryHandle{Rehearsal}, ::Nothing)
     session = SESSION[]
     SESSION[] = SessionRun(session.mode, session.job, handle, false,
                            session.hold)
     return nothing
 end
-function _opened(handle::DataRegistryHandle{RecordedRun})
+function _opened(handle::DataRegistryHandle{RecordedRun},
+                 hold::Union{Nothing, AbstractRegistryHold})
     SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false,
-                           nothing)
+                           hold)
     return nothing
 end
 

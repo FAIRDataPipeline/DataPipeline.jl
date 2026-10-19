@@ -62,10 +62,27 @@ function initialise(config_file::Union{Nothing, String} = nothing,
                                 get(run_metadata, "api_version",
                                     DEFAULT_API_VERSION),
                                 token = _runtoken(mode, token))
-    handle = _openrun(mode, config, config_file, submission_script, registry)
-    _opened(handle)
+    hold = _runhold(mode)
+    handle = try
+        _openrun(mode, config, config_file, submission_script, registry)
+    catch
+        _releaseregistry(hold)
+        rethrow()
+    end
+    _opened(handle, hold)
     return handle
 end
+
+# What holds the local registry for a run `initialise` opens: for a recorded
+# run, the run that launched this process, or else a session of its own, as in
+# a job `fair run --ci` prepared, closed at `finalise`; a CLI with no sessions
+# holds none, and having started nothing, there is nothing to say. A
+# rehearsal's hold is the one `rehearse` opened
+function _runhold(::RecordedRun)
+    hold = _holdregistry()
+    return hold isa RegistryNotHeld ? nothing : hold
+end
+_runhold(::Rehearsal) = nothing
 
 # Open a recorded code run: register the data store, the config, the script
 # and the repository, raise the issue on a repository with uncommitted
@@ -179,6 +196,8 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     end
     println("finished - code run locally registered as: ", url, "\n")
     _ended(handle)
+    session = SESSION[]
+    !isnothing(session) && session.handle === handle && _releasehold!()
     return handle.config["run_metadata"]["write_data_store"]
 end
 
@@ -853,15 +872,19 @@ function raise_issue!(targets::AbstractVector, description::String;
                       remote::Union{Nothing, AbstractString} = nothing,
                       severity::Integer = DEFAULT_ISSUE_SEVERITY,
                       all_versions::Bool = false)
-    return raise_issue!(RegistryEndpoint(remote = remote), targets,
-                        description; severity, all_versions)
+    return registry_session(remote = remote) do registry
+        return raise_issue!(registry, targets, description; severity,
+                            all_versions)
+    end
 end
 function raise_issue!(target::_IssueTargetArgument, description::String;
                       remote::Union{Nothing, AbstractString} = nothing,
                       severity::Integer = DEFAULT_ISSUE_SEVERITY,
                       all_versions::Bool = false)
-    return raise_issue!(RegistryEndpoint(remote = remote), [target],
-                        description; severity, all_versions)
+    return registry_session(remote = remote) do registry
+        return raise_issue!(registry, [target], description; severity,
+                            all_versions)
+    end
 end
 
 # A bare string names a data product: of this run by its config name, or a
