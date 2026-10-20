@@ -7,7 +7,6 @@ authors = ["Sonia Mitchell", "Martin J Burke", "Richard Reeve <richard.reeve@gla
 [deps]
 BibInternal = "2027ae74-3657-4b95-ae00-e2f7d55c3e64"
 BibParser = "13533e5b-e1c2-4e57-8cef-cac5e52f6474"
-CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
@@ -27,7 +26,6 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 [compat]
 BibInternal = "0.4"
 BibParser = "0.3"
-CSV = "0.10, 1"
 DataFrames = "1"
 Dates = "1"
 HDF5 = "0.16, 0.17"

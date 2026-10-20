@@ -13,7 +13,6 @@ import BibInternal
 import BibParser
 import MicroMamba
 using Preferences: Preferences, @load_preference
-using CSV
 using DataFrames
 using Dates
 using HTTP

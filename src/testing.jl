@@ -4,17 +4,6 @@
 # builds its own working configs from the one it was launched with.
 
 """
-    _startregistry()
-
-Start the FAIR registry installed under `~/.fair`.
-"""
-function _startregistry()
-    path = expanduser("~/.fair/registry/scripts/start_fair_registry")
-    run(`sh $path`)
-    return nothing
-end
-
-"""
     _createconfig(path; kwargs...)
 
 Write a working config holding only a `run_metadata` section at `path` under

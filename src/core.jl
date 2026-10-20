@@ -853,17 +853,6 @@ end
 _extractid(urls::AbstractVector) = map(_extractid, urls)
 
 """
-    _checkexists(registry, table, query)
-
-Return whether any entry of `table` matches `query`.
-"""
-function _checkexists(registry::RegistryEndpoint, table::String, query::Dict)
-    url = string(registry.url, table, "/")
-    r = _getentry(registry, URIs.URI(url * _convertquery(registry, query)))
-    return r["count"] != 0
-end
-
-"""
     _wholeobjectcomponent(registry, object_url)
 
 Return the URL of the `whole_object` component of a registry object, which the

@@ -14,8 +14,8 @@
       written to through another name, say - files it does not know, locations
       nothing uses, and outputs a run left unfinished.
   - Requirements:
-    - Six dependencies the package did not use are dropped: AxisArrays, FTPClient,
-      NetCDF, PrettyTables, SQLite and UnicodePlots.
+    - Seven dependencies the package did not use are dropped: AxisArrays, CSV,
+      FTPClient, NetCDF, PrettyTables, SQLite and UnicodePlots.
 
 - v0.56.1
   - `set_cli!` and `install_cli!` record their preference in the environment

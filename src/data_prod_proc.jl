@@ -23,7 +23,6 @@ end
 const ARRAY_OBJ_NAME = "array"
 const TABLE_OBJ_NAME = "table"
 const ROWN_OBJ_NAME = "row_names"
-const CSV_OBJ_NAME = TABLE_OBJ_NAME # "csv"
 
 ## does what it says on the tin
 function read_h5_table(obj_grp)
@@ -57,25 +56,4 @@ function process_h5_file(filepath::String)
     process_h5_file_group!(output, f)
     HDF5.close(f)
     return output
-end
-
-## NB. NEED TO REWORK THIS TO ACCOUNT
-"""
-    _readdataproduct_from_file(filepath)
-
-Read HDF5, CSV or TOML file from local system.
-
-**Parameters**
-- `filepath`        -- the location of an e.g. HDF5 file.
-"""
-function _readdataproduct_from_file(filepath::String)
-    println("processing file: ", filepath)
-    HDF5.ishdf5(filepath) && (return process_h5_file(filepath))
-    occursin(".h5", filepath) && (return process_h5_file(filepath))
-    occursin(".toml", filepath) && (return TOML.parsefile(filepath))
-    occursin(".tml", filepath) && (return TOML.parsefile(filepath))
-    occursin(".csv", filepath) &&
-        (return CSV.read(filepath, DataFrames.DataFrame))
-    println(" - WARNING - UNKNOWN FILE TYPE - skipping: ", filepath)
-    return nothing
 end
