@@ -1,5 +1,11 @@
 # NEWS
 
+- v0.57.0
+  - Breaking changes:
+    - `fair-cli` 0.11.0 or later is needed: a `fair` without its session commands
+      or `fair run --rehearse` is refused, naming the version, where the registry
+      went unheld and a rehearsal was prepared by `fair run --ci --dirty`.
+
 - v0.56.1
   - `set_cli!` and `install_cli!` record their preference in the environment
     DataPipeline is loaded from, so a project that does not name it, with

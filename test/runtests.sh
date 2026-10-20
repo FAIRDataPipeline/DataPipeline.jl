@@ -22,9 +22,9 @@ fi
 source $WORKSPACE/.venv/$ACTIVATE_DIR/activate
 fair registry install
 fair registry start
-# fair init --ci empties an existing .fair/, data store included, while the
-# registry keeps its records; keep what the workflow may already have set up
-if [ ! -d "$WORKSPACE/.fair" ]; then fair init --ci; fi
+# On a project initialised already, fair init --ci leaves it as it is and
+# registers the project's user in the local registry again
+fair init --ci
 if ! fair pull --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
 if ! fair run --local $WORKSPACE/examples/fdp/SEIRSconfig.yaml; then exit 1; fi
 

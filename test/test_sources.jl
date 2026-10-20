@@ -833,12 +833,7 @@ Test.@testset "a deposit that fair pull registers from a no_file entry" begin
                                        "pull", "--local", pulling,
                                        dir = DataPipeline._fairroot(pwd()))
     said = pulled.printed * pulled.errors
-    # A fair with no such entries asks for the root they leave out, as 0.10.2
-    # does, or names the key
-    if pulled.status != 0 &&
-       (occursin("Expected key 'root'", said) || occursin("no_file", said))
-        @info "this fair has no no_file entries: not reading a deposit it registered"
-    elseif pulled.status != 0 && occursin("not a valid identifier", said)
+    if pulled.status != 0 && occursin("not a valid identifier", said)
         @info "the CLI could not check the deposit's identifier online: not reading a deposit it registered"
     else
         # The run fair run would prepare reads it through its read: entry; a

@@ -173,8 +173,8 @@ Test.@testset "registry_session() and the registry outside a run" begin
             DataPipeline.set_cli!(nothing)
         end
 
-        # A fair with no session commands is asked once, and the block has the
-        # configuration's registry
+        # A fair with no session commands, which fair-cli has from 0.11.0, is
+        # refused, naming the version needed
         old = joinpath(bin, "old")
         write(old,
               "#!/bin/sh\necho \"\$*\" >> $calls_file\n" *
@@ -185,13 +185,9 @@ Test.@testset "registry_session() and the registry outside a run" begin
         @test DataPipeline.set_cli!(old) == old
         try
             withenv("FDP_SESSION" => nothing) do
-                before = length(calls())
-                for _ in 1:2
-                    DataPipeline.registry_session() do registry
-                        @test registry.url == url
-                    end
-                end
-                @test length(calls()) == before + 1
+                err = @test_throws ReadWriteException DataPipeline.registry_session(identity)
+                @test occursin("has no session commands", err.value.msg)
+                @test occursin("fair-cli 0.11.0 or later", err.value.msg)
             end
         finally
             DataPipeline.set_cli!(nothing)

@@ -75,13 +75,9 @@ end
 
 # What holds the local registry for a run `initialise` opens: for a recorded
 # run, the run that launched this process, or else a session of its own, as in
-# a job `fair run --ci` prepared, closed at `finalise`; a CLI with no sessions
-# holds none, and having started nothing, there is nothing to say. A
-# rehearsal's hold is the one `rehearse` opened
-function _runhold(::RecordedRun)
-    hold = _holdregistry()
-    return hold isa RegistryNotHeld ? nothing : hold
-end
+# a job `fair run --ci` prepared, closed at `finalise`. A rehearsal's hold is
+# the one `rehearse` opened
+_runhold(::RecordedRun) = _holdregistry()
 _runhold(::Rehearsal) = nothing
 
 # Open a recorded code run: register the data store, the config, the script

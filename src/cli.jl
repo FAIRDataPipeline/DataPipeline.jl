@@ -252,16 +252,21 @@ function _capturefair(command::Cmd, arguments::AbstractString...;
             errors = String(take!(errors)))
 end
 
-# The `fair` commands found to have no session commands, so that each is asked
-# once in a process rather than at every use of the registry
-const SESSIONLESS_CLIS = Set{Vector{String}}()
+# The oldest `fair-cli` this package works with
+const CLI_NEEDED = v"0.11.0"
+
+# The error for a `fair` that lacks `what`, which `fair-cli` before
+# `CLI_NEEDED` lacks, saying how to have one that does not
+function _oldcli(command::Cmd, what::AbstractString)
+    return ReadWriteException("the fair at $(first(command.exec)) has no $what, which DataPipeline needs: fair-cli $CLI_NEEDED or later - `DataPipeline.install_cli!()` installs the package's own copy and records it, or `pip install --upgrade fair-cli` upgrades yours")
+end
 
 # Hold the local registry while this process uses it: through the session that
-# the run which launched this process names in `FDP_SESSION`; else through a
-# session of the CLI's, owned by this process; else, from a CLI with no session
-# commands, not at all. With no `fair` to be found, nothing holds it. A CLI
-# without the commands is told by its usage error, so that a refusal from one
-# that has them - on another host, say - is an error here too
+# the run which launched this process names in `FDP_SESSION`, else through a
+# session of the CLI's, owned by this process. With no `fair` to be found,
+# nothing holds it. A `fair` with no session commands, told by its usage
+# error, is refused, as is a refusal from one that has them - on another host,
+# say
 function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
     haskey(ENV, "FDP_SESSION") && return RegistryHeldByRun()
     command = try
@@ -270,15 +275,12 @@ function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
         err isa ArgumentError || rethrow()
         return nothing
     end
-    command.exec in SESSIONLESS_CLIS && return RegistryNotHeld()
     opened = _capturefair(command, "registry", "session", "open", "--pid",
                           string(getpid()), "--json")
     if opened.status != 0
-        if opened.status == 2 &&
-           occursin("No such command 'session'", opened.errors)
-            push!(SESSIONLESS_CLIS, command.exec)
-            return RegistryNotHeld()
-        end
+        opened.status == 2 &&
+            occursin("No such command 'session'", opened.errors) &&
+            throw(_oldcli(command, "session commands"))
         throw(ReadWriteException("`fair registry session open` failed with exit status $(opened.status): $(strip(opened.errors))"))
     end
     reply = try
@@ -323,8 +325,8 @@ end
 
 With `remote`, the name of a remote in the project's CLI configuration, `f` is
 given that remote's endpoint instead, holding nothing. Under `fair run`, whose
-own session holds the registry, and with a `fair` that has no session commands,
-nothing is opened, and `f` is given the endpoint the CLI's configuration names.
+own session holds the registry, nothing is opened, and `f` is given the
+endpoint the CLI's configuration names.
 """
 function registry_session(f::Function;
                           remote::Union{Nothing, AbstractString} = nothing)
@@ -349,9 +351,7 @@ _heldendpoint(::Union{Nothing, AbstractRegistryHold}) = RegistryEndpoint()
 # Release what held the local registry for a rehearsal: a session of the
 # CLI's is closed, which stops a registry it started where it was the last,
 # and a failure is warned of, since the CLI treats the session of a process
-# that has gone as closed; with a CLI that has no sessions, a registry its
-# commands started is left running, which is said - unless this process was
-# launched to run a job, whose launcher has the registry
+# that has gone as closed
 _releaseregistry(::Nothing) = nothing
 _releaseregistry(::RegistryHeldByRun) = nothing
 function _releaseregistry(hold::RegistryHeldBySession)
@@ -363,12 +363,6 @@ function _releaseregistry(hold::RegistryHeldBySession)
     end
     closed.status == 0 ||
         @warn "`fair registry session close $(hold.id)` failed: $(strip(closed.errors))"
-    return nothing
-end
-function _releaseregistry(::RegistryNotHeld)
-    haskey(ENV, "FDP_CONFIG_DIR") && return nothing
-    println("the local registry may be left running, this fair having no sessions to stop one it started: ",
-            "`fair registry stop` stops it when you have finished")
     return nothing
 end
 

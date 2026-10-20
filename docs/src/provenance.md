@@ -10,12 +10,11 @@ all works outside `fair run`, against the local registry or a remote one.
 ## Holding the local registry
 
 Outside a run, each of these functions holds the local registry up through a
-session of the FAIR CLI's while it works, where `fair` has session commands: a
-session starts the registry where nothing holds it, and the last to close
-stops one a session started. Calls in a `DataPipeline.registry_session` block
-share its session, given its endpoint first; `fair registry start` keeps the
-registry running until `fair registry stop`, which a `fair` without session
-commands needs.
+session of the FAIR CLI's while it works: a session starts the registry where
+nothing holds it, and the last to close stops one a session started. Calls in
+a `DataPipeline.registry_session` block share its session, given its endpoint
+first; `fair registry start` keeps the registry running until `fair registry
+stop`.
 
 ```julia
 DataPipeline.registry_session() do registry
@@ -172,10 +171,6 @@ release = DataPipeline.register_release!(DataPipeline.NamedCommit("v1.2.0"))
 raise_issue!(DataPipeline.AncestorCommits(of = release, including = false),
              "Bug X, fixed in v1.2.0")
 ```
-
-With `fair-cli` 0.10.2 a release is registered on each registry it belongs on -
-`register_release!(...; remote = "origin")` for the project's remote - since
-`fair push` does not carry it; and its data product is not to be `fair add`ed.
 
 ```@docs
 DataPipeline.register_release!
