@@ -46,6 +46,8 @@ A data product a file is registered as.
 - `url`: its URL in the registry
 - `external_object`: the URL of its external object record, if it came from
   outside the pipeline, else `nothing`
+- `source`: that external object as a [`TraceSource`](@ref) - its identifier,
+  title and release, and where the file was fetched from - else `nothing`
 """
 struct DataProductRecord
     namespace::String
@@ -54,6 +56,7 @@ struct DataProductRecord
     newest::VersionNumber
     url::String
     external_object::Union{Nothing, String}
+    source::Union{Nothing, TraceSource}
 end
 
 function Base.show(io::IO, dp::DataProductRecord)
@@ -209,8 +212,14 @@ function Base.show(io::IO, ::MIME"text/plain", id::FileIdentification)
             println(io, "      version:   ", dp.version,
                     dp.version < dp.newest ?
                     " - SUPERSEDED, newest is $(dp.newest)" : " (newest)")
-            isnothing(dp.external_object) ||
-                println(io, "      external object: ", dp.external_object)
+            source = dp.source
+            if !isnothing(source)
+                println(io, "      source:    ",
+                        something(source.identifier, source.title, source.url),
+                        " (", source.primary ? "primary" : "supplement", ")")
+                isnothing(source.location) ||
+                    println(io, "      fetched from: ", source.location)
+            end
         end
         for issue in obj.issues
             println(io, "    ", issue)
@@ -399,6 +408,7 @@ function _objectissues(registry::RegistryEndpoint, object::AbstractDict)
 end
 
 # A data product, with the newest version of the same name in its namespace
+# and its source
 function _dataproductrecord(registry::RegistryEndpoint, url::String)
     entry = _getentry(registry, URIs.URI(url))
     namespace = _getentry(registry, URIs.URI(entry["namespace"]))["name"]
@@ -408,9 +418,12 @@ function _dataproductrecord(registry::RegistryEndpoint, url::String)
                                               "namespace" =>
                                                   _extractid(entry["namespace"])))]
     version = VersionNumber(entry["version"])
+    external = entry["external_object"]
+    source = isnothing(external) ? nothing :
+             _sourcepart(registry, _TraceParts(), external)
     return DataProductRecord(namespace, entry["name"], version,
                              maximum(versions, init = version), entry["url"],
-                             entry["external_object"])
+                             external, source)
 end
 
 """
@@ -426,15 +439,17 @@ repository.
 
 For a **file**, return a [`FileIdentification`](@ref): the data products it is
 registered as, where the registry expects to find it, whether a newer version
-of any of those data products exists, the issues raised against it, and the
-issues raised on anything behind it - the inputs read on the way to it, at
-the versions read, and the code, config and script of the runs on the way -
-each with the run it reaches the file through. With `superseded = true`, the
-inputs read on the way that a newer version of has been registered since are
-reported too, as outdated rather than wrong. `isempty(result.objects)` means
-the registry has no record of a file with these contents. The file is
-identified by the SHA-1 of its contents, as everything in the pipeline is, so
-a copy under another name is recognised and an edited file is not.
+of any of those data products exists, the source of any that came from
+elsewhere with where the file was fetched from, the issues raised against it,
+and the issues raised on anything behind it - the inputs read on the way to
+it, at the versions read, and the code, config and script of the runs on the
+way - each with the run it reaches the file through. With `superseded =
+true`, the inputs read on the way that a newer version of has been registered
+since are reported too, as outdated rather than wrong.
+`isempty(result.objects)` means the registry has no record of a file with
+these contents. The file is identified by the SHA-1 of its contents, as
+everything in the pipeline is, so a copy under another name is recognised and
+an edited file is not.
 
 For **commits**, an [`AbstractCommitSelection`](@ref) - such as
 `AncestorCommits()`, the checked-out commit of the repository holding the

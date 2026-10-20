@@ -848,7 +848,7 @@ Test.@testset "identify()" begin
     @test (product.namespace, product.name) == (namespace, data_product)
     @test product.version == VersionNumber(version)
     @test product.newest == product.version          # nothing newer yet
-    @test isnothing(product.external_object)
+    @test isnothing(product.external_object) && isnothing(product.source)
     @test isempty(object.issues)
     # A handle may be given instead of a registry
     @test DataPipeline.identify(run_handle, stored).hash == id.hash

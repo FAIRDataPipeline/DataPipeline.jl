@@ -47,9 +47,10 @@ DataPipeline.identify(DataPipeline.AllCommits(dirty = true))
 DataPipeline.identify(DataPipeline.AllCommits(repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl"))
 ```
 
-A file's identification carries the issues raised on it and, behind it, the
-issues raised on anything a run on the way read, or on a run's own code,
-config or script, each with the run it reaches the file through; with
+A file's identification carries the source of a file registered from
+elsewhere, with the address it was fetched from; the issues raised on it and,
+behind it, the issues raised on anything a run on the way read, or on a run's
+own code, config or script, each with the run it reaches the file through; with
 `superseded = true` it lists the inputs behind the file that a newer version of
 has been registered since, as outdated rather than wrong.
 

@@ -5,6 +5,10 @@
     - `fair-cli` 0.11.0 or later is needed: a `fair` without its session commands
       or `fair run --rehearse` is refused, naming the version, where the registry
       went unheld and a rehearsal was prepared by `fair run --ci --dirty`.
+  - Tracing provenance:
+    - `identify` of a file gives the source of each data product it is registered
+      as, in the new `source` field of `DataProductRecord`, and shows it with the
+      address the file was fetched from, in place of the external object's URL.
 
 - v0.56.1
   - `set_cli!` and `install_cli!` record their preference in the environment
