@@ -1,57 +1,108 @@
-# Introduction
+# DataPipeline.jl
 
 !!! note
 
-    See [here](https://www.fairdatapipeline.org) for the main FAIR Data Pipeline documentation, and information about the SCRC. This website is for the Julia package only.
+    The [FAIR Data Pipeline documentation](https://www.fairdatapipeline.org/docs/)
+    describes the pipeline as a whole, in every language. These pages are for
+    the Julia package.
 
-**DataPipeline.jl**  -  *the Julia implementation of the FAIR Data Pipeline*
+`DataPipeline` is the Julia API of the FAIR Data Pipeline. A model script
+calls it to find its inputs, place its outputs and record what it read and
+wrote as a code run, so that any output can be traced back through the code
+that made it to the data behind it, and a problem found later in any of these
+reaches everything made from it.
 
-## What is the FAIR Data Pipeline?
+## The pipeline
 
-The *FAIR Data Pipeline* can be understood by considering the central kernel of its technological implementation: the **[Data Registry](https://data.fairdatapipeline.org/) (DR)**. Essentially it consists of a relational database, and a [RESTful API](https://data.fairdatapipeline.org/api/) for reading and writing to the database.
+The pipeline has three parts. A **registry** holds the record: data products
+and the files that hold them, each file known by its SHA-1 hash and where it
+is stored; code runs, with their inputs and outputs and the commit of their
+code; the sources of data that came from elsewhere; and issues raised on any
+of these. The
+[schema](https://www.fairdatapipeline.org/docs/data_registry/schema/) has the
+detail. A registry runs on the modeller's own machine, so that work can go on
+offline, and what it records can be pushed to a remote one, such as
+[data.fairdatapipeline.org](https://data.fairdatapipeline.org). The
+command-line tool **`fair`** sets up a project, registers and fetches what a
+run will read, prepares and launches each run, and moves records between
+registries. A small **API in each language**, this package for Julia, is what
+the model calls while it runs.
 
-The [database schema](https://data.fairdatapipeline.org/static/images/schema.svg) (as illustrated below) is detailed, but key entity types of relevance here include:
+A run starts from a *user config*, a YAML file naming what the run reads and
+writes and the command that runs the model. `fair run` turns it into a
+*working config*, with every name, namespace and version made explicit, and
+runs the command. [`DataPipeline.initialise`](@ref) reads the working config,
+and the script asks for each input and output by the name the config gives it.
 
-- **Data Products** - *metadata*, or information about data 'products'. To elaborate: a data product typically includes a link to, e.g. a table of scientific data, but [for the most part] the underlying data is not actually stored in the DR. This may appear at first glance to be a limitation but there is a key benefit to the approach which is discussed briefly in due course.
-- **Code Repo Releases** - i.e. 'models', or a given version of some code that implements, e.g. a statistical model.
-- **Code runs** - or model runs, such as the output from a single realisation of the model.
+## What the package does
 
-Thus, the Code Repo (and Release) relating to a given statistical model, may be associated with a number of Code Runs, which in turn may be associated with a number of Data Products (as 'inputs' and 'outputs'.)
+- **Code runs.** `initialise` opens a run and registers its config, its
+  script and the commit of its code; [`link_read!`](@ref) gives the path of
+  an input and [`link_write!`](@ref) a path to write an output to, recording
+  each, as the component readers and writers do for parts of a TOML or HDF5
+  file; and [`DataPipeline.finalise`](@ref) registers the outputs and the
+  run. A name to read may be a wildcard, standing for every data product it
+  matches.
+- **Data from elsewhere**, registered with its source, its authors and its
+  licence, and read by a run as any other input:
+  [Data that comes from elsewhere](@ref).
+- **Issues**, raised on an input, an output, the config, the script or the
+  code: [Raising issues](@ref).
+- **Rehearsals**: a script run through the pipeline with nothing recorded,
+  until it is right: [Rehearsing a run](@ref).
+- **Tracing**: what the registry knows of a file or a repository, where a
+  file came from, what was made from it, and the RO-Crate that packs a
+  paper's files with their provenance: [Tracing provenance](@ref).
+- **Papers**: a LaTeX paper built in a run of its own, so that its PDF has
+  the provenance of every figure and table in it:
+  [Building a paper](@ref).
+- **`fair` from Julia**:
+  [`DataPipeline.fair"..."`](@ref DataPipeline.@fair_str) runs the
+  command-line tool, and [`DataPipeline.install_cli!`](@ref) installs a copy
+  of it for a Julia with no Python to hand.
 
-In summary the data pipeline provides both a centralised repository for [meta]data, and a means of tracking the full history of COVID-related modelling outputs, including data and other inputs, such as the random seed used to generate a particular realisation of a given model.
+## Installation
 
-The resulting 'audit trail' can thus provide transparency, and greatly improve the reproducibility, of published scientific research, even where the models and data used to produce them are complex or sophisticated.
+The package is registered in Julia's General registry. From the REPL type `]`
+to enter Pkg mode and run:
 
-Note that as a working process the pipeline is somewhat cyclical in nature: model outputs can be used to provide inputs for other models, and so on. Thus the audit capabilities of the pipeline process are not limited to individual research projects, models or datasets - it naturally extends to a sequence of ongoing projects, possibly produced by different users and teams ('groups' in the DR.)
-
-In other words, it mirrors the way in which scientific research in general is published, whilst providing a robust solution to vitally important current challenges far beyond the fields of public health and epidemiology, such as reproducibility and transparency.
-
-### The Data Registry
-
-As with the pipeline itself, a key design strength of the Data Registry (DR) is its 'agnosticism'. That is, it is agnostic with respect to both programming languages and [the format of] datasets. Thus, it is compatible even with those that have not been invented yet.
-
-Whilst this is a key strength, it does impose certain constraints on the functionality that can be provided directly within the framework of the DR itself. For example, in order to provide features such as file processing (necessary for the automated import of Data Products from the DR) it is necessary to know the file format in advance. This is also true of data processing in general: in order to do any kind of meaningful data processing, we must know both the structure of a given type of dataset, and how to recognise it in practice.
-
-For that reason, features such as these are instead provided by what can be regarded as an 'automation layer', a set of utility-like software packages (such as this one) and tools that comprise an important layer of the pipline's software ecosystem, because they make it possible for model developers to download data, and otherwise meaningfully interact with the SCRC pipeline process using only a few lines of code.
-
-#### Data Registry schema
-
-```@raw html
-<img src="https://data.fairdatapipeline.org/static/images/schema.svg" alt="Data Registry" schema="height: 80px;"/>
+```julia
+pkg> add DataPipeline
 ```
 
-Hint: click [here](https://data.fairdatapipeline.org/static/images/schema.svg) to expand the image.
-
-## What does this package do?
-
-Similar to the [R](https://www.fairdatapipeline.org/docs/API/R/) and the [python](https://www.fairdatapipeline.org/docs/API/python/) FAIR Data Pipeline API implementations, this package provides a language-specific automation layer [for the language-agnostic **RESTful API** that is used to interact with the DR.] It also handles the downloading (and pre-processing) of Data Products based on that [meta]data.
+It needs Julia 1.11 or later, and `fair-cli` from version 0.11.0. Install
+`fair` from PyPI, as the
+[CLI's documentation](https://www.fairdatapipeline.org/docs/cli/installation/)
+describes, or from Julia with `DataPipeline.install_cli!()`, which installs
+the package's own copy for `DataPipeline.fair"..."` to run. Then install the
+local registry, once, with `fair registry install`.
 
 ## Getting started
 
-## Package installation
+From the top level of the git repository holding the model, set the project
+up once, then register what the run reads, and run it:
 
-The package is not currently registered and must be added via the package manager Pkg. From the REPL type `]` to enter Pkg mode and run:
+```sh
+fair init
+fair pull config.yaml
+fair run config.yaml
+```
+
+Each command starts the local registry where none is running, and stops it
+when done; `fair registry start` keeps it running until `fair registry stop`.
+
+The script that `config.yaml` names brackets the model with the API:
 
 ```julia
-pkg> add https://github.com/FAIRDataPipeline/DataPipeline.jl
+using DataPipeline
+
+handle = DataPipeline.initialise()
+parameters = link_read!(handle, "SEIRS_model/parameters")
+# ... run the model on the parameters ...
+results = link_write!(handle, "model_output")
+# ... and write its results to that path
+DataPipeline.finalise(handle)
 ```
+
+The [SEIRS model example](@ref) is this example whole: its config, its script
+and its run.

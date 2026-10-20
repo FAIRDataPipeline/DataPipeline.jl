@@ -80,7 +80,6 @@ using DataPipeline
 DataPipeline.install_cli!()            # once: fair, with its Python, recorded
 DataPipeline.fair"registry install"    # once: the local registry
 DataPipeline.fair"init"                # once per project, from its root; asks questions
-DataPipeline.fair"registry start"
 DataPipeline.fair"pull config.yaml"
 DataPipeline.rehearse("config.yaml")
 ```

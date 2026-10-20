@@ -172,7 +172,6 @@ one line, none of which the paper's functions run themselves:
 DataPipeline.install_cli!()            # the package's own copy of fair
 DataPipeline.fair"registry install"    # a local registry
 DataPipeline.fair"init"                # in the repository: who you are, and your remote
-DataPipeline.fair"registry start"
 ```
 
 ## Reference
