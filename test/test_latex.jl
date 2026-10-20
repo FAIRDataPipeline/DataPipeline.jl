@@ -182,7 +182,7 @@ const PNG = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
         # the repository, and outside it, named as git names them
         top = folder_of(Dict("paper/paper.tex" => "",
                              "paper/pipeline/fig.png" => "",
-                             "paper/drawings/d.png" => "", "notes.tex" => ""))
+                             "paper/include/d.png" => "", "notes.tex" => ""))
         sorted = DataPipeline._sortdependencies([
                                                     joinpath(top, "paper",
                                                              "paper.tex"),
@@ -190,7 +190,7 @@ const PNG = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
                                                              "pipeline",
                                                              "fig.png"),
                                                     joinpath(top, "paper",
-                                                             "drawings",
+                                                             "include",
                                                              "d.png"),
                                                     joinpath(top, "notes.tex"),
                                                     "/usr/share/outside.sty"],
@@ -199,7 +199,7 @@ const PNG = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
                                                          "pipeline"))
         @test sorted.pipeline == ["paper/pipeline/fig.png"]
         @test sorted.own ==
-              ["paper/paper.tex", "paper/drawings/d.png", "notes.tex"]
+              ["paper/paper.tex", "paper/include/d.png", "notes.tex"]
         @test sorted.outside == ["/usr/share/outside.sty"]
 
         # Of the repository's own files, those not as its commit has them
@@ -216,10 +216,10 @@ const PNG = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
         write(joinpath(top, "ignored.tex"), "")
         @test DataPipeline._uncommitted(top,
                                         ["paper/paper.tex", "notes.tex",
-                                            "paper/drawings/d.png",
+                                            "paper/include/d.png",
                                             "ignored.tex"]) ==
               ["notes.tex" => "changed since the commit",
-            "paper/drawings/d.png" => "not committed",
+            "paper/include/d.png" => "not committed",
             "ignored.tex" => "ignored"]
         close(repo)
     end

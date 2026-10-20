@@ -263,7 +263,7 @@ end
             files = Dict("paper.tex" => """
                          \\documentclass{article}
                          \\usepackage{graphicx}
-                         \\graphicspath{{pipeline/}{drawings/}}
+                         \\graphicspath{{pipeline/}{include/}}
                          \\title{A made-up paper}
                          \\author{Morag Fairlie \\and Tobias Quennell}
                          \\begin{document}
@@ -292,9 +292,9 @@ end
                 mkpath(dirname(joinpath(top, name)))
                 write(joinpath(top, name), text)
             end
-            mkpath(joinpath(top, "drawings"))
+            mkpath(joinpath(top, "include"))
             write(joinpath(top, "pipeline", "figure.png"), PNG)
-            write(joinpath(top, "drawings", "sketch.png"), PNG)
+            write(joinpath(top, "include", "sketch.png"), PNG)
             repo = LibGit2.init(top)
             signature = LibGit2.Signature("Test", "test@example.com",
                                           1_000_000_000, 0)
@@ -491,13 +491,13 @@ end
                       \\maketitle
                       \\input{pipeline/table}
                       \\input{pipeline/results}
-                      \\input{drawings/notes}
+                      \\input{include/notes}
                       \\end{document}
                       """
             texts = Dict("paper/article.tex" => article,
                          "paper/pipeline/table.tex" => "A table for the paper setup, run $uid.\n",
                          "paper/pipeline/results.tex" => "Results for the paper setup, run $uid.\n",
-                         "paper/drawings/notes.tex" => "Notes of the paper's own, run $uid.\n")
+                         "paper/include/notes.tex" => "Notes of the paper's own, run $uid.\n")
             for (name, text) in texts
                 mkpath(dirname(joinpath(top, name)))
                 write(joinpath(top, name), text)
@@ -571,7 +571,7 @@ end
             @test sort(check.uses.pipeline) ==
                   ["paper/pipeline/results.tex", "paper/pipeline/table.tex"]
             @test sort(check.uses.own) ==
-                  ["paper/article.tex", "paper/drawings/notes.tex"]
+                  ["paper/article.tex", "paper/include/notes.tex"]
             @test check.metadata == "the top level of CITATION.cff"
             @test "paper/pipeline/table.tex is $(label("table", "0.0.1")), its newest version" in
                   check.notes
@@ -592,7 +592,7 @@ end
             write(joinpath(folder, "pipeline", "unused.txt"),
                   "Not from the pipeline, run $uid.\n")
             write(joinpath(folder, "pipeline", "Project.toml"), "[deps]\n")
-            write(joinpath(folder, "drawings", "notes.tex"),
+            write(joinpath(folder, "include", "notes.tex"),
                   texts["paper/pipeline/results.tex"])
             reordered = replace(article,
                                 "Ines A. Valcourt \\and Oskar Lindqvist" => "Oskar Lindqvist \\and Ines A. Valcourt")
@@ -600,7 +600,7 @@ end
             check = DataPipeline.check_paper(registry, paper, remote = nothing)
             @test any(contains("paper/pipeline/table.tex is $(label("table", "0.0.1")), and v0.0.2 is newer - `update_paper(newest = true)` brings it in"),
                       check.actions)
-            @test any(contains("paper/drawings/notes.tex has the bytes of $(label("results", "0.0.1")), but is outside the pipeline folder"),
+            @test any(contains("paper/include/notes.tex has the bytes of $(label("results", "0.0.1")), but is outside the pipeline folder"),
                       check.actions)
             @test any(contains("files in the pipeline folder are registered as no data product and the paper does not use them: paper/pipeline/unused.txt -"),
                       check.actions)
@@ -612,8 +612,8 @@ end
 
             # Updated to the newest versions: the newer table copied in, the
             # config pinning it, and CITATION.cff in the LaTeX's order
-            write(joinpath(folder, "drawings", "notes.tex"),
-                  texts["paper/drawings/notes.tex"])
+            write(joinpath(folder, "include", "notes.tex"),
+                  texts["paper/include/notes.tex"])
             rm(joinpath(folder, "pipeline", "unused.txt"))
             updated = DataPipeline.update_paper(registry, paper, newest = true,
                                                 remote = nothing)

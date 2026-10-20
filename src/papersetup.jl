@@ -46,8 +46,7 @@ end
 function Base.show(io::IO, ::MIME"text/plain", check::PaperCheck)
     lines = ["Check of the paper $(check.paper.tex): $(_checksummary(check))"]
     if isempty(check.setup)
-        push!(lines,
-              "  set up: fair, the project, the remote and the local registry are ready")
+        push!(lines, "  set up: nothing is missing")
     else
         push!(lines, "  set up, but for:")
         append!(lines, "    - " .* check.setup)
@@ -1126,7 +1125,7 @@ function _checkplacement!(actions::Vector{String},
         isempty(_productrecords(identifying, joinpath(top, file)))]
     isempty(unused) ||
         push!(actions,
-              "files in the pipeline folder are registered as no data product and the paper does not use them: $(join(unused, ", ")) - the folder is for files from the pipeline, so move them out, to the drawings folder for any the paper is to use")
+              "files in the pipeline folder are registered as no data product and the paper does not use them: $(join(unused, ", ")) - the folder is for files from the pipeline, so move them out, into `include/` for any the paper is to use")
     return nothing
 end
 

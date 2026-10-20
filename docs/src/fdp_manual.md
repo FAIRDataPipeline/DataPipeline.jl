@@ -189,58 +189,6 @@ register_authors!
 link_register!
 ```
 
-## Building a paper
-
-A LaTeX paper whose figures and tables come from pipeline runs can be built in
-a code run of its own, so that the PDF is a data product whose provenance runs
-through what it uses to the data behind it. The files the paper uses from its
-pipeline folder must be registered outputs of other runs, which the working
-config's `read:` block offers; its own files, such as the `.tex`, the
-bibliography and any drawings, are recorded with the repository's commit. The
-PDF is registered with the authors, licence and keywords of the paper's
-metadata, `CITATION.cff` first, and holds them in its document information
-too. The run's script is an ordinary one:
-
-```julia
-import Pkg
-Pkg.activate("pipeline")
-Pkg.instantiate()
-using DataPipeline
-handle = DataPipeline.initialise()
-build_paper!(handle, "paper.tex")
-DataPipeline.finalise(handle)
-```
-
-Outside any run, [`DataPipeline.setup_paper`](@ref) prepares a paper once,
-drafting its `CITATION.cff` from the LaTeX, the template of the config that
-builds it, holding that script, and the script's environment in the pipeline
-folder. Before each build, [`DataPipeline.check_paper`](@ref) reports what is
-missing or out of date, and [`DataPipeline.update_paper`](@ref) brings
-`CITATION.cff` and the config up to date, with `newest = true` bringing in the
-newest version of each file from the pipeline too:
-
-```julia
-DataPipeline.setup_paper("paper.tex")
-DataPipeline.check_paper("paper.tex")
-DataPipeline.update_paper("paper.tex", newest = true)
-```
-
-The files changed are then committed, after `fair pull paper.yaml` where the
-local registry lacks a version the config names, and the paper is built with
-`fair run paper.yaml`.
-
-```@docs
-build_paper!
-DataPipeline.setup_paper
-DataPipeline.check_paper
-DataPipeline.update_paper
-DataPipeline.PaperCheck
-DataPipeline.LaTeXPaper
-DataPipeline.PdfLaTeXEngine
-DataPipeline.LuaLaTeXEngine
-DataPipeline.XeLaTeXEngine
-```
-
 ## Raising issues
 
 An issue records a problem found in something registered, so that
