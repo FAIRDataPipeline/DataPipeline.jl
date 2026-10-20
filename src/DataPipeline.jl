@@ -16,7 +16,6 @@ using Preferences: Preferences, @load_preference
 using CSV
 using DataFrames
 using Dates
-using FTPClient
 using HTTP
 using JSON
 using LibGit2

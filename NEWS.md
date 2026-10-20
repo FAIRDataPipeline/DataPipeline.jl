@@ -9,6 +9,9 @@
     - `identify` of a file gives the source of each data product it is registered
       as, in the new `source` field of `DataProductRecord`, and shows it with the
       address the file was fetched from, in place of the external object's URL.
+  - Requirements:
+    - Six dependencies the package did not use are dropped: AxisArrays, FTPClient,
+      NetCDF, PrettyTables, SQLite and UnicodePlots.
 
 - v0.56.1
   - `set_cli!` and `install_cli!` record their preference in the environment

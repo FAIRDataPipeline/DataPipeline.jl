@@ -373,7 +373,7 @@ array, recording it as an input.
 function read_array!(handle::DataRegistryHandle, data_product::String,
                      component::String)
     path = _inputpath(handle, data_product, component)
-    return process_h5_file(path, false)["/$component"]
+    return process_h5_file(path)["/$component"]
 end
 
 """
