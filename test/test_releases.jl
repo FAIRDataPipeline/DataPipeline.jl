@@ -432,7 +432,7 @@ if haskey(ENV, "FDP_CONFIG_DIR")
         # While the session rehearses, said and not registered
         DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
                                                          mktempdir(), nothing,
-                                                         false)
+                                                         false, nothing)
         said = mktemp() do path, io
             result = redirect_stdout(io) do
                 return DataPipeline.register_release!(registry,
@@ -531,7 +531,7 @@ if haskey(ENV, "FDP_CONFIG_DIR")
         # A rehearsal says the source it would attach
         DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
                                                          mktempdir(), nothing,
-                                                         false)
+                                                         false, nothing)
         rehearsed = string(LibGit2.commit(zenodo_repo, "rehearsed",
                                           author = signature,
                                           committer = signature))

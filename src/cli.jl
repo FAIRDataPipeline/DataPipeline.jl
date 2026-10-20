@@ -28,10 +28,13 @@ macro fair_str(text)
 end
 
 # Run `fair` with these arguments - `cli` naming the one to run, else the one
-# found - and throw on an exit status other than 0
+# found - in the folder `dir` if one is given, and throw on an exit status
+# other than 0
 function _fair(arguments::AbstractString...;
-               cli::Union{Nothing, AbstractString, Cmd} = nothing)
+               cli::Union{Nothing, AbstractString, Cmd} = nothing,
+               dir::Union{Nothing, AbstractString} = nothing)
     command = _withenvironment(`$(_faircommand(cli)) $arguments`)
+    isnothing(dir) || (command = Cmd(command; dir = String(dir)))
     process = run(ignorestatus(command))
     success(process) ||
         throw(ReadWriteException("`fair $(join(arguments, " "))` failed with exit status $(process.exitcode)"))
@@ -81,7 +84,8 @@ after. The Python is $CLI_PYTHON unless `python` names another minor version;
 a change rebuilds the environment, as does an environment whose Python no
 longer runs. A registry installed through this copy has an environment of its
 own built with the copy's interpreter, so after such a rebuild it must be
-installed again, with `fair registry install --force`. Needs the network.
+installed again: `fair registry stop`, then `fair registry install --force`,
+which a CLI may refuse while the registry runs. Needs the network.
 """
 function install_cli(;
                      version::Union{Nothing, VersionNumber, AbstractString} = nothing,
@@ -93,7 +97,8 @@ function install_cli(;
         if !isnothing(present)
             println("rebuilding the copy's environment with Python ", wanted,
                     " in place of ", present,
-                    ": a registry installed through this copy must be installed again")
+                    ": a registry installed through this copy must be installed again, ",
+                    "with `fair registry stop` then `fair registry install --force`")
         elseif !isempty(readdir(folder))
             println("the copy's environment at ", folder,
                     " no longer runs: rebuilding it")
@@ -225,4 +230,151 @@ function _cliversion()
     executable = _installedcli()
     isnothing(executable) && return nothing
     return strip(read(_withenvironment(`$executable --version`), String))
+end
+
+# Run `fair` with these arguments, in the folder `dir` if one is given,
+# keeping what it prints and what it writes as errors apart, with its exit
+# status
+function _capturefair(command::Cmd, arguments::AbstractString...;
+                      dir::Union{Nothing, AbstractString} = nothing)
+    line = ignorestatus(_withenvironment(`$command $arguments`))
+    isnothing(dir) || (line = Cmd(line; dir = String(dir)))
+    printed, errors = IOBuffer(), IOBuffer()
+    process = run(pipeline(line, stdout = printed, stderr = errors))
+    return (status = process.exitcode, printed = String(take!(printed)),
+            errors = String(take!(errors)))
+end
+
+# The `fair` commands found to have no session commands, so that each is asked
+# once in a process rather than at every use of the registry
+const SESSIONLESS_CLIS = Set{Vector{String}}()
+
+# Hold the local registry while this process uses it: through the session that
+# the run which launched this process names in `FDP_SESSION`; else through a
+# session of the CLI's, owned by this process; else, from a CLI with no session
+# commands, not at all. With no `fair` to be found, nothing holds it. A CLI
+# without the commands is told by its usage error, so that a refusal from one
+# that has them - on another host, say - is an error here too
+function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
+    haskey(ENV, "FDP_SESSION") && return RegistryHeldByRun()
+    command = try
+        _faircommand(cli)
+    catch err
+        err isa ArgumentError || rethrow()
+        return nothing
+    end
+    command.exec in SESSIONLESS_CLIS && return RegistryNotHeld()
+    opened = _capturefair(command, "registry", "session", "open", "--pid",
+                          string(getpid()), "--json")
+    if opened.status != 0
+        if opened.status == 2 &&
+           occursin("No such command 'session'", opened.errors)
+            push!(SESSIONLESS_CLIS, command.exec)
+            return RegistryNotHeld()
+        end
+        throw(ReadWriteException("`fair registry session open` failed with exit status $(opened.status): $(strip(opened.errors))"))
+    end
+    reply = try
+        JSON.parse(opened.printed)
+    catch err
+        err isa InterruptException && rethrow()
+        nothing
+    end
+    (reply isa AbstractDict &&
+     all(haskey(reply, key)
+         for key in ("session", "registry_url", "token_file"))) ||
+        throw(ReadWriteException("`fair registry session open` printed no session: $(strip(opened.printed))"))
+    _closeatexit()
+    return RegistryHeldBySession(string(reply["session"]), command,
+                                 string(reply["registry_url"]),
+                                 string(reply["token_file"]))
+end
+
+"""
+    registry_session(f; remote = nothing)
+
+Call `f` with the [`RegistryEndpoint`](@ref) of the local registry, held up
+for as long as `f` runs through a session of the FAIR CLI's, which this
+process owns and closes when `f` returns or throws, and return what `f`
+returns. The endpoint is the registry the session names, with the token in the
+file it names. A session starts the registry where nothing holds it, and the
+last to close stops one a session started; a registry started by `fair
+registry start` runs until `fair registry stop`.
+
+Each function that reads or writes a registry outside a run - [`identify`](@ref),
+[`provenance`](@ref), [`downstream`](@ref), [`crate`](@ref),
+[`register_release!`](@ref), [`raise_issue!`](@ref) outside a run - holds a
+session for the call when given no endpoint, and takes this endpoint first to
+share one:
+
+```julia
+DataPipeline.registry_session() do registry
+    DataPipeline.identify(registry, "figures/summary.pdf")
+    DataPipeline.provenance(registry, "figures/summary.pdf")
+end
+```
+
+With `remote`, the name of a remote in the project's CLI configuration, `f` is
+given that remote's endpoint instead, holding nothing. Under `fair run`, whose
+own session holds the registry, and with a `fair` that has no session commands,
+nothing is opened, and `f` is given the endpoint the CLI's configuration names.
+"""
+function registry_session(f::Function;
+                          remote::Union{Nothing, AbstractString} = nothing)
+    isnothing(remote) || return f(RegistryEndpoint(remote = remote))
+    hold = _holdregistry()
+    try
+        return f(_heldendpoint(hold))
+    finally
+        hold isa RegistryHeldBySession && _releaseregistry(hold)
+    end
+end
+
+# The endpoint of the local registry as what holds it names it: a session's
+# address and the token in its file; otherwise the CLI's configuration's
+function _heldendpoint(hold::RegistryHeldBySession)
+    return RegistryEndpoint(hold.registry_url,
+                            token = _tokenfromfile(Dict("token" =>
+                                                            hold.token_file)))
+end
+_heldendpoint(::Union{Nothing, AbstractRegistryHold}) = RegistryEndpoint()
+
+# Release what held the local registry for a rehearsal: a session of the
+# CLI's is closed, which stops a registry it started where it was the last,
+# and a failure is warned of, since the CLI treats the session of a process
+# that has gone as closed; with a CLI that has no sessions, a registry its
+# commands started is left running, which is said - unless this process was
+# launched to run a job, whose launcher has the registry
+_releaseregistry(::Nothing) = nothing
+_releaseregistry(::RegistryHeldByRun) = nothing
+function _releaseregistry(hold::RegistryHeldBySession)
+    closed = try
+        _capturefair(hold.cli, "registry", "session", "close", hold.id)
+    catch err
+        err isa Base.IOError || rethrow()
+        (status = nothing, printed = "", errors = sprint(showerror, err))
+    end
+    closed.status == 0 ||
+        @warn "`fair registry session close $(hold.id)` failed: $(strip(closed.errors))"
+    return nothing
+end
+function _releaseregistry(::RegistryNotHeld)
+    haskey(ENV, "FDP_CONFIG_DIR") && return nothing
+    println("the local registry may be left running, this fair having no sessions to stop one it started: ",
+            "`fair registry stop` stops it when you have finished")
+    return nothing
+end
+
+# Whether a session still held when Julia exits is closed then, arranged once
+const CLOSE_AT_EXIT = Ref(false)
+function _closeatexit()
+    CLOSE_AT_EXIT[] && return nothing
+    atexit() do
+        session = SESSION[]
+        if !isnothing(session) && session.hold isa RegistryHeldBySession
+            _releaseregistry(session.hold)
+        end
+    end
+    CLOSE_AT_EXIT[] = true
+    return nothing
 end

@@ -34,6 +34,8 @@ const DEFAULT_API_VERSION = "1.0.0"
 # The severity the registry gives an issue when none is set
 const DEFAULT_ISSUE_SEVERITY = 1
 FDP_CONFIG_DIR() = get(ENV, "FDP_CONFIG_DIR", ".")
+# The submission script of a working config that names none in its
+# `run_metadata.script_path`
 @static if Sys.iswindows()
     const FDP_SUBMISSION_SCRIPT = "script.bat"
 else
@@ -52,13 +54,16 @@ export read_array!, read_table!, read_distribution!, read_estimate!
 export write_array!, write_table!, write_distribution!, write_estimate!
 export raise_issue!
 export register_authors!, register_citations!
+export build_paper!
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
 public initialise, finalise, rehearse, discard, install_cli, install_cli!,
        set_cli!
 public @fair_str
 public DataRegistryHandle, RecordedRun, Rehearsal
-public RegistryEndpoint
+public RegistryEndpoint, registry_session
+public LaTeXPaper, PdfLaTeXEngine, LuaLaTeXEngine, XeLaTeXEngine
+public setup_paper, check_paper, update_paper, PaperCheck
 public ReadWriteException, ConfigFileException
 public WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
@@ -79,6 +84,10 @@ public AncestorCommits, CheckedOutCommit, AllCommits, NamedCommit
 public register_release!, RegisteredRelease
 
 include("repometadata.jl")
+include("latex.jl")
+include("citationfile.jl")
+include("paper.jl")
+include("papersetup.jl")
 include("fdp_i.jl")
 include("citations.jl")
 include("authors.jl")

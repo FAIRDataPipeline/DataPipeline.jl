@@ -137,7 +137,9 @@ end
 function downstream(x::AbstractString;
                     remote::Union{Nothing, AbstractString} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
-    return downstream(RegistryEndpoint(remote = remote), x; depth)
+    return registry_session(remote = remote) do registry
+        return downstream(registry, x; depth)
+    end
 end
 function downstream(registry::RegistryEndpoint,
                     commits::AbstractCommitSelection;
@@ -159,7 +161,9 @@ end
 function downstream(commits::AbstractCommitSelection;
                     remote::Union{Nothing, AbstractString} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
-    return downstream(RegistryEndpoint(remote = remote), commits; depth)
+    return registry_session(remote = remote) do registry
+        return downstream(registry, commits; depth)
+    end
 end
 function downstream(registry::RegistryEndpoint;
                     issue::Union{Integer, AbstractString, TraceIssue,
@@ -179,7 +183,9 @@ function downstream(;
                                  IssueRecord},
                     remote::Union{Nothing, AbstractString} = nothing,
                     depth::Union{Nothing, Integer} = nothing)
-    return downstream(RegistryEndpoint(remote = remote); issue, depth)
+    return registry_session(remote = remote) do registry
+        return downstream(registry; issue, depth)
+    end
 end
 
 # The registry URL of the issue named: by a record from a trace or identify,

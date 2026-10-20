@@ -1,5 +1,44 @@
 # NEWS
 
+- v0.56.0
+  - Breaking changes:
+    - A code repository's metadata is taken from the first of its metadata files
+      that exists, alone: a field it lacks stays unset rather than being filled
+      from a later file, what later files say more or otherwise is told in an
+      info message, and that first file being unreadable is an error.
+  - Running and rehearsing:
+    - `rehearse` keeps the local registry running until `finalise` or `discard`,
+      through a session of the CLI's where `fair` has session commands; with a
+      `fair` that has none, they say how to stop a registry left running.
+    - A local registry that does not answer is an error naming `fair registry
+      start`; a remote one is no longer called local.
+    - `rehearse` prepares a job with `fair run --rehearse` where `fair` has it,
+      which stages nothing and makes no git check; otherwise with `fair run --ci
+      --dirty`, as before.
+    - A run's date is posted in UTC, as the registry reads it, rather than in
+      local time; the dates shown say UTC.
+    - Each `initialise` registers a new code run: two runs of one config started
+      in the same second were one.
+    - `initialise()` takes the submission script the working config names, so a
+      user config may give its `shell:`, `julia` say; it looked for `script.sh`.
+    - Outside a run, `identify`, `provenance`, `downstream`, `crate`,
+      `register_release!` and `raise_issue!` hold the local registry through a
+      session of the CLI's, where `fair` has them; `registry_session` shares one
+      between calls, and `initialise()` outside `fair run` holds one to `finalise`.
+  - Writing:
+    - A `write:` entry may name a version that exists, to reproduce it: a file
+      that is that version's registers nothing, and any other is refused at
+      `finalise`, or at the call given a `path`, rather than at the first write.
+  - Building a paper:
+    - `build_paper!(handle, paper)` builds a LaTeX paper with `latexmk` in a code
+      run: the files it uses from its pipeline folder are its inputs, and the PDF
+      its output, with the authors, licence and keywords of the paper's metadata,
+      which the PDF holds too. `LaTeXPaper` describes a paper.
+    - `setup_paper` drafts a paper's `CITATION.cff`, its config's template and its
+      build's environment, once; `check_paper` reports what is out of date or
+      missing; `update_paper` brings `CITATION.cff` and the config's `read:` block
+      up to date, and with `newest = true` the files from the pipeline.
+
 - v0.55.0
   - Breaking changes:
     - `initialise()` with no arguments reads the job folder `fair run` names in

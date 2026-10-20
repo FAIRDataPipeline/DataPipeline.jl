@@ -165,6 +165,61 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     @test occursin("rehearse again", err.value.msg)
 end
 
+Test.@testset "a rehearsal writing a version that exists" begin
+    versioned = "rehearse/versions/$uid"
+    placed = "rehearse/placed/$uid"
+    # Two versions of a name, recorded
+    for (version, text) in (("0.0.1", "first"), ("0.0.2", "second"))
+        config = DataPipeline._createconfig(joinpath("coderun", datetime,
+                                                     "rehearse-versions",
+                                                     "$version.yaml"))
+        DataPipeline._addwrite(config, versioned, "a recorded version",
+                               file_type = "txt", use_version = version)
+        recorded = DataPipeline.initialise(config, config)
+        write(link_write!(recorded, versioned), "$text $uid\n")
+        DataPipeline.finalise(recorded)
+    end
+    # A rehearsal that writes the first version again, with a new file whose
+    # label sorts before it, which finalise places first
+    function rehearsing(name)
+        job = job_folder(name)
+        working = joinpath(job, "config.yaml")
+        DataPipeline._addwrite(working, "reproduced", "the first version",
+                               file_type = "txt", use_data_product = versioned,
+                               use_version = "0.0.1")
+        DataPipeline._addwrite(working, "placed", "a new file",
+                               file_type = "txt", use_data_product = placed,
+                               use_version = "0.0.1")
+        DataPipeline.rehearse(job, outputs = mktempdir())
+        handle = DataPipeline.initialise()
+        write(link_write!(handle, "placed"), "placed $name $uid\n")
+        return handle
+    end
+    before = counts()
+
+    # The same bytes are a reproduction, though not of the highest version,
+    # placed as that version
+    handle = rehearsing("reproduced")
+    write(link_write!(handle, "reproduced"), "first $uid\n")
+    DataPipeline.finalise(handle)
+    @test haskey(handle.unchanged, ("reproduced", nothing))
+    @test read(joinpath(handle.mode.outputs, namespace, versioned, "0.0.1.txt"),
+               String) == "first $uid\n"
+    @test isfile(joinpath(handle.mode.outputs, namespace, placed, "0.0.1.txt"))
+
+    # Other bytes are refused at finalise, before anything is placed, leaving
+    # the rehearsal to be discarded
+    handle = rehearsing("changed")
+    write(link_write!(handle, "reproduced"), "second $uid\n")
+    err = @test_throws ReadWriteException DataPipeline.finalise(handle)
+    @test startswith(err.value.msg,
+                     "$namespace:$versioned@v0.0.1 is registered already")
+    @test isempty(readdir(handle.mode.outputs))
+    @test !current().ended
+    DataPipeline.discard(handle)
+    @test counts() == before
+end
+
 Test.@testset "a rehearsal repeated into the same folder replaces its files" begin
     job = job_folder("again")
     working = joinpath(job, "config.yaml")
@@ -304,15 +359,18 @@ Test.@testset "what rehearse() accepts" begin
 end
 
 # A user config inside the project, as a user's would be, reading the SEIRS
-# parameters and writing one text file
-function user_config(name::AbstractString, data_product::AbstractString)
+# parameters and writing one text file, its script run by `shell` where one is
+# given
+function user_config(name::AbstractString, data_product::AbstractString;
+                     shell = nothing, script = "julia script.jl")
     path = joinpath(pwd(), "rehearse-$name-$uid.yaml")
+    run_metadata = Dict("description" => "A rehearsed run $uid",
+                        "script" => script,
+                        "default_input_namespace" => "testing",
+                        "default_output_namespace" => "testing")
+    isnothing(shell) || (run_metadata["shell"] = shell)
     DataPipeline.YAML.write_file(path,
-                                 Dict("run_metadata" =>
-                                          Dict("description" => "A rehearsed run $uid",
-                                               "script" => "julia script.jl",
-                                               "default_input_namespace" => "testing",
-                                               "default_output_namespace" => "testing"),
+                                 Dict("run_metadata" => run_metadata,
                                       "read" =>
                                           [Dict("data_product" => "parameters",
                                                 "use" =>
@@ -330,8 +388,17 @@ Test.@testset "rehearse() from a user config, through fair" begin
     user = user_config("fair", name)
     outputs = mktempdir()
     before = counts()
-    # fair run --ci prepares the job under the data store's jobs/
+    # A fair with `fair run --rehearse` stages nothing; one without, preparing
+    # the job with `fair run --ci`, adds it to the project's staging
+    staging = joinpath(DataPipeline._fairroot(pwd()), ".fair", "staging")
+    staged() = isfile(staging) ? read(staging, String) : ""
+    staged_before = staged()
+    rehearses = occursin("--rehearse",
+                         read(DataPipeline._withenvironment(`$(DataPipeline._faircommand(nothing)) run --help`),
+                              String))
+    # fair prepares the job under the data store's jobs/
     job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
+    rehearses && @test staged() == staged_before
     @test isdir(job)
     @test !startswith(relpath(job, joinpath(datastore, "jobs")), "..")
     @test isfile(joinpath(job, "config.yaml"))
@@ -359,6 +426,22 @@ Test.@testset "rehearse() from a user config, through fair" begin
     rm(user)
 end
 
+Test.@testset "rehearse() of a script in another shell, through fair" begin
+    name = "rehearse/via-fair-julia/$uid"
+    user = user_config("julia", name, shell = "julia",
+                       script = "println(\"a rehearsed Julia script $uid\")\n")
+    outputs = mktempdir()
+    # fair writes the script as script.jl, which the working config names
+    job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
+    @test isfile(joinpath(job, "script.jl"))
+    handle = DataPipeline.initialise()
+    write(link_write!(handle, name), "rehearsed in another shell $uid\n")
+    @test DataPipeline.finalise(handle) == outputs
+    @test occursin("a rehearsed Julia script $uid",
+                   read(joinpath(outputs, "script.jl"), String))
+    rm(user)
+end
+
 Test.@testset "rehearse() through the package's copy of fair" begin
     # Installed by the tests of cli.jl, which run before these; recorded by
     # set_cli!, it is the fair used whatever the path holds
@@ -382,6 +465,22 @@ Test.@testset "rehearse() through the package's copy of fair" begin
     rm(user)
 end
 
+# What a stand-in for a fair with neither session commands nor `fair run
+# --rehearse` says to them, as such a fair does: a usage error
+no_sessions = "[ \"\$1 \$2\" = \"registry session\" ] && " *
+              "{ echo \"Error: No such command 'session'.\" >&2; exit 2; }\n" *
+              "[ \"\$1 \$2\" = \"run --rehearse\" ] && " *
+              "{ echo \"Error: No such option '--rehearse'.\" >&2; exit 2; }\n"
+
+# What `f` prints
+function printed_by(f::Function)
+    return mktemp() do path, io
+        redirect_stdout(f, io)
+        flush(io)
+        return read(path, String)
+    end
+end
+
 @static if !Sys.iswindows()
     Test.@testset "how rehearse() finds fair" begin
         # Stand-ins for fair: one printing a prepared job folder as fair does,
@@ -395,9 +494,11 @@ end
             return path
         end
         fake = stand_in("fair",
+                        no_sessions *
                         "echo Running run please wait\necho $prepared\n")
         failing = stand_in("failing", "echo no such thing >&2\nexit 1\n")
-        silent = stand_in("silent", "echo Running run please wait\n")
+        silent = stand_in("silent",
+                          no_sessions * "echo Running run please wait\n")
         user = user_config("fake", "rehearse/fake/$uid")
 
         # The preference first, whatever the path holds; set_cli! records
@@ -456,8 +557,8 @@ end
                                                                  cli = failing)
         @test occursin("exit status 1", err.value.msg)
 
-        # A failing fair preparing a job, recorded directly since set_cli!
-        # would refuse it: the error carries what it said
+        # A failing fair, recorded directly since set_cli! would refuse it:
+        # the error carries what it said
         DataPipeline.Preferences.set_preferences!(DataPipeline,
                                                   "cli" => failing,
                                                   force = true)
@@ -479,6 +580,221 @@ end
             DataPipeline.set_cli!(nothing)
         end
         @test isnothing(current())
+        rm(user)
+    end
+
+    Test.@testset "how rehearse() holds the registry" begin
+        # A stand-in for a fair with the session commands, logging each call
+        # and numbering the sessions it opens
+        bin = mktempdir()
+        calls_file = joinpath(bin, "calls")
+        count_file = joinpath(bin, "count")
+        sessions = joinpath(bin, "fair")
+        write(sessions,
+              """
+              #!/bin/sh
+              echo "\$*" >> $calls_file
+              case "\$1 \$2 \$3" in
+                "registry session open")
+                  n=\$((\$(cat $count_file 2>/dev/null || echo 0) + 1))
+                  echo \$n > $count_file
+                  echo "{\\"session\\": \\"s\$n\\", \\"registry_url\\": \\"http://127.0.0.1:8000/api/\\", \\"token_file\\": \\"/nowhere/token\\"}" ;;
+                "registry session close") ;;
+                *) echo "fair, version 9.9.9" ;;
+              esac
+              """)
+        chmod(sessions, 0o755)
+        calls() = isfile(calls_file) ? readlines(calls_file) : String[]
+        opening = "registry session open --pid $(getpid()) --json"
+        # Made first: making a job folder forgets the session's run
+        folder = Dict(name => job_folder("held-$name")
+                      for name in ("main", "earlier", "later", "run", "none",
+                          "none-run", "refused"))
+        @test DataPipeline.set_cli!(sessions) == sessions
+        try
+            withenv("FDP_SESSION" => nothing) do
+                # Opened by rehearse in this process's name, closed by
+                # finalise
+                DataPipeline.rehearse(folder["main"])
+                @test calls()[end] == opening
+                @test current().hold isa DataPipeline.RegistryHeldBySession
+                @test current().hold.id == "s1"
+                DataPipeline.finalise(DataPipeline.initialise())
+                @test calls()[end] == "registry session close s1"
+                @test isnothing(current().hold)
+                # Restarted, the new session opens before the old one closes,
+                # so that the registry is held throughout; discarded, it
+                # closes
+                DataPipeline.rehearse(folder["earlier"])
+                DataPipeline.rehearse(folder["later"], restart = true)
+                @test calls()[(end - 2):end] ==
+                      [opening, opening, "registry session close s2"]
+                DataPipeline._discardcurrent()
+                @test calls()[end] == "registry session close s3"
+                @test isnothing(current())
+            end
+            # A run that names its session holds the registry: nothing opened
+            withenv("FDP_SESSION" => "the-run") do
+                before = length(calls())
+                DataPipeline.rehearse(folder["run"])
+                @test current().hold isa DataPipeline.RegistryHeldByRun
+                DataPipeline._discardcurrent()
+                @test length(calls()) == before
+            end
+            # A session whose fair has gone is warned of, not an error
+            @test_logs((:warn,
+                        r"^`fair registry session close s9` failed: "),
+                       DataPipeline._releaseregistry(DataPipeline.RegistryHeldBySession("s9",
+                                                                                        Cmd([joinpath(bin,
+                                                                                                      "gone")]),
+                                                                                        "http://127.0.0.1:8000/api/",
+                                                                                        "/nowhere/token")))
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+
+        # A fair with no session commands holds nothing, and the end of a
+        # rehearsal says how to stop a registry it may have left running -
+        # unless this process was launched to run a job, as the tests are
+        old = joinpath(bin, "old")
+        write(old, "#!/bin/sh\n" * no_sessions * "echo fair, version 0.10.2\n")
+        chmod(old, 0o755)
+        @test DataPipeline.set_cli!(old) == old
+        try
+            withenv("FDP_SESSION" => nothing) do
+                withenv("FDP_CONFIG_DIR" => nothing) do
+                    DataPipeline.rehearse(folder["none"])
+                    @test current().hold isa DataPipeline.RegistryNotHeld
+                    @test occursin("`fair registry stop` stops it",
+                                   printed_by(DataPipeline._discardcurrent))
+                end
+                @test haskey(ENV, "FDP_CONFIG_DIR")
+                DataPipeline.rehearse(folder["none-run"])
+                @test !occursin("fair registry stop",
+                                printed_by(DataPipeline._discardcurrent))
+            end
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+
+        # A fair that has the commands and refuses, or answers with no
+        # session, stops the rehearsal before it starts
+        refusing = joinpath(bin, "refusing")
+        write(refusing,
+              "#!/bin/sh\n[ \"\$1\" = --version ] && { echo fair; exit 0; }\n" *
+              "echo 'the registry runs on another host' >&2\nexit 1\n")
+        garbled = joinpath(bin, "garbled")
+        write(garbled, "#!/bin/sh\necho not a session\n")
+        for (cli, says) in ((refusing, "runs on another host"),
+            (garbled, "printed no session"))
+            chmod(cli, 0o755)
+            DataPipeline.set_cli!(cli)
+            try
+                withenv("FDP_SESSION" => nothing) do
+                    err = @test_throws ReadWriteException DataPipeline.rehearse(folder["refused"])
+                    @test occursin(says, err.value.msg)
+                end
+                @test isnothing(current())
+            finally
+                DataPipeline.set_cli!(nothing)
+            end
+        end
+    end
+
+    Test.@testset "how rehearse() prepares a job" begin
+        # Stand-ins for a fair, logging each call, whose `fair run --rehearse`
+        # does as `rehearsal` says; their `fair run --ci` prints a prepared job
+        # folder as fair does
+        bin = mktempdir()
+        calls_file = joinpath(bin, "calls")
+        prepared = job_folder("prepared")
+        user = user_config("prepared", "rehearse/prepared/$uid")
+        function stand_in(name::AbstractString, rehearsal::AbstractString)
+            path = joinpath(bin, name)
+            write(path,
+                  """
+                  #!/bin/sh
+                  echo "\$*" >> $calls_file
+                  case "\$1 \$2" in
+                    "run --rehearse") $rehearsal ;;
+                    "run --ci") echo Running run please wait; echo $prepared ;;
+                    *) echo "fair, version 9.9.9" ;;
+                  esac
+                  """)
+            chmod(path, 0o755)
+            return path
+        end
+        reply = string("{\\\"job_dir\\\": \\\"$prepared\\\", ",
+                       "\\\"config\\\": \\\"$prepared/config.yaml\\\", ",
+                       "\\\"script\\\": \\\"$prepared/script.sh\\\", ",
+                       "\\\"data_store\\\": \\\"$datastore\\\", ",
+                       "\\\"token_file\\\": \\\"/nowhere/token\\\"}")
+        rehearsing = stand_in("rehearsing",
+                              "echo 'a log line' >&2; echo \"$reply\"")
+        lacking = stand_in("lacking",
+                           "echo \"Error: No such option '--rehearse'.\" >&2; exit 2")
+        unprepared = stand_in("unprepared",
+                              "echo 'Warning: nothing to prepare' >&2")
+        failing = stand_in("failing", "echo 'cannot prepare it' >&2; exit 1")
+        calls() = isfile(calls_file) ? readlines(calls_file) : String[]
+        # Held by the run, so that only the runs are called: with the option,
+        # it alone, without `--ci` or `--dirty`, its log printed; without it,
+        # `--ci --dirty` after it
+        withenv("FDP_SESSION" => "the-run") do
+            for (cli, prepares) in ((rehearsing,
+                                     ["run --rehearse --local $user"]),
+                                    (lacking,
+                                     ["run --rehearse --local $user",
+                                         "run --ci --dirty --local $user"]))
+                @test DataPipeline.set_cli!(cli) == cli
+                try
+                    rm(calls_file, force = true)
+                    said = printed_by() do
+                        @test DataPipeline.rehearse(user, local_only = true) ==
+                              prepared
+                    end
+                    @test calls() == prepares
+                    cli == rehearsing && @test occursin("a log line", said)
+                    DataPipeline._discardcurrent()
+                finally
+                    DataPipeline.set_cli!(nothing)
+                end
+            end
+            # A fair without session commands is not asked for a rehearsal,
+            # having neither
+            without = joinpath(bin, "without")
+            write(without,
+                  "#!/bin/sh\necho \"\$*\" >> $calls_file\n" * no_sessions *
+                  "[ \"\$1 \$2\" = \"run --ci\" ] && { echo $prepared; exit 0; }\n" *
+                  "echo fair, version 0.10.2\n")
+            chmod(without, 0o755)
+            DataPipeline.set_cli!(without)
+            try
+                withenv("FDP_SESSION" => nothing) do
+                    rm(calls_file, force = true)
+                    @test DataPipeline.rehearse(user) == prepared
+                    @test calls() ==
+                          ["registry session open --pid $(getpid()) --json",
+                        "run --ci --dirty $user"]
+                    DataPipeline._discardcurrent()
+                end
+            finally
+                DataPipeline.set_cli!(nothing)
+            end
+            # Exit 0 naming no job, and a failure, are errors carrying what
+            # the fair wrote, and leave no rehearsal
+            for (cli, says) in ((unprepared, "nothing to prepare"),
+                (failing, "cannot prepare it"))
+                DataPipeline.set_cli!(cli)
+                try
+                    err = @test_throws ReadWriteException DataPipeline.rehearse(user)
+                    @test occursin(says, err.value.msg)
+                    @test isnothing(current())
+                finally
+                    DataPipeline.set_cli!(nothing)
+                end
+            end
+        end
         rm(user)
     end
 end

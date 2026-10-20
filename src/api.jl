@@ -2,13 +2,13 @@
 
 """
     initialise(config_file = \$FDP_CONFIG_DIR/config.yaml,
-               submission_script = \$FDP_CONFIG_DIR/script.sh;
+               submission_script = its run_metadata.script_path;
                token = \$FDP_LOCAL_TOKEN)
 
 Read the working config that `fair run` wrote, register the config, the
 submission script and the code repository with the local registry, open a new
-code run, and return the [`DataRegistryHandle`](@ref) the rest of the API
-works on. The registry is `run_metadata.local_data_registry_url` (default
+code run, dated in UTC, and return the [`DataRegistryHandle`](@ref) the rest of
+the API works on. The registry is `run_metadata.local_data_registry_url` (default
 `$DEFAULT_REGISTRY_URL`) and the API version `run_metadata.api_version`
 (default `$DEFAULT_API_VERSION`). `token` is the registry's access token, which
 registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
@@ -16,7 +16,10 @@ registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 With no arguments, the files are those in the folder `fair run` names in
 `FDP_CONFIG_DIR` when it launches a script: a call with that unset, or with a
 file that is not a working config, throws a [`ConfigFileException`](@ref)
-saying so. After [`rehearse`](@ref) the same call opens a
+saying so. The submission script is the one the working config names as
+`run_metadata.script_path` - the copy `fair run` wrote in that folder,
+`script.sh`, or `script.jl` for a user config with `shell: julia`, and so on -
+else `script.sh` (`script.bat` on Windows) in the folder. After [`rehearse`](@ref) the same call opens a
 [`Rehearsal`](@ref) instead, from the job folder it prepared: nothing is
 registered, and the handle holds no token, whatever is given or set.
 
@@ -28,11 +31,13 @@ supported.
 
 The code repository is registered at its commit as one object, kept where the
 registry holds one already. A new one has the repository's own authors, read
-from its metadata files - `codemeta.json`, `.zenodo.json`, `CITATION.cff`,
-`JuliaProject.toml`, `Project.toml`, the first that lists any - as they are at
-the commit in the clone `run_metadata.local_repo`, or in its working tree for
-a run from uncommitted changes; with none, the runner. The licence and
-keywords the files give are added to the object either way.
+from the first of its metadata files that it has - `codemeta.json`,
+`.zenodo.json`, `CITATION.cff`, `JuliaProject.toml`, `Project.toml` - as it is
+at the commit in the clone `run_metadata.local_repo`, or in its working tree
+for a run from uncommitted changes; where that file lists none, the runner.
+The licence and keywords that file gives are added to the object either way.
+Nothing is taken from the files after it, even what it lacks, and what they
+say more or otherwise is told; that file being unreadable is an error.
 
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
@@ -42,23 +47,42 @@ function initialise(config_file::Union{Nothing, String} = nothing,
                     submission_script::Union{Nothing, String} = nothing;
                     token::Union{Nothing, AbstractString} = FDP_LOCAL_TOKEN())
     mode = _runmode(SESSION[])
+    job = nothing
     if isnothing(config_file)
-        config_file, submission_script = _launchedfiles()
-    elseif isnothing(submission_script)
-        submission_script = _launchedscript()
+        job = _launchedjob()
+        config_file = joinpath(job, "config.yaml")
     end
     println("processing config file: ", config_file)
     config = _workingconfig(config_file)
+    isnothing(submission_script) &&
+        (submission_script = _submissionscript(config, job))
     run_metadata = config["run_metadata"]
     registry = RegistryEndpoint(get(run_metadata, "local_data_registry_url",
                                     DEFAULT_REGISTRY_URL),
                                 get(run_metadata, "api_version",
                                     DEFAULT_API_VERSION),
                                 token = _runtoken(mode, token))
-    handle = _openrun(mode, config, config_file, submission_script, registry)
-    _opened(handle)
+    hold = _runhold(mode)
+    handle = try
+        _openrun(mode, config, config_file, submission_script, registry)
+    catch
+        _releaseregistry(hold)
+        rethrow()
+    end
+    _opened(handle, hold)
     return handle
 end
+
+# What holds the local registry for a run `initialise` opens: for a recorded
+# run, the run that launched this process, or else a session of its own, as in
+# a job `fair run --ci` prepared, closed at `finalise`; a CLI with no sessions
+# holds none, and having started nothing, there is nothing to say. A
+# rehearsal's hold is the one `rehearse` opened
+function _runhold(::RecordedRun)
+    hold = _holdregistry()
+    return hold isa RegistryNotHeld ? nothing : hold
+end
+_runhold(::Rehearsal) = nothing
 
 # Open a recorded code run: register the data store, the config, the script
 # and the repository, raise the issue on a repository with uncommitted
@@ -80,19 +104,30 @@ function _openrun(mode::RecordedRun, config::Dict, config_file::String,
     endswith(run_metadata["latest_commit"], "-dirty") &&
         _flagdirtyrepository(registry, repo_url, run_metadata["latest_commit"])
 
-    run_date = Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS")
-    code_run = _postentry(registry, "code_run",
-                          Dict("run_date" => run_date,
-                               "description" => run_metadata["description"],
-                               "code_repo" => repo_url,
-                               "model_config" => config_url,
-                               "submission_script" => script_url))
+    code_run = _newcoderun(registry, run_metadata["description"], repo_url,
+                           config_url, script_url)
     println("pipeline initialised.")
 
     return _newhandle(mode, config, config_file, registry,
                       (config = config_url, script = script_url,
                        repository = repo_url, datastore = datastore_url,
                        code_run = code_run["url"]), code_run["uuid"])
+end
+
+# Register a new code run started at `run_date`, in UTC, and return its entry:
+# always a new one, since two runs of one config may start in the same second,
+# and an entry found by these fields would be the other's
+function _newcoderun(registry::RegistryEndpoint, description::AbstractString,
+                     repo_url::AbstractString, config_url::AbstractString,
+                     script_url::AbstractString;
+                     run_date::DateTime = Dates.now(Dates.UTC))
+    return _createentry(registry, "code_run",
+                        Dict("run_date" => Dates.format(run_date,
+                                          "yyyy-mm-ddTHH:MM:SSZ"),
+                             "description" => description,
+                             "code_repo" => repo_url,
+                             "model_config" => config_url,
+                             "submission_script" => script_url))
 end
 
 # A handle at the start of a run: the mode, the config and where it was read
@@ -127,10 +162,14 @@ A file whose bytes are those of the highest version of its data product
 already registered is not registered again: no version is made, the file
 written is removed, and it is not an output of the code run. Where a link
 call named its source, the source, authors and licence registered with that
-version must be the same as well.
+version must be the same as well. A file written as a version that is
+registered already must be that version's in the same way - a reproduction,
+likewise not registered again - or nothing is registered, and the call is an
+error naming the version.
 """
 function finalise(handle::DataRegistryHandle{RecordedRun})
     _checksources(handle)
+    _checkversions(handle)
     previous = _previousversions(handle)
     # In name order, so which of two identical outputs keeps its file, and the
     # order of the code run's inputs and outputs, are the same on every machine
@@ -157,6 +196,8 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     end
     println("finished - code run locally registered as: ", url, "\n")
     _ended(handle)
+    session = SESSION[]
+    !isnothing(session) && session.handle === handle && _releasehold!()
     return handle.config["run_metadata"]["write_data_store"]
 end
 
@@ -377,10 +418,12 @@ second name, so the file must not be written to afterwards.
 A file whose bytes are those of the highest version of the data product
 already registered is not registered again: no version is made and it is not
 an output of the code run. Where the call names a source, the source, authors
-and licence registered with that version must be the same as well. With a
-`path` this is found as the call is made, and the path returned is that of
-the registered file; a file that is written afterwards is found so by
-`finalise`.
+and licence registered with that version must be the same as well. The
+version the `write:` entry names may be one registered already, when the file
+must be that version's in the same way - a reproduction, likewise not
+registered again - or it is an error. With a `path` this is found as the call
+is made, and the path returned is that of the registered file; a file that is
+written afterwards is found so by `finalise`, before it registers anything.
 
 A file that comes from somewhere else is registered with its source. The
 source is named by its `doi`, or by `bibtex`, the key of a citation that
@@ -431,9 +474,9 @@ everything made from that: once the new version is registered at
 [`finalise`](@ref), an issue reading `Superseded by namespace:name@vX.Y.Z` is
 raised on the highest version before it, at severity 0, the lowest, so that
 [`identify`](@ref) of anything made from the old version reports it. Where
-there is nothing to supersede - the file is the highest version's and
-unchanged, the name has no version before, or the version written is not
-above the highest - nothing is raised, and an info message says so.
+there is nothing to supersede - the file is registered already, unchanged,
+the name has no version before, or the version written is not above the
+highest - nothing is raised, and an info message says so.
 
 See also: [`canwrite`](@ref)
 """
@@ -460,7 +503,8 @@ end
 
 # A new file in the data store, for the caller to write
 function _linkwrite!(handle::DataRegistryHandle, data_product::String,
-                     ::Nothing, source::Union{Nothing, SourceRecord},
+                     ::Nothing,
+                     source::Union{Nothing, SourceRecord, OutputDescription},
                      supersede::Bool)
     key = (data_product, nothing)
     if haskey(handle.outputs, key)
@@ -480,7 +524,8 @@ end
 # A file that exists already, linked or copied into the data store
 function _linkwrite!(handle::DataRegistryHandle, data_product::String,
                      path::AbstractString,
-                     source::Union{Nothing, SourceRecord}, supersede::Bool)
+                     source::Union{Nothing, SourceRecord, OutputDescription},
+                     supersede::Bool)
     path = String(path)
     isfile(path) || throw(ReadWriteException("no file to register at $path"))
     wmd, name = _writemetadata(handle, data_product)
@@ -511,12 +556,14 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
     end
 
     _checkonefile(handle, source, hash, data_product)
-    unchanged = _unchangedfile(handle.registry, _writenamespace(handle, wmd),
-                               name, hash, source)
+    namespace = _writenamespace(handle, wmd)
+    version = String(get(wmd, "use", Dict())["version"])
+    unchanged = _heldfile(handle.registry, namespace, name, version, hash,
+                          source)
     if !isnothing(unchanged)
         println("data product unchanged: ", name, " (", unchanged.version, ")")
         supersede &&
-            @info "nothing to supersede: $(_dataproductname(_writenamespace(handle, wmd), name, unchanged.version)) is the highest version already, unchanged"
+            @info "nothing to supersede: the file written as $(_dataproductname(namespace, name, version)) is registered already, unchanged"
         whole = _wholeobjectcomponent(handle.registry, unchanged.object)
         found = Dict("path" => unchanged.path,
                      "object_url" => unchanged.object,
@@ -825,15 +872,19 @@ function raise_issue!(targets::AbstractVector, description::String;
                       remote::Union{Nothing, AbstractString} = nothing,
                       severity::Integer = DEFAULT_ISSUE_SEVERITY,
                       all_versions::Bool = false)
-    return raise_issue!(RegistryEndpoint(remote = remote), targets,
-                        description; severity, all_versions)
+    return registry_session(remote = remote) do registry
+        return raise_issue!(registry, targets, description; severity,
+                            all_versions)
+    end
 end
 function raise_issue!(target::_IssueTargetArgument, description::String;
                       remote::Union{Nothing, AbstractString} = nothing,
                       severity::Integer = DEFAULT_ISSUE_SEVERITY,
                       all_versions::Bool = false)
-    return raise_issue!(RegistryEndpoint(remote = remote), [target],
-                        description; severity, all_versions)
+    return registry_session(remote = remote) do registry
+        return raise_issue!(registry, [target], description; severity,
+                            all_versions)
+    end
 end
 
 # A bare string names a data product: of this run by its config name, or a

@@ -7,6 +7,27 @@ made from it, how one version supersedes another, and the crate that packs the
 files of a paper with the provenance of each. None of it needs a token, so it
 all works outside `fair run`, against the local registry or a remote one.
 
+## Holding the local registry
+
+Outside a run, each of these functions holds the local registry up through a
+session of the FAIR CLI's while it works, where `fair` has session commands: a
+session starts the registry where nothing holds it, and the last to close
+stops one a session started. Calls in a `DataPipeline.registry_session` block
+share its session, given its endpoint first; `fair registry start` keeps the
+registry running until `fair registry stop`, which a `fair` without session
+commands needs.
+
+```julia
+DataPipeline.registry_session() do registry
+    DataPipeline.identify(registry, "results.csv")
+    DataPipeline.provenance(registry, "results.csv")
+end
+```
+
+```@docs
+DataPipeline.registry_session
+```
+
 ## Asking what the registry knows about a file or a repository
 
 `DataPipeline.identify` takes a file, or commits of a git repository, and asks
@@ -67,14 +88,14 @@ DataPipeline.provenance("testing:SEIRS_model/report/julia", depth = 2)   # two r
 
 ```
 Provenance of testing:SEIRS_model/report/julia@v0.0.1  sha1 c896cfb9
-<- run a1b118f0 on 2026-10-15 11:33, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
+<- run a1b118f0 on 2026-10-15 11:33 UTC, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
    used testing:SEIRS_model/summary/julia@v0.0.1  sha1 b6ae4389
        issue, severity 3: an issue over an input and an output
-   <- run 577160a1 on 2026-10-15 11:33, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
+   <- run 577160a1 on 2026-10-15 11:33 UTC, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
       used PSU:SEIRS_model/parameters@v1.0.0  sha1 6294a595  superseded by v1.0.1  from https://doi.org/10.1038/s41592-020-0856-2 (supplement)
           issue, severity 2: an issue on the parameters
       used testing:SEIRS_model/results/model_output/julia@v0.0.1  sha1 e8912ec2
-      <- run c30fbbdd on 2026-10-15 11:33, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
+      <- run c30fbbdd on 2026-10-15 11:33 UTC, github.com/FAIRDataPipeline/DataPipeline.jl.git at 34d3bdca
          used PSU:SEIRS_model/parameters@v1.0.0  (above)
 ```
 
@@ -127,7 +148,7 @@ link_write!(handle, "era5/t2m/2021", path = "cache/era5_t2m_2021.nc", doi = era5
             primary = false, supersede = true)
 ```
 
-Where there is nothing to supersede - the file is the highest version's and
+Where there is nothing to supersede - the file is registered already,
 unchanged, or the name has no version before - nothing is raised and an info
 message says so.
 
@@ -135,8 +156,9 @@ message says so.
 
 A run records the commit of the code it ran. `DataPipeline.register_release!`
 records that a commit is a release - its version read from the commit's tag,
-`v1.2.0` say, its authors and licence from the repository's `codemeta.json`,
-`.zenodo.json`, `CITATION.cff` or project file - as the registry's release
+`v1.2.0` say, its authors and licence from the first of the repository's
+`codemeta.json`, `.zenodo.json`, `CITATION.cff` and project file that it has -
+as the registry's release
 record and as a data product, `<organisation>:<repository>@<version>`, which
 the traces and the crate take as they take any data product. A release then
 names the code before it, so that a problem fixed in it can be raised on

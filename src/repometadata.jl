@@ -2,26 +2,29 @@
 
 # What a code repository says of itself in its metadata files - its authors,
 # licence, keywords, description, version and title - read from the files as
-# they are at a commit of a clone, in a working tree, or at a commit on GitHub.
+# they are at a commit of a clone, in a working tree, or at a commit on GitHub;
+# and what they say of a paper the repository holds.
 
 """
     RepositoryMetadata
 
-What a code repository's metadata files say of it. Each field is taken from
-the first file, in the order of `REPOSITORY_METADATA_FILES`, that holds it;
-the authors are the list of the first file that has one, a later file only
-adding an identifier to an author it names the same way.
+What a code repository's metadata files say of it: everything the first of
+them that exists, in the order of `REPOSITORY_METADATA_FILES`, says, and
+nothing that the files after it say. A field the first file lacks is left
+empty, since it may be unset on purpose; what the others say more or
+otherwise is told in an info message.
 
 # Fields
 - `authors`: the authors in order, a person as given names then family name,
   an organisation as it is written
 - `identifiers`: the ORCID or ROR id of an author, by name, as a URL
 - `licence`: the licence as written, an SPDX identifier or a URL, or `nothing`
-- `keywords`: the keywords, none where no file has any
+- `keywords`: the keywords, none where the first file has none
 - `description`: what the code is, or `nothing`
 - `version`: the version as written, or `nothing`
 - `title`: the code's name or title, or `nothing`
-- `files`: the files read, in order
+- `files`: the files read, in order, the first being the one everything is
+  taken from
 """
 struct RepositoryMetadata
     authors::Vector{String}
@@ -37,91 +40,113 @@ end
 # == Functions ==
 
 # What a repository's metadata files say at a commit of a clone ...
-function _repositorymetadata(clone::LibGit2.GitRepo, commit::AbstractString)
-    return _repositorymetadata("commit $commit") do name
+function _repositorymetadata(clone::LibGit2.GitRepo, commit::AbstractString;
+                             title::Bool = false)
+    return _repositorymetadata("commit $commit"; title) do name
         return _committedtext(clone, commit, name)
     end
 end
 # ... in a working tree, the folder at its top level ...
-function _repositorymetadata(folder::AbstractString)
-    return _repositorymetadata("the working tree at $folder") do name
+function _repositorymetadata(folder::AbstractString; title::Bool = false)
+    return _repositorymetadata("the working tree at $folder"; title) do name
         path = joinpath(folder, name)
         return isfile(path) ? read(path, String) : nothing
     end
 end
 # ... or at a commit of a repository named by its remote's URL, whose files
 # can be had with no clone only from GitHub, at the commit's own hash; `fetch`
-# gives a URL's text, or `nothing`
+# gives a URL's text, or `nothing` where there is none, and throws where it
+# cannot tell
 function _repositorymetadata(remote::AbstractString, commit::AbstractString;
-                             fetch::Function = _fetchtext)
+                             fetch::Function = _fetchtext, title::Bool = false)
     path = _githubpath(remote)
     isnothing(path) && return _repositorymetadata(_ -> nothing, remote)
-    return _repositorymetadata("commit $commit of $remote") do name
+    return _repositorymetadata("commit $commit of $remote"; title) do name
         return fetch("https://raw.githubusercontent.com/$path/$commit/$name")
     end
 end
 
-# What the metadata files say, `text(name)` giving each file's text or
-# `nothing` where there is none, `place` saying where they are read from
-function _repositorymetadata(text::Function, place::AbstractString)
-    authors = String[]
-    authors_from = nothing
-    identifiers = Dict{String, String}()
-    fields = Dict{Symbol, Any}()
-    keywords = String[]
+# What the metadata files say: what the first in `order` that exists says,
+# `text(name)` giving each file's text or `nothing` where there is none, and
+# `place` saying where they are read from. The first being unreadable is an
+# error, since taking a less trusted file in its place could register what it
+# contradicts; a later one is passed over. What the later files say more or
+# otherwise is told, as of `described`, the title only where `title` is true,
+# or where `told` is given added to it instead
+function _repositorymetadata(text::Function, place::AbstractString;
+                             title::Bool = false,
+                             order::Tuple = REPOSITORY_METADATA_FILES,
+                             described::String = "the repository's metadata",
+                             told::Union{Nothing, Vector{String}} = nothing)
+    trusted = nothing
+    differences = String[]
     files = String[]
-    for (name, reader) in REPOSITORY_METADATA_FILES
-        content = text(name)
-        isnothing(content) && continue
+    for (name, reader) in order
         said = try
-            reader(content)
+            content = text(name)
+            isnothing(content) ? nothing : reader(content)
         catch err
             err isa InterruptException && rethrow()
-            @warn "cannot read $name at $place, so it is passed over: $(sprint(showerror, err))"
+            reason = err isa ReadWriteException ? err.msg :
+                     sprint(showerror, err)
+            isnothing(trusted) &&
+                throw(ReadWriteException("cannot read $name at $place, the most trusted of the repository's metadata files there: $reason"))
+            @warn "cannot read $name at $place, so it is passed over: $reason"
             continue
         end
+        isnothing(said) && continue
         push!(files, name)
-        if isnothing(authors_from)
-            if !isempty(said.authors)
-                append!(authors, said.authors)
-                merge!(identifiers, said.identifiers)
-                authors_from = name
-            end
+        if isnothing(trusted)
+            trusted = name => said
         else
-            _addidentifiers!(identifiers, authors, authors_from, said, name)
+            _metadatadifferences!(differences, trusted, name => said, title)
         end
-        for field in (:licence, :description, :version, :title)
-            value = getfield(said, field)
-            isnothing(value) || get!(fields, field, value)
-        end
-        isempty(keywords) && append!(keywords, said.keywords)
     end
-    return RepositoryMetadata(authors, identifiers,
-                              get(fields, :licence, nothing), keywords,
-                              get(fields, :description, nothing),
-                              get(fields, :version, nothing),
-                              get(fields, :title, nothing), files)
+    if !isnothing(told)
+        append!(told, differences)
+    elseif !isempty(differences)
+        @info "$described at $place is $(first(trusted))'s alone, and files trusted less say more or otherwise: $(join(differences, "; "))"
+    end
+    said = isnothing(trusted) ? _filesays() : last(trusted)
+    return RepositoryMetadata(said.authors, said.identifiers, said.licence,
+                              said.keywords, said.description, said.version,
+                              said.title, files)
 end
 
-# Give the authors read already the identifiers that a later file gives the
-# same names, telling of each, since the earlier file is trusted more and
-# lacked it; an identifier that differs from the earlier file's is passed over
-function _addidentifiers!(identifiers::Dict{String, String},
-                          authors::Vector{String}, authors_from::String,
-                          said::NamedTuple, name::String)
-    for (author, identifier) in said.identifiers
-        index = findfirst(==(_namekey(author)), _namekey.(authors))
-        isnothing(index) && continue
-        known = authors[index]
-        held = get(identifiers, known, nothing)
-        if isnothing(held)
-            identifiers[known] = identifier
-            @info "$name gives $known the identifier $identifier, which $authors_from lacks"
-        elseif held != identifier
-            @warn "$name gives $known the identifier $identifier, and $authors_from gives $held, which is kept"
-        end
+# Add to `differences` what a file trusted less says more than the trusted
+# one, or otherwise, of the authors, their identifiers, the licence, the
+# keywords and, where `title` is true, the title; what it lacks is not told
+function _metadatadifferences!(differences::Vector{String},
+                               trusted::Pair{String, <:NamedTuple},
+                               other::Pair{String, <:NamedTuple}, title::Bool)
+    (source, held), (name, said) = trusted, other
+    tell(what, given, kept) = push!(differences,
+                                    isnothing(kept) ?
+                                    "$name gives $what $given, which $source lacks" :
+                                    "$name gives $what $given, where $source gives $kept")
+    listed(items) = isempty(items) ? nothing : join(items, ", ")
+    isempty(said.authors) ||
+        _namekey.(said.authors) == _namekey.(held.authors) ||
+        tell("the authors", listed(said.authors), listed(held.authors))
+    for author in said.authors
+        identifier = get(said.identifiers, author, nothing)
+        index = findfirst(==(_namekey(author)), _namekey.(held.authors))
+        (isnothing(identifier) || isnothing(index)) && continue
+        known = held.authors[index]
+        kept = get(held.identifiers, known, nothing)
+        kept == identifier || tell("$known the identifier", identifier, kept)
     end
-    return nothing
+    isnothing(said.licence) ||
+        (!isnothing(held.licence) &&
+         _licencekey(said.licence) == _licencekey(held.licence)) ||
+        tell("the licence", said.licence, held.licence)
+    isempty(said.keywords) ||
+        Set(lowercase.(said.keywords)) == Set(lowercase.(held.keywords)) ||
+        tell("the keywords", listed(said.keywords), listed(held.keywords))
+    (!title || isnothing(said.title) || said.title == held.title) ||
+        tell("the title", "'$(said.title)'",
+             isnothing(held.title) ? nothing : "'$(held.title)'")
+    return differences
 end
 
 # A name as two files are compared by it: in lower case, without full stops
@@ -156,21 +181,18 @@ function _githubpath(remote::AbstractString)
 end
 
 # The text at a URL, or `nothing` where there is none; a server or a network
-# that cannot be reached is warned of, and gives nothing too
+# that cannot be reached is an error, since it does not say there is none
 function _fetchtext(url::AbstractString)
     response = try
         HTTP.get(url, status_exception = false)
     catch err
         err isa Union{Base.IOError, HTTP.ConnectError, HTTP.TimeoutError} ||
             rethrow()
-        @warn "cannot reach $url, so it is passed over: $(sprint(showerror, err))"
-        return nothing
+        throw(ReadWriteException("cannot reach $url: $(sprint(showerror, err))"))
     end
     response.status == 404 && return nothing
-    if response.status != 200
-        @warn "$url answered HTTP status $(response.status), so it is passed over"
-        return nothing
-    end
+    response.status == 200 ||
+        throw(ReadWriteException("$url answered HTTP status $(response.status)"))
     return String(response.body)
 end
 
@@ -309,12 +331,12 @@ function _zenodosays(text::AbstractString)
                      title = _textof(get(meta, "title", nothing)))
 end
 
-# What `CITATION.cff` says: a person by `given-names`, `name-particle`,
-# `family-names` and `name-suffix`, identified by `orcid`; an entity by `name`
-function _citationcffsays(text::AbstractString)
-    meta = YAML.load(text)
-    meta isa AbstractDict ||
-        throw(ArgumentError("CITATION.cff holds no YAML mapping"))
+# What `CITATION.cff` says at its top level ...
+_citationcffsays(text::AbstractString) = _citationcffsays(_cffmapping(text))
+# ... or what one of its citations says: a person by `given-names`,
+# `name-particle`, `family-names` and `name-suffix`, identified by `orcid`; an
+# entity by `name`
+function _citationcffsays(meta::AbstractDict)
     people = _authorsof(_aslist(get(meta, "authors", nothing))) do person
         parts = [_textof(get(person, key, nothing))
                  for key in ("given-names", "name-particle", "family-names",
@@ -349,6 +371,27 @@ function _projectsays(text::AbstractString)
                      title = _textof(get(project, "name", nothing)))
 end
 
+# The text of `CITATION.cff` as a mapping
+function _cffmapping(text::AbstractString)
+    meta = YAML.load(text)
+    meta isa AbstractDict ||
+        throw(ArgumentError("CITATION.cff holds no YAML mapping"))
+    return meta
+end
+
+# The citation of a paper in `CITATION.cff`: its `preferred-citation` where it
+# has one, its top level then describing something else in the repository,
+# else its top level
+function _papercitation(meta::AbstractDict)
+    preferred = get(meta, "preferred-citation", nothing)
+    return preferred isa AbstractDict ? preferred : meta
+end
+
+# What `CITATION.cff` says of a paper
+function _papercitationsays(text::AbstractString)
+    return _citationcffsays(_papercitation(_cffmapping(text)))
+end
+
 # The files a repository's metadata is read from, most trusted first, with the
 # reader of each; a Julia project file under either name Pkg reads it by, in
 # Pkg's order
@@ -357,3 +400,43 @@ const REPOSITORY_METADATA_FILES = ("codemeta.json" => _codemetasays,
                                    "CITATION.cff" => _citationcffsays,
                                    "JuliaProject.toml" => _projectsays,
                                    "Project.toml" => _projectsays)
+
+# The files a paper's metadata is read from, most trusted first: those that
+# describe what is to be cited before those that describe code
+const PAPER_METADATA_FILES = ("CITATION.cff" => _papercitationsays,
+                              ".zenodo.json" => _zenodosays,
+                              "codemeta.json" => _codemetasays,
+                              "JuliaProject.toml" => _projectsays,
+                              "Project.toml" => _projectsays)
+
+# What the metadata files in the working tree at `folder`, its top level, say
+# of the paper it holds, in the order of `PAPER_METADATA_FILES`. Where
+# `CITATION.cff` has a `preferred-citation`, that is the paper's and the other
+# files describe something else, so they are neither read nor compared with it.
+# What the others say more or otherwise is told, or added to `told`
+function _papermetadata(folder::AbstractString;
+                        told::Union{Nothing, Vector{String}} = nothing)
+    citation = joinpath(folder, "CITATION.cff")
+    if isfile(citation)
+        meta = try
+            _cffmapping(read(citation, String))
+        catch err
+            err isa InterruptException && rethrow()
+            throw(ReadWriteException("cannot read CITATION.cff in the working tree at $folder, the most trusted of the paper's metadata files: $(sprint(showerror, err))"))
+        end
+        if get(meta, "preferred-citation", nothing) isa AbstractDict
+            said = _citationcffsays(_papercitation(meta))
+            return RepositoryMetadata(said.authors, said.identifiers,
+                                      said.licence, said.keywords,
+                                      said.description, said.version,
+                                      said.title, ["CITATION.cff"])
+        end
+    end
+    return _repositorymetadata("the working tree at $folder", title = true,
+                               order = PAPER_METADATA_FILES,
+                               described = "the paper's metadata",
+                               told = told) do name
+        path = joinpath(folder, name)
+        return isfile(path) ? read(path, String) : nothing
+    end
+end

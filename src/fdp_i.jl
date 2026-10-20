@@ -29,16 +29,13 @@ end
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
-# The working config and the submission script of the run this script is in,
-# as `(config, script)`: the session's rehearsal's, else those `fair run`
-# launched this script with, in the folder it names in FDP_CONFIG_DIR; with
-# neither, no run was prepared
-function _launchedfiles()
+# The job folder of the run this script is in: the session's rehearsal's, else
+# the one `fair run` launched this script with and names in FDP_CONFIG_DIR;
+# with neither, no run was prepared
+function _launchedjob()
     job = _sessionjob()
     isnothing(job) && haskey(ENV, "FDP_CONFIG_DIR") && (job = FDP_CONFIG_DIR())
-    isnothing(job) ||
-        return (config = joinpath(job, "config.yaml"),
-                script = joinpath(job, FDP_SUBMISSION_SCRIPT))
+    isnothing(job) || return job
     return throw(ConfigFileException(string("DataPipeline.initialise() is called by a script that `fair run` launches, ",
                                             "which sets FDP_CONFIG_DIR to the folder holding the run's working config: ",
                                             "run the script with `fair run`, prepare a rehearsal with ",
@@ -76,35 +73,45 @@ _runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
 
 # The session's run once `initialise` has opened one: the rehearsal's handle,
 # or the recorded run, in the folder its files are in
-function _opened(handle::DataRegistryHandle{Rehearsal})
+function _opened(handle::DataRegistryHandle{Rehearsal}, ::Nothing)
     session = SESSION[]
-    SESSION[] = SessionRun(session.mode, session.job, handle, false)
+    SESSION[] = SessionRun(session.mode, session.job, handle, false,
+                           session.hold)
     return nothing
 end
-function _opened(handle::DataRegistryHandle{RecordedRun})
-    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false)
+function _opened(handle::DataRegistryHandle{RecordedRun},
+                 hold::Union{Nothing, AbstractRegistryHold})
+    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false,
+                           hold)
     return nothing
 end
 
 # Forget the session's run, so that `initialise` opens another: for the
 # tests, which open many runs in one process, and for whoever else knows
-# what that means - a run left open is not ended by it
-_resetsession!() = (SESSION[] = nothing; nothing)
+# what that means - a run left open is not ended by it, though its hold on
+# the registry is released
+_resetsession!() = (_releasehold!(); SESSION[] = nothing; nothing)
 
 # ... and ended, where it was the session's
 function _ended(handle::DataRegistryHandle)
     session = SESSION[]
     (!isnothing(session) && session.handle === handle) ||
         return nothing
-    SESSION[] = SessionRun(session.mode, session.job, handle, true)
+    SESSION[] = SessionRun(session.mode, session.job, handle, true,
+                           session.hold)
     return nothing
 end
 
-# The submission script `fair run` launched this script with, wanted when a
-# working config was given alone
-function _launchedscript()
+# The submission script of a working config: the copy in its job folder that
+# `fair run` names as `run_metadata.script_path`, whatever shell runs it. For a
+# config naming none, `script.sh` (`script.bat` on Windows) in its job folder
+# `job`, or with none known, in FDP_CONFIG_DIR
+function _submissionscript(config::AbstractDict, job::Union{Nothing, String})
+    path = get(config["run_metadata"], "script_path", nothing)
+    isnothing(path) || return String(path)
+    isnothing(job) || return joinpath(job, FDP_SUBMISSION_SCRIPT)
     haskey(ENV, "FDP_CONFIG_DIR") && return FDP_PATH_SUBMISSION()
-    return throw(ConfigFileException(string("initialise was given a working config and no submission script, ",
+    return throw(ConfigFileException(string("initialise was given a working config that names no submission script, ",
                                             "and FDP_CONFIG_DIR is not set to find one beside it: give both")))
 end
 
@@ -455,16 +462,68 @@ differs, if that version has no file, or if the name is not registered.
 """
 function _unchangedfile(registry::RegistryEndpoint, namespace::String,
                         data_product::String, hash::String,
-                        source::Union{Nothing, SourceRecord})
+                        source::Union{Nothing, SourceRecord, OutputDescription})
     latest = _latestdataproduct(registry, namespace, data_product)
     isnothing(latest) && return nothing
-    object = _getentry(registry, URIs.URI(latest["object"]))
+    return _registeredfile(registry, latest, hash, source)
+end
+
+# The path, the version and the object's URL of the file a registered data
+# product holds, as `(path, version, object)`, if it is this file - these
+# bytes, with what `source` says of it registered with it; else `nothing`, as
+# for a data product with no file
+function _registeredfile(registry::RegistryEndpoint, data_product::AbstractDict,
+                         hash::String,
+                         source::Union{Nothing, SourceRecord,
+                                       OutputDescription})
+    object = _getentry(registry, URIs.URI(data_product["object"]))
     isnothing(object["storage_location"]) && return nothing
-    location = _getstoragelocation(registry, latest["object"])
+    location = _getstoragelocation(registry, data_product["object"])
     location.hash == hash || return nothing
-    _recordssource(registry, latest, object, source) || return nothing
-    return (path = location.path, version = String(latest["version"]),
-            object = String(latest["object"]))
+    _recordssource(registry, data_product, object, source) || return nothing
+    return (path = location.path, version = String(data_product["version"]),
+            object = String(data_product["object"]))
+end
+
+# What the registry holds of an output of these bytes written as `version`, as
+# `(path, version, object)`, or `nothing` for an output that is a new version.
+# Where that version exists it must be this file - a version is registered
+# once, so a run may reproduce it and not change it - or this is an error;
+# where it does not, the highest version is the output if it is this file
+function _heldfile(registry::RegistryEndpoint, namespace::String,
+                   data_product::String, version::String, hash::String,
+                   source::Union{Nothing, SourceRecord, OutputDescription})
+    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
+    existing = isnothing(namespace_id) ? nothing :
+               _getentry(registry, "data_product",
+                         Dict("name" => data_product, "version" => version,
+                              "namespace" => namespace_id))
+    isnothing(existing) &&
+        return _unchangedfile(registry, namespace, data_product, hash, source)
+    held = _registeredfile(registry, existing, hash, source)
+    isnothing(held) &&
+        throw(ReadWriteException("$(_dataproductname(namespace, data_product, version)) is registered already, as another file or with another source, authors or licence: a run may reproduce a version that exists, byte for byte, and not change it"))
+    return held
+end
+
+# Check, before a code run registers any output, that each written as a
+# version that exists reproduces it, keeping the hash it was checked by
+function _checkversions(handle::DataRegistryHandle)
+    checked = Set{String}()
+    for key in sort(collect(keys(handle.outputs)), by = string)
+        metadata = handle.outputs[key]
+        (key[1] in checked || !isfile(metadata["path"])) && continue
+        push!(checked, key[1])
+        hash = get!(metadata, "hash") do
+            return _getfilehash(metadata["path"])
+        end
+        _heldfile(handle.registry, metadata["use_namespace"],
+                  replace(metadata["use_dp"],
+                          RUN_ID_PLACEHOLDER => handle.code_run_uuid),
+                  String(metadata["use_version"]), hash,
+                  _outputsource(handle, key[1]))
+    end
+    return nothing
 end
 
 # Make the file at `source` available at `destination`, which must not exist:
@@ -537,8 +596,8 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
             return _getfilehash(filepath)
         end
         source = _outputsource(handle, data_product)
-        held = _unchangedfile(registry, wmd["use_namespace"], use_data_product,
-                              hash, source)
+        held = _heldfile(registry, wmd["use_namespace"], use_data_product,
+                         String(wmd["use_version"]), hash, source)
         unchanged = !isnothing(held)
         if unchanged
             println("data product unchanged: ", use_data_product, " (",
@@ -573,7 +632,8 @@ end
 # its object, its data product and its source. Return the file's path and
 # the object's URL, as `(path, object)`.
 function _registerfile(handle::DataRegistryHandle, wmd::AbstractDict,
-                       hash::String, source::Union{Nothing, SourceRecord})
+                       hash::String,
+                       source::Union{Nothing, SourceRecord, OutputDescription})
     registry = handle.registry
     datastore = handle.config["run_metadata"]["write_data_store"]
     filepath = wmd["path"]
@@ -632,23 +692,12 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])
 
-    # A data product written to earlier in this code run keeps its file
+    # A data product written to earlier in this code run keeps its file. One
+    # written as a version that exists is compared with it at `finalise`, when
+    # its bytes are known
     paths = unique(value["path"]
                    for (key, value) in handle.outputs if key[1] == data_product)
     if isempty(paths)
-        namespace_id = _getid(handle.registry, "namespace",
-                              Dict("name" => use_namespace))
-        exists = isnothing(namespace_id) ? nothing :
-                 _getentry(handle.registry, "data_product",
-                           Dict("name" => use_data_product,
-                                "version" => use_version,
-                                "namespace" => namespace_id))
-        if !isnothing(exists)
-            msg = string("data product already exists in registry: ",
-                         use_data_product,
-                         " :-(ns: ", use_namespace, " - v: ", use_version, ")")
-            throw(ReadWriteException(msg))
-        end
         directory = joinpath(data_store, use_namespace, use_data_product)
         mkpath(directory)
         path = joinpath(directory, "dat-$(_randomhash()).$file_type")
@@ -834,14 +883,14 @@ const SUPERSEDED_ISSUE_SEVERITY = 0
 # What `supersede = true` does once a data product's version is settled: queue
 # the issue on the version it supersedes - the highest before, `previous` as
 # the registry holds it or `nothing` - or say that there was nothing to
-# supersede: the highest version was unchanged, there was none before, or the
-# version is not above it
+# supersede: the file was registered already, unchanged, there was no version
+# before, or the version is not above the highest
 function _supersede!(handle::DataRegistryHandle, namespace::String,
                      name::String, version::String,
                      previous::Union{Nothing, AbstractDict}, unchanged::Bool)
     label = _dataproductname(namespace, name, version)
     if unchanged
-        @info "nothing to supersede: $label is the highest version already, unchanged"
+        @info "nothing to supersede: the file written as $label is registered already, unchanged"
     elseif isnothing(previous)
         @info "nothing to supersede: $label is the first version of its name"
     elseif VersionNumber(previous["version"]) >= VersionNumber(version)

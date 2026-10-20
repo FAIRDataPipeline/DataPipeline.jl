@@ -345,70 +345,52 @@ Test.@testset "read_distribution!()" begin
     @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
-# If an attempt is made to write a new component to a data product that was createtd in 
-# a previous Code Run, then an error should be thrown.
+# A version that exists may be written again only as the file it is, so a
+# component added to one is refused - not at the write, whose file is not
+# finished, but at finalise, before anything is registered
 Test.@testset "new components aren't added to existing data products" begin
+    registry = handle.registry
+    writers = ("write_array" =>
+                   (handle, name) -> write_array!(handle, data1,
+                                                  name,
+                                                  component3,
+                                                  "description3"),
+               "write_estimate" =>
+                   (handle, name) -> write_estimate!(handle,
+                                                     estimate1,
+                                                     name,
+                                                     component3,
+                                                     "description3"),
+               "write_distribution" =>
+                   (handle, name) -> write_distribution!(handle,
+                                                         distribution["distribution"],
+                                                         distribution["parameters"],
+                                                         name,
+                                                         component3,
+                                                         "symptom-delay"))
+    for (writer, writing) in writers
+        data_product = "data_product/$writer/$uid"
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, data_product, "description",
+                               use_version = version)
+        handle = DataPipeline.initialise(config, config)
+        writing(handle, data_product)
+        @test length(handle.outputs) == 1
+        err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(handle)
+        @test startswith(err.value.msg,
+                         "$namespace:$data_product@v$version is registered already")
 
-    # write_array!() -------------------------------------------------------------------
-
-    data_product = "data_product/write_array/$uid"
-
-    # Create working config.yaml
-    config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description",
-                           use_version = version)
-    handle = DataPipeline.initialise(config, config)
-
-    # Write component
-    msg = string("data product already exists in registry: ", data_product,
-                 " :-(ns: ",
-                 namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_array!(handle,
-                                                                   data1,
-                                                                   data_product,
-                                                                   component3,
-                                                                   "description3")
-
-    # write_estimate!() ----------------------------------------------------------------
-
-    data_product = "data_product/write_estimate/$uid"
-
-    # Create working config.yaml
-    config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description",
-                           use_version = version)
-    handle = DataPipeline.initialise(config, config)
-
-    # Write component
-    msg = string("data product already exists in registry: ", data_product,
-                 " :-(ns: ",
-                 namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_estimate!(handle,
-                                                                      estimate1,
-                                                                      data_product,
-                                                                      component3,
-                                                                      "description3")
-
-    # write_distribution!() ------------------------------------------------------------
-
-    data_product = "data_product/write_distribution/$uid"
-
-    # Create working config.yaml
-    config = DataPipeline._createconfig(cpath)
-    DataPipeline._addwrite(config, data_product, "description",
-                           use_version = version)
-    handle = DataPipeline.initialise(config, config)
-
-    # Write component
-    msg = string("data product already exists in registry: ", data_product,
-                 " :-(ns: ",
-                 namespace, " - v: ", version, ")")
-    @test_throws DataPipeline.ReadWriteException(msg) write_distribution!(handle,
-                                                                          distribution["distribution"],
-                                                                          distribution["parameters"],
-                                                                          data_product,
-                                                                          component3,
-                                                                          "symptom-delay")
+        # The version is as it was, and the code run has no outputs
+        entries = DataPipeline._getentries(registry, "data_product",
+                                           Dict("name" => data_product))
+        @test [entry["version"] for entry in entries] == [version]
+        object = DataPipeline._extractid(only(entries)["object"])
+        @test isnothing(DataPipeline._getentry(registry, "object_component",
+                                               Dict("object" => object,
+                                                    "name" => component3)))
+        @test isempty(DataPipeline._getentry(registry,
+                                             URIs.URI(handle.code_run_obj))["outputs"])
+    end
 end
 
 # The issues of a component, as the registry holds them
@@ -502,15 +484,15 @@ Test.@testset "supersede = true" begin
     third = writing(name, "0.0.3")
     write(link_write!(third, name, supersede = true),
           "supersede second $uid\n")
-    @test_logs (:info, r"highest version already, unchanged") match_mode=:any DataPipeline.finalise(third)
+    @test_logs (:info, r"registered already, unchanged") match_mode=:any DataPipeline.finalise(third)
     @test isempty(third.issues)
     same = joinpath(mktempdir(), "same.txt")
     write(same, "supersede second $uid\n")
     by_path = writing(name, "0.0.3")
-    @test_logs (:info, r"highest version already, unchanged") match_mode=:any link_write!(by_path,
-                                                                                          name,
-                                                                                          path = same,
-                                                                                          supersede = true)
+    @test_logs (:info, r"registered already, unchanged") match_mode=:any link_write!(by_path,
+                                                                                     name,
+                                                                                     path = same,
+                                                                                     supersede = true)
     DataPipeline._resetsession!()
     # A version above the highest supersedes it; one below does not
     above = writing(name, "0.1.0")
@@ -952,6 +934,74 @@ Test.@testset "identify()" begin
     end
 end
 
+Test.@testset "initialise() opens a new code run, dated in UTC" begin
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, "data_product/new_run/$uid", "a new run",
+                           file_type = "txt", use_version = version)
+    # The code run of a handle, as the registry holds it
+    run_of(handle) = DataPipeline._getentry(handle.registry,
+                                            URIs.URI(handle.code_run_obj))
+
+    # The registry records the date to the second. Where the machine's own
+    # zone is UTC this cannot tell local time from UTC
+    before = floor(now(UTC), Second)
+    handle = DataPipeline.initialise(config, config)
+    @test before <= DateTime(first(run_of(handle)["run_date"], 19)) <= now(UTC)
+
+    # Two runs of one config started in the same second are two code runs
+    moment = floor(now(UTC), Second)
+    runs = [DataPipeline._newcoderun(handle.registry, "one second $uid",
+                                     handle.repo_obj, handle.config_obj,
+                                     handle.script_obj, run_date = moment)
+            for _ in 1:2]
+    @test runs[1]["run_date"] == runs[2]["run_date"]
+    @test runs[1]["uuid"] != runs[2]["uuid"]
+    DataPipeline._resetsession!()
+end
+
+Test.@testset "initialise() takes the script the working config names" begin
+    job = joinpath(datastore, "coderun", datetime, "another-shell")
+    script = joinpath(job, "script.jl")
+    config = DataPipeline._createconfig(joinpath("coderun", datetime,
+                                                 "another-shell",
+                                                 "config.yaml"),
+                                        script_path = script)
+    write(script, "println(\"a script in another shell $uid\")\n")
+    # The hash of the script a handle's run registered
+    script_hash(handle) = DataPipeline._getstoragelocation(handle.registry,
+                                                           handle.script_obj).hash
+
+    # Launched by fair run, or given the working config alone, the script is
+    # the one the working config names, not script.sh beside it
+    handle = withenv("FDP_CONFIG_DIR" => job) do
+        return DataPipeline.initialise()
+    end
+    @test script_hash(handle) == DataPipeline._getfilehash(script)
+    DataPipeline._resetsession!()
+    handle = withenv("FDP_CONFIG_DIR" => nothing) do
+        return DataPipeline.initialise(config)
+    end
+    @test script_hash(handle) == DataPipeline._getfilehash(script)
+
+    # A working config naming none has script.sh (script.bat on Windows)
+    # beside it, and given alone with no FDP_CONFIG_DIR is an error
+    data = DataPipeline.YAML.load_file(config)
+    delete!(data["run_metadata"], "script_path")
+    DataPipeline.YAML.write_file(config, data)
+    beside = joinpath(job, DataPipeline.FDP_SUBMISSION_SCRIPT)
+    write(beside, "a script beside its config $uid\n")
+    DataPipeline._resetsession!()
+    handle = withenv("FDP_CONFIG_DIR" => job) do
+        return DataPipeline.initialise()
+    end
+    @test script_hash(handle) == DataPipeline._getfilehash(beside)
+    DataPipeline._resetsession!()
+    withenv("FDP_CONFIG_DIR" => nothing) do
+        @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config)
+    end
+    DataPipeline._resetsession!()
+end
+
 Test.@testset "a run from uncommitted changes" begin
     registry = handle.registry
     # What `fair run --dirty` records for a working tree with uncommitted
@@ -1253,8 +1303,8 @@ Test.@testset "identify() a git repository" begin
                                               "authors" =>
                                                   [DataPipeline._getauthorurl(registry)]))["url"]
     DataPipeline._postentry(registry, "code_run",
-                            Dict("run_date" => Dates.format(now(),
-                                              "yyyy-mm-dd HH:MM:SS"),
+                            Dict("run_date" => Dates.format(now(UTC),
+                                              "yyyy-mm-ddTHH:MM:SSZ"),
                                  "description" => "python-style run $uid",
                                  "code_repo" => object_url,
                                  "model_config" => handle.config_obj,
@@ -1570,7 +1620,7 @@ Test.@testset "identify() a git repository" begin
     saved = DataPipeline.SESSION[]
     DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
                                                      mktempdir(), nothing,
-                                                     false)
+                                                     false, nothing)
     printed = mktemp() do path, io
         result = redirect_stdout(io) do
             return raise_issue!(registry, before, "rehearsed $uid")
@@ -1763,6 +1813,26 @@ Test.@testset "link_write!() with a wildcard entry" begin
     @test err isa DataPipeline.ConfigFileException
     @test occursin("data_product/two/$uid/*", err.msg) &&
           occursin("data_product/*/$uid/both", err.msg)
+
+    # Under the pattern alone, at the version its names now have, the same
+    # bytes are a reproduction of each, and other bytes are refused at
+    # finalise
+    function rewriting(text)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, pattern, "wildcard description",
+                               file_type = "txt", use_version = version,
+                               use_data_product = pattern)
+        handle = DataPipeline.initialise(config, config)
+        write(link_write!(handle, covered), text)
+        return handle
+    end
+    again = rewriting("covered $uid\n")
+    DataPipeline.finalise(again)
+    @test isempty(again.outputs) && haskey(again.unchanged, (covered, nothing))
+    changed = rewriting("covered again $uid\n")
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(changed)
+    @test startswith(err.value.msg,
+                     "$namespace:$covered@v$version is registered already")
 end
 
 Test.@testset "\${{RUN_ID}} in a wildcard-covered name" begin
@@ -2030,13 +2100,22 @@ Test.@testset "link_write!() with a path" begin
     @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
     @test read(registered, String) == "fetched $uid\n"
 
-    # A version that exists is refused, as for any write
-    handle = offering("0.0.2")
-    @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
-                                                             path = other)
+    # A version that exists may be written as its own file, though it is not
+    # the highest - a reproduction, and the registered file is returned - and
+    # other bytes as it are refused at the call
+    handle = offering("0.0.1")
+    @test link_write!(handle, name, path = again) == registered
     @test isempty(handle.outputs)
+    DataPipeline.finalise(handle)
+    handle = offering("0.0.2")
+    err = @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
+                                                                   path = other)
+    @test startswith(err.value.msg,
+                     "$namespace:$name@v0.0.2 is registered already")
+    @test isempty(handle.outputs)
+    @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
 
-    # It is the highest version that a file is compared with, so the first
+    # A new version is compared with the highest only, so the first
     # version's bytes are now a third version. They are in the store already,
     # so the link made for them is removed, which leaves the original alone
     handle = offering("0.0.3")
@@ -2154,6 +2233,40 @@ Test.@testset "an output that is registered already" begin
     DataPipeline.finalise(handle)
     @test raised(newer) == ["given again $uid"]
     @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+
+    # A version that exists may be written as its own file, though it is not
+    # the highest: a reproduction, registered as nothing, an issue raised with
+    # it being one with that version
+    handle = offering("0.0.1")
+    write(link_write!(handle, name), "written $uid\n")
+    raise_issue!(handle, name, "reproduced $uid")
+    DataPipeline.finalise(handle)
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test isempty(handle.outputs)
+    @test handle.unchanged[(name, nothing)]["path"] == registered
+    @test isempty(code_run_of(handle)["outputs"])
+    @test sort(raised(component)) ==
+          sort(["written twice $uid", "reproduced $uid"])
+
+    # Other bytes as a version that exists are refused at finalise, naming
+    # it, before any output is registered - a new name included, which
+    # finalise would otherwise register first, in name order
+    first_written = "data_product/unchanged-first/$uid"
+    @test string((first_written, nothing)) < string((name, nothing))
+    config = DataPipeline._createconfig(cpath)
+    for written in (first_written, name)
+        DataPipeline._addwrite(config, written, "description",
+                               file_type = "txt", use_version = "0.0.1")
+    end
+    handle = DataPipeline.initialise(config, config)
+    write(link_write!(handle, first_written), "written first $uid\n")
+    write(link_write!(handle, name), "not the first version $uid\n")
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(handle)
+    @test startswith(err.value.msg,
+                     "$namespace:$name@v0.0.1 is registered already")
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test isempty(registered_versions(registry, first_written))
+    @test isempty(code_run_of(handle)["outputs"])
 
     # A data product written by its components is one file, and all of them
     # are found unchanged with it
@@ -2421,9 +2534,10 @@ end
         @test occursin("fair run", err.value.msg)
         @test occursin("FDP_CONFIG_DIR", err.value.msg)
 
-        # A working config given alone has no script to go with it
-        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config)
-        @test occursin("submission script", err.value.msg)
+        # A working config given alone takes the script it names, and with no
+        # token goes no further than the first registration
+        err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config)
+        @test occursin("no token", err.value.msg)
 
         # A job folder that is gone
         withenv("FDP_CONFIG_DIR" => mktempdir()) do

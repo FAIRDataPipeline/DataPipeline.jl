@@ -76,8 +76,9 @@ function crate(paths::AbstractString...;
                pack::Union{Nothing, AbstractString} = nothing,
                to::Union{Nothing, AbstractString} = nothing,
                strict::Bool = true)
-    return crate(RegistryEndpoint(remote = remote), paths...; depth, level,
-                 pack, to, strict)
+    return registry_session(remote = remote) do registry
+        return crate(registry, paths...; depth, level, pack, to, strict)
+    end
 end
 
 # The data products the crate is for: those the files among `paths` are
@@ -207,9 +208,8 @@ function _cratebytes(registry::RegistryEndpoint, url::String;
             end
             throw(ReadWriteException("the registry refused the crate: $detail"))
         end
-        if err isa Base.IOError || err isa HTTP.ConnectError
-            throw(ReadWriteException("couldn't connect to the local registry at $(registry.url) - is it running?"))
-        end
+        (err isa Base.IOError || err isa HTTP.ConnectError) &&
+            throw(_unreachable(registry))
         rethrow()
     end
 end
