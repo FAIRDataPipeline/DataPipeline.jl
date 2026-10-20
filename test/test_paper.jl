@@ -698,15 +698,18 @@ end
                     write(token, ENV["FDP_LOCAL_TOKEN"] * "\n")
 
                     # A pull that fails leaves the config and the files as
-                    # they were
+                    # they were. The newer table is registered with no
+                    # stand-in recorded, since a run given no session by
+                    # `fair run` asks the recorded fair to open one
+                    DataPipeline.set_cli!(nothing)
+                    register!("table",
+                              "A table newer still for the paper setup, run $uid.\n",
+                              "0.0.4")
                     failing = joinpath(bin, "failing")
                     write(failing,
                           "#!/bin/sh\n[ \"\$1\" = pull ] && exit 1\necho \"fair, version 9.9.9\"\n")
                     chmod(failing, 0o755)
                     DataPipeline.set_cli!(failing)
-                    register!("table",
-                              "A table newer still for the paper setup, run $uid.\n",
-                              "0.0.4")
                     kept = read(paper.config, String)
                     @test contains(message_of(() -> DataPipeline.update_paper(registry,
                                                                               paper,
