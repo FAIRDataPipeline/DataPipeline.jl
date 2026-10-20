@@ -742,6 +742,123 @@ Test.@testset "link_register!() with no file" begin
                                                  "version" => "0.0.1")))
 end
 
+Test.@testset "link_read!() of a data product with no file" begin
+    deposit = "sources/read/deposit/$uid"
+    beside = "sources/read/file/$uid"
+
+    # The deposit registered by one run, and a file by another
+    handle = offering()
+    link_register!(handle, deposit, bibtex = "deposit", primary = true)
+    DataPipeline.finalise(handle)
+    product = registered(deposit, "0.0.1")
+    writing = offering(beside => "0.0.1")
+    link_write!(writing, beside, path = file_of("read beside a deposit $uid\n"))
+    DataPipeline.finalise(writing)
+    # A run offered these names by its read: entries
+    function reading(names...)
+        config = DataPipeline._createconfig(cpath)
+        for name in names
+            DataPipeline._addread(config, name, use_version = "0.0.1",
+                                  use_namespace = name == deposit ?
+                                                  inputs_namespace : namespace)
+        end
+        return DataPipeline.initialise(config, config)
+    end
+
+    # The next run reads the deposit: nothing returned, and the deposit the
+    # run's input, as link_register! records it
+    handle = reading(deposit)
+    @test isnothing(link_read!(handle, deposit))
+    @test isnothing(handle.inputs[(deposit, nothing)]["path"])
+    @test isnothing(link_read!(handle, deposit))
+    @test DataPipeline.canread(handle, deposit)
+    DataPipeline.finalise(handle)
+    run = entry(handle.code_run_obj)
+    @test run["inputs"] == [whole(product)] && isempty(run["outputs"])
+
+    # It has no file to put anywhere, which leaves the run's inputs as they
+    # were, nor a component to read
+    handle = reading(deposit)
+    msg = message_of(ReadWriteException) do
+        return link_read!(handle, deposit,
+                          path = joinpath(mktempdir(), "deposit.txt"))
+    end
+    @test occursin("is a data product with no file, so there is nothing to put at",
+                   msg)
+    @test isempty(handle.inputs)
+    msg = message_of(() -> read_estimate!(handle, deposit, "rate"),
+                     ReadWriteException)
+    @test occursin("is a data product with no file, so it has no component rate",
+                   msg)
+    DataPipeline.finalise(handle)
+
+    # A pattern matching it and the file records both, linking and listing
+    # the file alone
+    handle = reading(deposit, beside)
+    pattern = "sources/read/*/$uid"
+    folder = link_read!(handle, pattern)
+    @test readdir(folder) == [replace(beside, "/" => "_") * ".txt"]
+    @test link_read_files!(handle, pattern) ==
+          [handle.inputs[(beside, nothing)]["path"]]
+    @test sort(collect(keys(handle.inputs))) ==
+          sort([(deposit, nothing), (beside, nothing)])
+    DataPipeline.finalise(handle)
+    @test sort(entry(handle.code_run_obj)["inputs"]) ==
+          sort([whole(product), whole(registered(beside, "0.0.1"))])
+end
+
+Test.@testset "a deposit that fair pull registers from a no_file entry" begin
+    deposit = "sources/pulled/deposit/$uid"
+    pulling = joinpath(mktempdir(), "pull.yaml")
+    write(pulling,
+          """
+          run_metadata:
+            description: A deposit registered by the CLI
+            script: |
+              echo pulled
+          register:
+          - namespace: $inputs_namespace
+            full_name: The suite's input namespace
+          - external_object: $deposit
+            namespace_name: $inputs_namespace
+            title: A deposit with no file $uid
+            description: A deposit with no file of its own
+            identifier: https://doi.org/10.1038/s41592-020-0856-2
+            release_date: 2026-01-01T12:00
+            version: "1.0.0"
+            primary: True
+            no_file: true
+          """)
+    pulled = DataPipeline._capturefair(DataPipeline._faircommand(nothing),
+                                       "pull", "--local", pulling,
+                                       dir = DataPipeline._fairroot(pwd()))
+    said = pulled.printed * pulled.errors
+    # A fair with no such entries asks for the root they leave out, as 0.10.2
+    # does, or names the key
+    if pulled.status != 0 &&
+       (occursin("Expected key 'root'", said) || occursin("no_file", said))
+        @info "this fair has no no_file entries: not reading a deposit it registered"
+    elseif pulled.status != 0 && occursin("not a valid identifier", said)
+        @info "the CLI could not check the deposit's identifier online: not reading a deposit it registered"
+    else
+        # The run fair run would prepare reads it through its read: entry; a
+        # pull that failed otherwise fails here, saying what fair said
+        @test pulled.status == 0
+        pulled.status == 0 || @info "fair pull said: $said"
+        if pulled.status == 0
+            config = DataPipeline._createconfig(cpath)
+            DataPipeline._addread(config, deposit, use_version = "1.0.0",
+                                  use_namespace = inputs_namespace)
+            handle = DataPipeline.initialise(config, config)
+            @test isnothing(link_read!(handle, deposit))
+            DataPipeline.finalise(handle)
+            product = registered(deposit, "1.0.0")
+            @test isnothing(object_of(product)["storage_location"])
+            @test entry(handle.code_run_obj)["inputs"] == [whole(product)]
+        end
+    end
+end
+
 Test.@testset "link_register!() with a file" begin
     fetched = "sources/register/file/$uid"
     file = file_of("registered file $uid\n")

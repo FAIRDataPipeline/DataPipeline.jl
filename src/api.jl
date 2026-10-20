@@ -206,7 +206,10 @@ end
     link_read!(handle, pattern)
 
 Return the path of the file behind a `read:` data product of the working
-config, recording it as an input of the code run.
+config, recording it as an input of the code run. A data product with no
+file, such as a deposit, which a `register:` entry with `no_file: true` or
+[`link_register!`](@ref) with no `path` registers, is recorded as an input in
+the same way, and `nothing` is returned.
 
 The file is in the data store, named by its hash. For code that needs its
 input under a name or in a place of its own, `path` asks for the file there,
@@ -220,13 +223,15 @@ and is what is then returned:
   unless `force` is `true`, when it is replaced by the registered file. A
   directory there is always an error.
 A file that is a hard link is the data store's own, so it must not be written
-to. `force` does nothing without `path`.
+to. `force` does nothing without `path`. A data product with no file takes no
+`path`.
 
 Given a pattern instead - a name with one or more `*`, each matching one
 segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
 `era5/t2m/a/b` - return the path of a temporary directory holding a symbolic
 link to the file of every `read:` data product that matches, each recorded as
-an input (the directory itself is not). Where the working config keeps the
+an input (the directory itself is not), a data product with no file being
+recorded and given no link. Where the working config keeps the
 pattern's own entry, as a CLI may, a pattern that matches nothing gives an
 empty directory; where it does not, that is an error. A link is named after its data
 product with `/` replaced by `_`, plus the file's extension; the directory is
@@ -260,8 +265,15 @@ function _linkread!(handle::DataRegistryHandle, data_product::String,
     occursin('*', data_product) &&
         throw(ArgumentError("a path cannot be given with a pattern: $data_product"))
     path = String(path)
+    key = (data_product, nothing)
+    recorded = haskey(handle.inputs, key)
     stored = _linkread!(handle, data_product, nothing, force)
-    input = handle.inputs[(data_product, nothing)]
+    if isnothing(stored)
+        # A refused call leaves the run's inputs as they were
+        recorded || delete!(handle.inputs, key)
+        throw(ReadWriteException("'$data_product' is a data product with no file, so there is nothing to put at $path"))
+    end
+    input = handle.inputs[key]
     isfile(stored) ||
         throw(ReadWriteException("the file of '$data_product' is not in the data store: $stored"))
     if isdir(path)
@@ -292,24 +304,31 @@ Return the paths of the files behind every `read:` data product of the working
 config whose name matches `pattern`, in name order, recording each as an
 input of the code run. A pattern is a name with one or more `*`, each
 matching one segment of a name, and one that matches nothing gives no paths
-or an error, as for [`link_read!`](@ref).
+or an error, as for [`link_read!`](@ref). A data product with no file is
+recorded and gives no path.
 """
 function link_read_files!(handle::DataRegistryHandle, pattern::String)
-    return String[link_read!(handle, name)
-                  for name in _matchingreads(handle, pattern)]
+    paths = String[]
+    for name in _matchingreads(handle, pattern)
+        path = link_read!(handle, name)
+        isnothing(path) || push!(paths, path)
+    end
+    return paths
 end
 
-# The directory of links `link_read!` returns for a pattern
+# The directory of links `link_read!` returns for a pattern, with no link for a
+# data product with no file
 function _link_read_directory!(handle::DataRegistryHandle, pattern::String)
     names = _matchingreads(handle, pattern)
-    paths = [link_read!(handle, name) for name in names]
+    found = [(name, link_read!(handle, name)) for name in names]
+    held = [(name, path) for (name, path) in found if !isnothing(path)]
     links = [replace(name, "/" => "_") * "." * _extension(path)
-             for (name, path) in zip(names, paths)]
-    hashes = [handle.inputs[(name, nothing)]["hash"] for name in names]
+             for (name, path) in held]
+    hashes = [handle.inputs[(name, nothing)]["hash"] for (name, _) in held]
     manifest = join(("$link\t$hash\n" for (link, hash) in zip(links, hashes)))
     directory = joinpath(mktempdir(), bytes2hex(SHA.sha1(manifest)))
     mkdir(directory)
-    for (link, path) in zip(links, paths)
+    for (link, (_, path)) in zip(links, held)
         try
             symlink(path, joinpath(directory, link))
         catch e

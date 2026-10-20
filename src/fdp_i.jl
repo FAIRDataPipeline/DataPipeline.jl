@@ -308,7 +308,8 @@ end
 
 Find a `read:` data product of the working config in the registry, record it
 (and `component`, `nothing` for the whole file) as an input in the handle, and
-return the path of its file.
+return the path of its file, or `nothing` for a data product with no file,
+such as a deposit, which has no component to read either.
 """
 function _readdataproduct(handle::DataRegistryHandle, data_product::String,
                           component::Union{Nothing, String})
@@ -316,8 +317,13 @@ function _readdataproduct(handle::DataRegistryHandle, data_product::String,
     dp_entry = _finddataproduct(handle.registry, rmd.namespace,
                                 rmd.data_product, rmd.version)
     obj_url = dp_entry["object"]
+    object = _getentry(handle.registry, URIs.URI(obj_url))
+    fileless = isnothing(object["storage_location"])
+    fileless && !isnothing(rmd.component) &&
+        throw(ReadWriteException("'$data_product' is a data product with no file, so it has no component $(rmd.component) to read"))
     component_url = _componenturl(handle.registry, obj_url, rmd.component)
-    location = _getstoragelocation(handle.registry, obj_url)
+    location = fileless ? (path = nothing, hash = nothing) :
+               _getstoragelocation(handle.registry, obj_url)
 
     handle.inputs[(data_product, component)] = Dict("use_dp" =>
                                                         rmd.data_product,
