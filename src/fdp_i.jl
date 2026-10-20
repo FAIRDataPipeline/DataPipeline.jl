@@ -8,7 +8,8 @@
 
 Thrown when the registry or the data store does not hold what a read or write
 needs: a missing data product, a version already registered, a registry that
-is not running, a write with no registry token.
+is not running, a write with no registry token; or when a read or write asks
+for what is not yet implemented, such as a table.
 """
 struct ReadWriteException <: Exception
     msg::String

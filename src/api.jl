@@ -379,13 +379,15 @@ end
 """
     read_table!(handle, data_product, component)
 
-Read a table data product. Not yet implemented: returns `nothing`.
+Read the table that is `component` of `data_product`. Not yet implemented: it
+throws a [`ReadWriteException`](@ref) saying so. A table kept as a file of its
+own, such as a CSV, is read from the path [`link_read!`](@ref) gives.
 
 See also: [`write_table!`](@ref), [`read_array!`](@ref).
 """
 function read_table!(handle::DataRegistryHandle, data_product::String,
                      component::String)
-    return nothing
+    return throw(ReadWriteException("tables are not yet implemented, so component $(repr(component)) of $(repr(data_product)) cannot be read as one: read a table kept as a file, such as a CSV, from the path link_read!(handle, $(repr(data_product))) gives"))
 end
 
 """
@@ -728,13 +730,16 @@ end
 """
     write_table!(handle, data, data_product, component)
 
-Write a table data product. Not yet implemented: returns `nothing`.
+Write `data` as the table that is `component` of `data_product`. Not yet
+implemented: it throws a [`ReadWriteException`](@ref) saying so. A table is
+written as a file of its own, such as a CSV, to the path
+[`link_write!`](@ref) gives.
 
 See also: [`write_array!`](@ref), [`read_array!`](@ref), [`read_table!`](@ref)
 """
 function write_table!(handle::DataRegistryHandle, data, data_product::String,
                       component::String)
-    return nothing
+    return throw(ReadWriteException("tables are not yet implemented, so component $(repr(component)) of $(repr(data_product)) cannot be written as one: write the table to a file, such as a CSV, at the path link_write!(handle, $(repr(data_product))) gives"))
 end
 
 """

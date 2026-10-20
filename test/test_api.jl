@@ -535,7 +535,15 @@ Test.@testset "the released names, deprecated, and a repeated read" begin
           (estimates, "point")
     @test write_distribution(writing, "Gaussian", Dict("mean" => 1.0),
                              estimates, "spread", "d") == (estimates, "spread")
-    @test isnothing(write_table(writing, nothing, estimates, "table"))
+    @test_throws DataPipeline.ReadWriteException write_table(writing, nothing,
+                                                             estimates, "table")
+    # Tables are not yet implemented: the error says what to do instead
+    err = @test_throws DataPipeline.ReadWriteException write_table!(writing,
+                                                                    nothing,
+                                                                    estimates,
+                                                                    "table")
+    @test occursin("tables are not yet implemented", err.value.msg)
+    @test occursin("link_write!(handle, \"$estimates\")", err.value.msg)
     raise_issue(writing, DataPipeline.WorkingConfig(), "deprecated $uid")
     @test length(writing.issues) == 1
     DataPipeline.finalise(writing)
@@ -545,7 +553,12 @@ Test.@testset "the released names, deprecated, and a repeated read" begin
     @test read_estimate(reading, estimates, "point") == 1.5
     @test read_distribution(reading, estimates, "spread")["distribution"] ==
           "Gaussian"
-    @test isnothing(read_table(reading, estimates, "table"))
+    @test_throws DataPipeline.ReadWriteException read_table(reading, estimates,
+                                                            "table")
+    err = @test_throws DataPipeline.ReadWriteException read_table!(reading,
+                                                                   estimates,
+                                                                   "table")
+    @test occursin("link_read!(handle, \"$estimates\")", err.value.msg)
     # A repeated read leaves the recorded input as it was
     recorded = reading.inputs[(estimates, "point")]
     @test read_estimate!(reading, estimates, "point") == 1.5

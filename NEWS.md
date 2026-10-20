@@ -5,6 +5,9 @@
     - `fair-cli` 0.11.0 or later is needed: a `fair` without its session commands
       or `fair run --rehearse` is refused, naming the version, where the registry
       went unheld and a rehearsal was prepared by `fair run --ci --dirty`.
+    - `read_table!` and `write_table!`, which returned `nothing` and read or wrote
+      nothing, throw a `ReadWriteException` saying tables are not yet implemented
+      and naming `link_read!` or `link_write!` for a table kept as a file.
   - Tracing provenance:
     - `identify` of a file gives the source of each data product it is registered
       as, in the new `source` field of `DataProductRecord`, and shows it with the
