@@ -48,9 +48,11 @@ end
 Record `path` as the `fair` this package runs - by [`rehearse`](@ref) and
 [`@fair_str`](@ref), before any `fair` on the path or the copy
 [`install_cli`](@ref) made - after checking that it runs. The record is a
-preference in the active environment's `LocalPreferences.toml`, so it holds
-for every later session of that environment. `nothing` removes it. Return
-the path recorded.
+preference in the `LocalPreferences.toml` of the first environment on the
+load path that has DataPipeline: the active one where DataPipeline is among
+its dependencies, else the one it is loaded from, such as the default
+environment. It holds for every later session that takes DataPipeline from
+that environment. `nothing` removes it. Return the path recorded.
 """
 function set_cli!(path::AbstractString)
     executable = abspath(path)
@@ -61,11 +63,16 @@ function set_cli!(path::AbstractString)
     catch
         throw(ArgumentError("$executable does not run as fair: `--version` failed (the CLI needs git on the path)"))
     end
-    @set_preferences!("cli" => executable)
+    # Into the environment that has the package, rather than the active one as
+    # the macro does: a project that does not name the package would be given
+    # it in `[extras]`, its Project.toml rewritten
+    Preferences.set_preferences!(@__MODULE__, "cli" => executable,
+                                 active_project_only = false, force = true)
     return executable
 end
 function set_cli!(::Nothing)
-    @delete_preferences!("cli")
+    Preferences.delete_preferences!(@__MODULE__, "cli",
+                                    active_project_only = false, force = true)
     return nothing
 end
 

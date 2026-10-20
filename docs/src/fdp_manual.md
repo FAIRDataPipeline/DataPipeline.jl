@@ -60,7 +60,8 @@ rehearsal replaces its files. `local_only = true` passes `--local` to
 be rehearsed only once the fetch run it reads from has been recorded.
 
 The `fair` used is the one `DataPipeline.set_cli!(path)` has recorded, a
-preference of the active environment that holds across sessions; else the
+preference of the environment DataPipeline is loaded from that holds across
+sessions; else the
 `fair` on the path, which it is on when Julia was started from a shell with
 the CLI's virtual environment active; else the copy the package installed.
 `DataPipeline.fair"..."` runs it with any arguments, written as on the
@@ -177,6 +178,11 @@ the place of what it says. A citation given as BibTeX by
 [`register_citations!`](@ref) is named by `bibtex =` instead, and serves a run
 with no network. Run again, a fetch run registers nothing new for a file that
 has not changed.
+
+A deposit may instead be registered by `fair pull` from a `register:` entry
+with `no_file: true` (`fair-cli` 0.11.0 or later), or by `link_register!` in an
+earlier run. Either way a later run is offered it by a `read:` entry, and
+`link_read!` records it as an input and returns `nothing`, since it has no file.
 
 Registering a source needs `data-registry` v1.4.0 or later. Wildcard entries in
 the working config need `fair-cli` 0.10.0 or later, a pattern read of a family

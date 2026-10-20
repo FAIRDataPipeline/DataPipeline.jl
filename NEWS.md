@@ -1,5 +1,14 @@
 # NEWS
 
+- v0.56.1
+  - `set_cli!` and `install_cli!` record their preference in the environment
+    DataPipeline is loaded from, so a project that does not name it, with
+    DataPipeline in the default environment, no longer has it added to its
+    `[extras]` and its `Project.toml` rewritten.
+  - `link_read!` of a data product with no file, such as a deposit offered by a
+    `read:` entry, records it as an input and returns `nothing`, as
+    `link_register!` does; a pattern records it and gives it no link or path.
+
 - v0.56.0
   - Breaking changes:
     - A code repository's metadata is taken from the first of its metadata files

@@ -199,4 +199,53 @@ Test.@testset "registry_session() and the registry outside a run" begin
     end
 end
 
+Test.@testset "set_cli!() records the fair where the package is" begin
+    if Sys.iswindows()
+        @info "the stand-in for fair is a shell script: not on Windows"
+    else
+        # A user's project that does not name DataPipeline, which comes from
+        # the suite's own environment stacked behind it, as from a default
+        # environment
+        user = mktempdir()
+        project = """
+                  # A user's project
+                  [deps]
+                  TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+                  [compat]
+                  julia = "1.11"
+                  """
+        write(joinpath(user, "Project.toml"), project)
+        first, standin = joinpath(mktempdir(), "fair"),
+                         joinpath(mktempdir(), "fair")
+        for file in (first, standin)
+            write(file, "#!/bin/sh\necho \"fair, version 9.9.9\"\n")
+            chmod(file, 0o755)
+        end
+        stacked = dirname(Base.active_project())
+        # What a Julia in the user's project prints, running `code`
+        function in_user_project(code)
+            command = `$(Base.julia_cmd()) --startup-file=no --project=$user -e $code`
+            return read(addenv(command,
+                               "JULIA_LOAD_PATH" => "@:$stacked:@stdlib"),
+                        String)
+        end
+        try
+            # One recorded, then another in its place: in the suite's
+            # environment, the user's project left as it was
+            in_user_project("using DataPipeline; DataPipeline.set_cli!($(repr(first))); DataPipeline.set_cli!($(repr(standin)))")
+            @test read(joinpath(user, "Project.toml"), String) == project
+            @test !isfile(joinpath(user, "LocalPreferences.toml"))
+            @test DataPipeline._preferredcli() == standin
+            # ... and read in the user's project by a later session
+            @test in_user_project("using DataPipeline; print(DataPipeline._preferredcli())") ==
+                  standin
+        finally
+            in_user_project("using DataPipeline; DataPipeline.set_cli!(nothing)")
+        end
+        @test isnothing(DataPipeline._preferredcli())
+        @test read(joinpath(user, "Project.toml"), String) == project
+    end
+end
+
 end
