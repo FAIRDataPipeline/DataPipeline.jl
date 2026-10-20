@@ -9,6 +9,10 @@
     - `identify` of a file gives the source of each data product it is registered
       as, in the new `source` field of `DataProductRecord`, and shows it with the
       address the file was fetched from, in place of the external object's URL.
+    - `DataPipeline.check_store` checks the data stores on this machine against the
+      local registry: registered files missing or changed - a hard-linked file
+      written to through another name, say - files it does not know, locations
+      nothing uses, and outputs a run left unfinished.
   - Requirements:
     - Six dependencies the package did not use are dropped: AxisArrays, FTPClient,
       NetCDF, PrettyTables, SQLite and UnicodePlots.

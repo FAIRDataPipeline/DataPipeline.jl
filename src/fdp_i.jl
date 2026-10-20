@@ -766,8 +766,8 @@ function _getstoragelocation(registry::RegistryEndpoint, object_url::String)
                                   URIs.URI(obj_entry["storage_location"]))
     storage_root_entry = _getentry(registry,
                                    URIs.URI(storage_loc_entry["storage_root"]))
-    root = replace(storage_root_entry["root"], "file://" => "")
-    return (path = joinpath(root, storage_loc_entry["path"]),
+    return (path = joinpath(_rootfolder(storage_root_entry["root"]),
+                            storage_loc_entry["path"]),
             hash = String(storage_loc_entry["hash"]))
 end
 

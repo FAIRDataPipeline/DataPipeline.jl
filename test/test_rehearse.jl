@@ -49,7 +49,7 @@ end
 # A file of this text, outside the data store
 outside = mktempdir()
 function file_of(text::AbstractString)
-    path = joinpath(outside, "$(DataPipeline._randomhash()).txt")
+    path = tempname(outside) * ".txt"
     write(path, text)
     return path
 end

@@ -29,7 +29,7 @@ fixture_remote = "https://github.com/FAIRDataPipeline/downstream-fixture-$uid.gi
 
 outside = mktempdir()
 function file_of(text::AbstractString)
-    path = joinpath(outside, DataPipeline._randomhash() * ".txt")
+    path = tempname(outside) * ".txt"
     write(path, text)
     return path
 end

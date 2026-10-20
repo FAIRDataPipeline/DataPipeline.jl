@@ -2,10 +2,11 @@
 
 What the pipeline records of every run - the code at its commit, what it read
 and what it wrote - is there to be asked. This page is what the package asks
-of it: what the registry knows about a file, where a file came from, what was
-made from it, how one version supersedes another, and the crate that packs the
-files of a paper with the provenance of each. None of it needs a token, so it
-all works outside `fair run`, against the local registry or a remote one.
+of it: what the registry knows about a file, whether the data stores hold what
+it records, where a file came from, what was made from it, how one version
+supersedes another, and the crate that packs the files of a paper with the
+provenance of each. None of it needs a token, so it all works outside
+`fair run`, against the local registry or a remote one.
 
 ## Holding the local registry
 
@@ -70,6 +71,31 @@ DataPipeline.AncestorCommits
 DataPipeline.CheckedOutCommit
 DataPipeline.AllCommits
 DataPipeline.NamedCommit
+```
+
+## Checking the data store
+
+`DataPipeline.check_store` checks the data stores on this machine - the
+folders of registered files that each project writes to - against the local
+registry: the registered files that are missing or whose contents have
+changed, the files there that the registry does not know, the storage
+locations that nothing uses, and the outputs a run left unfinished. It changes
+nothing.
+
+```julia
+DataPipeline.check_store()                  # hashing every registered file
+DataPipeline.check_store(hashes = false)    # whether each is there, reading none
+DataPipeline.check_store(quiet = false)     # every missing file, and the CLI's own
+```
+
+A store whose folder has gone is reported in one line, and missing files
+beyond a few are counted rather than listed. A changed file with more than one
+name was most likely written to through another: a file given to `link_write!`
+or `link_register!` as a `path` is hard-linked into the store where it can be.
+
+```@docs
+DataPipeline.check_store
+DataPipeline.StoreCheck
 ```
 
 ## Where a file came from
