@@ -12,8 +12,7 @@ module DataPipeline
 import BibInternal
 import BibParser
 import MicroMamba
-using Preferences: Preferences, @load_preference, @set_preferences!,
-                   @delete_preferences!
+using Preferences: Preferences, @load_preference
 using CSV
 using DataFrames
 using Dates

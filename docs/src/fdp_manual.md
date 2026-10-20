@@ -60,7 +60,8 @@ rehearsal replaces its files. `local_only = true` passes `--local` to
 be rehearsed only once the fetch run it reads from has been recorded.
 
 The `fair` used is the one `DataPipeline.set_cli!(path)` has recorded, a
-preference of the active environment that holds across sessions; else the
+preference of the environment DataPipeline is loaded from that holds across
+sessions; else the
 `fair` on the path, which it is on when Julia was started from a shell with
 the CLI's virtual environment active; else the copy the package installed.
 `DataPipeline.fair"..."` runs it with any arguments, written as on the

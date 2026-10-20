@@ -1,5 +1,11 @@
 # NEWS
 
+- v0.56.1
+  - `set_cli!` and `install_cli!` record their preference in the environment
+    DataPipeline is loaded from, so a project that does not name it, with
+    DataPipeline in the default environment, no longer has it added to its
+    `[extras]` and its `Project.toml` rewritten.
+
 - v0.56.0
   - Breaking changes:
     - A code repository's metadata is taken from the first of its metadata files
