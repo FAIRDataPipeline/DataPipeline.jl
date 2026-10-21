@@ -5,6 +5,8 @@ on:
       - created
   workflow_dispatch:
 
+# No permissions block: TagBot's README asks for the repository's defaults, and
+# sends permission errors back to them
 jobs:
   TagBot:
     if: github.event_name == 'workflow_dispatch' || github.actor == 'JuliaTagBot'

@@ -56,8 +56,7 @@ and the script asks for each input and output by the name the config gives it.
 - **Papers**: a LaTeX paper built in a run of its own, so that its PDF has
   the provenance of every figure and table in it:
   [Building a paper](@ref).
-- **`fair` from Julia**:
-  [`DataPipeline.fair"..."`](@ref DataPipeline.@fair_str) runs the
+- **`fair` from Julia**: [`fair"..."`](@ref @fair_str) runs the
   command-line tool, and [`DataPipeline.install_cli!`](@ref) installs a copy
   of it for a Julia with no Python to hand.
 
@@ -70,26 +69,46 @@ to enter Pkg mode and run:
 pkg> add DataPipeline
 ```
 
-It needs Julia 1.11 or later, and `fair-cli` from version 0.11.0. Install
-`fair` from PyPI, as the
+It needs Julia 1.11 or later, and `fair-cli` from version 0.11.0: from PyPI,
+as the
 [CLI's documentation](https://www.fairdatapipeline.org/docs/cli/installation/)
-describes, or from Julia with `DataPipeline.install_cli!()`, which installs
-the package's own copy for `DataPipeline.fair"..."` to run. Then install the
-local registry, once, with `fair registry install`.
+describes, or the package's own copy, which `DataPipeline.install_cli!()`
+installs from Julia.
 
 ## Getting started
 
-From the top level of the git repository holding the model, set the project
-up once, then register what the run reads, and run it:
+The pipeline is driven by `fair`, from Julia or from a shell. In Julia,
+`fair"..."` runs it with its arguments written as on the command line, in the
+current directory. Each command starts the local registry where none is
+running, and stops it when done; `fair"registry start"` keeps it running until
+`fair"registry stop"`.
 
-```sh
-fair init
-fair pull config.yaml
-fair run config.yaml
+The first time, install the local registry, then set the project up from the
+top level of the git repository holding the model, answering the questions
+`fair init` asks:
+
+```julia
+using DataPipeline
+DataPipeline.install_cli!()  # where there is no `fair` installed
+fair"registry install"
+cd("path/to/model")
+fair"init"
 ```
 
-Each command starts the local registry where none is running, and stops it
-when done; `fair registry start` keeps it running until `fair registry stop`.
+Then each time the model runs, register or fetch what it reads, and run it,
+adding `--dirty` to `run` while the repository has uncommitted changes:
+
+```julia
+using DataPipeline
+cd("path/to/model")
+fair"pull config.yaml"
+fair"run config.yaml"
+```
+
+From a shell the same commands are `fair registry install`, `fair init`,
+`fair pull config.yaml` and `fair run config.yaml`. Either way, `fair run` runs
+the config's script in a shell, so a `julia` that the script calls must be on
+the path.
 
 The script that `config.yaml` names brackets the model with the API:
 

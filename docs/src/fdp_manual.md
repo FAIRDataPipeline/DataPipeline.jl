@@ -30,7 +30,7 @@ time:
 
 ```julia
 using DataPipeline
-DataPipeline.fair"pull config.yaml"    # when inputs need registering or syncing
+fair"pull config.yaml"                 # when inputs need registering or syncing
 DataPipeline.rehearse("config.yaml")   # fair prepares the job as a run would
 include("script.jl")                    # or its lines, one at a time
 ```
@@ -65,9 +65,8 @@ preference of the environment DataPipeline is loaded from that holds across
 sessions; else the
 `fair` on the path, which it is on when Julia was started from a shell with
 the CLI's virtual environment active; else the copy the package installed.
-`DataPipeline.fair"..."` runs it with any arguments, written as on the
-command line: `DataPipeline.fair"pull config.yaml"`, or
-`DataPipeline.fair"pull $config"`.
+`fair"..."` runs it with any arguments, written as on the command line:
+`fair"pull config.yaml"`, or `fair"pull $config"`.
 
 A Julia started by an editor has no virtual environment on its path, so the
 package can install a copy of its own, with a Python and a git of its own
@@ -78,16 +77,16 @@ pipeline can then be set up from Julia:
 ```julia
 using DataPipeline
 DataPipeline.install_cli!()            # once: fair, with its Python, recorded
-DataPipeline.fair"registry install"    # once: the local registry
-DataPipeline.fair"init"                # once per project, from its root; asks questions
-DataPipeline.fair"pull config.yaml"
+fair"registry install"                 # once: the local registry
+fair"init"                             # once per project, from its root; asks questions
+fair"pull config.yaml"
 DataPipeline.rehearse("config.yaml")
 ```
 
 ```@docs
 DataPipeline.rehearse
 DataPipeline.discard
-DataPipeline.@fair_str
+@fair_str
 DataPipeline.set_cli!
 DataPipeline.install_cli
 DataPipeline.install_cli!

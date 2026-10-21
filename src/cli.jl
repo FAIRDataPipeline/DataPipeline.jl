@@ -9,11 +9,11 @@
 const CLI_PYTHON = "3.12"
 
 """
-    DataPipeline.fair"arguments"
+    fair"arguments"
 
 Run the pipeline's command-line tool `fair` with its arguments written as on
 the command line, in the current directory, printing what it prints:
-`DataPipeline.fair"pull config.yaml"` is `fair pull config.yaml`. The text is
+`fair"pull config.yaml"` is `fair pull config.yaml`. The text is
 split as Julia's backticks split a command, so quotes group a word, and
 `\$name` and `\$(expression)` interpolate, as in `fair"pull \$config"`. An exit
 status other than 0 is a [`ReadWriteException`](@ref). The `fair` run is

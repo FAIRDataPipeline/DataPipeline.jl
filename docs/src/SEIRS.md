@@ -46,7 +46,7 @@ fair run examples/fdp/SEIRSconfig.yaml
 with that run's uuid, then `fair push`, sends it and its data products to a
 remote registry.
 
-The two blocks below do exactly that, through `DataPipeline.fair"..."`,
+The two blocks below do exactly that, through `fair"..."`,
 which runs the CLI from Julia with its arguments as on the command line, when
 this documentation is built with the
 environment variable `FDP_DOCS_RUN_EXAMPLE` set to `true`, as the package's
@@ -57,14 +57,14 @@ run_example = get(ENV, "FDP_DOCS_RUN_EXAMPLE", "") == "true"
 run_example || println("Not run: FDP_DOCS_RUN_EXAMPLE is not set.")
 # fair runs from the root of the repository, where the project is
 run_example && cd(pkgdir(DataPipeline)) do
-    DataPipeline.fair"pull --local examples/fdp/SEIRSconfig.yaml"
+    fair"pull --local examples/fdp/SEIRSconfig.yaml"
 end
 nothing # hide
 ```
 
 ```@example seirs
 run_example && cd(pkgdir(DataPipeline)) do
-    DataPipeline.fair"run --local examples/fdp/SEIRSconfig.yaml"
+    fair"run --local examples/fdp/SEIRSconfig.yaml"
 end
 nothing # hide
 ```

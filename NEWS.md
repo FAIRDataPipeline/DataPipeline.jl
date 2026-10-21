@@ -1,5 +1,10 @@
 # NEWS
 
+- v0.57.1
+  - `fair"..."` is exported, so that after `using DataPipeline` the CLI runs from
+    Julia as `fair"pull config.yaml"`; the docs' front page shows the whole
+    workflow from Julia, the first time and each run.
+
 - v0.57.0
   - Breaking changes:
     - `fair-cli` 0.11.0 or later is needed: a `fair` without its session commands

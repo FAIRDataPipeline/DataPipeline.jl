@@ -801,7 +801,7 @@ function _unreachable(registry::RegistryEndpoint)
     host = URIs.URI(registry.url).host
     host in ("127.0.0.1", "localhost", "::1") ||
         return ReadWriteException("cannot reach the registry at $(registry.url)")
-    return ReadWriteException("cannot reach the local registry at $(registry.url): start it with `fair registry start`, or `DataPipeline.fair\"registry start\"` from Julia, and it runs until `fair registry stop`")
+    return ReadWriteException("cannot reach the local registry at $(registry.url): start it with `fair registry start`, or `fair\"registry start\"` from Julia, and it runs until `fair registry stop`")
 end
 
 """
