@@ -9,18 +9,18 @@ const ReadWriteException = DataPipeline.ReadWriteException
 
 uid = DataPipeline._randomhash()
 
-Test.@testset "DataPipeline.fair\"...\"" begin
+Test.@testset "fair\"...\"" begin
     # The fair on the path, which the suite runs under, with the text split
     # as a command line is: quoting and interpolation
-    @test isnothing(DataPipeline.fair"--version")
+    @test isnothing(fair"--version")
     flag = "--version"
-    @test isnothing(DataPipeline.fair"$flag")
-    @test isnothing(DataPipeline.fair"$(flag)")
-    @test isnothing(DataPipeline.fair" --version ")
-    err = @test_throws ReadWriteException DataPipeline.fair"no-such-command --with-option"
+    @test isnothing(fair"$flag")
+    @test isnothing(fair"$(flag)")
+    @test isnothing(fair" --version ")
+    err = @test_throws ReadWriteException fair"no-such-command --with-option"
     @test occursin("no-such-command --with-option", err.value.msg)
     # A quoted word stays one argument, which the CLI refuses as one
-    err = @test_throws ReadWriteException DataPipeline.fair"'no such command'"
+    err = @test_throws ReadWriteException fair"'no such command'"
     @test occursin("no such command", err.value.msg)
 end
 
@@ -52,7 +52,7 @@ Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
                                split(ENV["PATH"], separator)), separator)
     withenv("PATH" => without_fair) do
         @test isnothing(Sys.which("fair"))
-        @test isnothing(DataPipeline.fair"--version")
+        @test isnothing(fair"--version")
     end
 
     # set_cli! records a fair that runs, and the record comes first; a path
@@ -60,7 +60,7 @@ Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
     @test DataPipeline.set_cli!(executable) == executable
     try
         @test DataPipeline._preferredcli() == executable
-        @test isnothing(DataPipeline.fair"--version")
+        @test isnothing(fair"--version")
         @test_throws ArgumentError DataPipeline.set_cli!(joinpath(tempdir(),
                                                                   "missing-$uid"))
         @test DataPipeline._preferredcli() == executable

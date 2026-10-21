@@ -555,7 +555,7 @@ function _identifypipeline(top::AbstractString, files::AbstractVector{String},
     if isnothing(endpoint)
         return withlocal() do registry
             _answers(registry) ||
-                throw(ReadWriteException("the local registry at $(registry.url) does not answer - start it with `DataPipeline.fair\"registry start\"`"))
+                throw(ReadWriteException("the local registry at $(registry.url) does not answer - start it with `fair\"registry start\"`"))
             return _pipelineentries(registry, top, files; newest)
         end
     end
@@ -764,12 +764,12 @@ function _checkpaper(paper::LaTeXPaper,
     initialised = isdir(joinpath(top, ".fair"))
     initialised ||
         push!(setup,
-              "the repository at $top is not initialised for the pipeline - run `DataPipeline.fair\"init\"` there")
+              "the repository at $top is not initialised for the pipeline - run `fair\"init\"` there")
     if !isnothing(held)
         push!(setup, "the local registry cannot be held: $held")
     elseif !isnothing(registry) && !_answers(registry)
         push!(setup,
-              "the local registry at $(registry.url) does not answer - start it with `DataPipeline.fair\"registry start\"`, after `DataPipeline.fair\"registry install\"` where none is installed")
+              "the local registry at $(registry.url) does not answer - start it with `fair\"registry start\"`, after `fair\"registry install\"` where none is installed")
         registry = nothing
     end
     localwhy = "the local registry cannot be reached"
@@ -896,7 +896,7 @@ function _checkremote!(setup::Vector{String}, top::AbstractString,
     entry = get(registries, remote, nothing)
     if !(entry isa AbstractDict && haskey(entry, "uri"))
         push!(setup,
-              "the project's CLI configuration, $path, names no remote registry '$remote' - run `DataPipeline.fair\"init\"` in $top again to configure one")
+              "the project's CLI configuration, $path, names no remote registry '$remote' - run `fair\"init\"` in $top again to configure one")
         return nothing
     end
     if isnothing(_tokenfromfile(entry))
