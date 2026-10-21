@@ -136,9 +136,10 @@ end
 """
     install_cli!(; version = nothing, python = nothing)
 
-[`install_cli`](@ref), then [`set_cli!`](@ref) on the copy, whether it was
-installed by this call or before: so that the copy is the `fair` this package
-runs, whatever is on the path. Return the executable's path.
+[`install_cli`](@ref), passing it `version` and `python`, then
+[`set_cli!`](@ref) on the copy, whether it was installed by this call or
+before: so that the copy is the `fair` this package runs, whatever is on the
+path. Return the executable's path.
 """
 function install_cli!(;
                       version::Union{Nothing, VersionNumber, AbstractString} = nothing,

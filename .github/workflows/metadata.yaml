@@ -1,0 +1,39 @@
+name: Metadata and hygiene
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
+  actions: write
+  contents: read
+
+jobs:
+  metadata:
+    name: RSMD - ${{ github.event_name }}
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # The crosswalk reads the first commit and the release tags
+          fetch-depth: 0
+      - name: Set up julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+          arch: x64
+      - name: Cache
+        uses: julia-actions/cache@v3
+      - name: Build package
+        uses: julia-actions/julia-buildpkg@v1
+      - name: Running the repository checks
+        # Named as a test argument, the repository checks alone, with no
+        # registry; `Pkg.test` provisions the test target's dependencies
+        run: julia --project=. -e 'using Pkg; Pkg.test(test_args = ["extras_clean.jl"])'

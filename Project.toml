@@ -24,27 +24,41 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
+Aqua = "0.8"
 BibInternal = "0.4"
 BibParser = "0.3"
 DataFrames = "1"
 Dates = "1"
+Git = "1"
 HDF5 = "0.16, 0.17"
 HTTP = "1, 2"
 JSON = "0.21, 1"
+JuliaFormatter = "2"
 LibGit2 = "1"
+Logging = "1"
 MicroMamba = "0.1"
 Plots = "1"
 Preferences = "1"
+REPL = "1"
+Random = "1"
+ResearchSoftwareMetadata = "0.4"
 SHA = "0.7, 1"
 Scratch = "1"
 TOML = "1"
+Test = "1"
 URIs = "1"
 UUIDs = "1"
 YAML = "0.4"
 julia = "1.11"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Git = "d7ba0133-e1db-5d97-8f8c-041e4b3a1eb2"
+JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+ResearchSoftwareMetadata = "58378933-4625-47fa-851e-05ee27d397bd"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [rsmd]
@@ -76,4 +90,4 @@ development_status = "active"
         ror = "00vtgdb53"
 
 [targets]
-test = ["Test", "Random"]
+test = ["Aqua", "Git", "JuliaFormatter", "Logging", "REPL", "Random", "ResearchSoftwareMetadata", "Test"]
