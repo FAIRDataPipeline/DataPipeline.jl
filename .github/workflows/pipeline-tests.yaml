@@ -27,6 +27,10 @@ on:
         type: boolean
         default: false
 
+# A called workflow can only keep or narrow its caller's permissions
+permissions:
+  contents: read
+
 jobs:
   pipeline-tests:
     runs-on: ${{ inputs.os }}

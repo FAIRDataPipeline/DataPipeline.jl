@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [closed]
 
+# It pushes to gh-pages with the workflow's token
+permissions:
+  contents: write
+
 jobs:
   doc-preview-cleanup:
     runs-on: ubuntu-latest
