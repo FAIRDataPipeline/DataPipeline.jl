@@ -8,6 +8,10 @@
     - `read_table!` and `write_table!`, which returned `nothing` and read or wrote
       nothing, throw a `ReadWriteException` saying tables are not yet implemented
       and naming `link_read!` or `link_write!` for a table kept as a file.
+  - Reading:
+    - `link_read!` of a pattern puts a hard link to each file in its folder, else a
+      copy, where no symbolic link can be made - as on Windows without the
+      privilege - rather than failing.
   - Tracing provenance:
     - `identify` of a file gives the source of each data product it is registered
       as, in the new `source` field of `DataProductRecord`, and shows it with the

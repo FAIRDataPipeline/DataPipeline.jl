@@ -2048,6 +2048,30 @@ function can_hardlink(from, to)
     end
 end
 
+Test.@testset "a folder of links where no symbolic link can be made" begin
+    # As on Windows without the privilege: a hard link where one can be made,
+    # else a copy. A folder of a pattern read is placed this way, which the
+    # pattern test checks only where symbolic links can be made
+    source = joinpath(mktempdir(), "source-$uid.txt")
+    write(source, "a folder of links $uid\n")
+    folder = mktempdir()
+    placed = joinpath(folder, "placed.txt")
+    refused(from, to) = throw(Base.IOError("no symbolic links here", -1))
+    @test DataPipeline._placelink(source, placed, link = refused) == placed
+    @test !islink(placed)
+    @test read(placed, String) == "a folder of links $uid\n"
+    @test samefile(placed, source) == can_hardlink(dirname(source), folder)
+    # Where one can be made, it is a symbolic link
+    linked = DataPipeline._placelink(source, joinpath(folder, "linked.txt"))
+    @test islink(linked) && normpath(readlink(linked)) == normpath(source)
+    # Any other failure is not taken for a refusal
+    broken(from, to) = error("not a refusal")
+    @test_throws ErrorException DataPipeline._placelink(source,
+                                                        joinpath(folder,
+                                                                 "broken.txt"),
+                                                        link = broken)
+end
+
 Test.@testset "link_write!() with a path" begin
     name = "data_product/path_write/$uid"
     outside = mktempdir()

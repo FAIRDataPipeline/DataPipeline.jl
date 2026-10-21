@@ -224,15 +224,17 @@ to. `force` does nothing without `path`. A data product with no file takes no
 
 Given a pattern instead - a name with one or more `*`, each matching one
 segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
-`era5/t2m/a/b` - return the path of a temporary directory holding a symbolic
-link to the file of every `read:` data product that matches, each recorded as
-an input (the directory itself is not), a data product with no file being
-recorded and given no link. Where the working config keeps the
-pattern's own entry, as a CLI may, a pattern that matches nothing gives an
-empty directory; where it does not, that is an error. A link is named after its data
-product with `/` replaced by `_`, plus the file's extension; the directory is
-named by the SHA-1 of the sorted list of link names and file hashes, so the
-same set of files gives the same name. The directory is removed when Julia
+`era5/t2m/a/b` - return the path of a temporary directory holding the file of
+every `read:` data product that matches, each recorded as an input (the
+directory itself is not), a data product with no file being recorded and
+given none. Each is a symbolic link to the data store's file where one can be
+made, else a hard link, else a copy, as on a Windows machine that allows no
+symbolic links. Where the working config keeps the pattern's own entry, as a
+CLI may, a pattern that matches nothing gives an empty directory; where it
+does not, that is an error. Each is named after its data product with `/`
+replaced by `_`, plus the file's extension; the directory is named by the
+SHA-1 of the sorted list of those names and the files' hashes, so the same set
+of files gives the same name. The directory is removed when Julia
 exits. A pattern takes no `path`.
 
 See also: [`canread`](@ref)
@@ -325,12 +327,7 @@ function _link_read_directory!(handle::DataRegistryHandle, pattern::String)
     directory = joinpath(mktempdir(), bytes2hex(SHA.sha1(manifest)))
     mkdir(directory)
     for (link, (_, path)) in zip(links, held)
-        try
-            symlink(path, joinpath(directory, link))
-        catch e
-            isa(e, Base.IOError) || rethrow()
-            throw(ReadWriteException("cannot make a symbolic link in $directory: $(e.msg)"))
-        end
+        _placelink(path, joinpath(directory, link))
     end
     return directory
 end

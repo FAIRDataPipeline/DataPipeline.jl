@@ -547,6 +547,21 @@ function _placefile(source::AbstractString, destination::AbstractString)
     return destination
 end
 
+# Make the file at `source` available at `destination` in a folder of links: a
+# symbolic link where one can be made, else as `_placefile` places it, since
+# Windows may refuse one. `link` makes the symbolic link; the tests replace it
+# with one that fails.
+function _placelink(source::AbstractString, destination::AbstractString;
+                    link::Function = symlink)
+    try
+        link(source, destination)
+    catch e
+        isa(e, Base.IOError) || rethrow()
+        _placefile(source, destination)
+    end
+    return destination
+end
+
 # Remove `directory` and its parents while they are empty, stopping at `stop`
 function _pruneempty(directory::AbstractString, stop::AbstractString)
     stop = rstrip(normpath(stop), '/')
