@@ -535,7 +535,15 @@ Test.@testset "the released names, deprecated, and a repeated read" begin
           (estimates, "point")
     @test write_distribution(writing, "Gaussian", Dict("mean" => 1.0),
                              estimates, "spread", "d") == (estimates, "spread")
-    @test isnothing(write_table(writing, nothing, estimates, "table"))
+    @test_throws DataPipeline.ReadWriteException write_table(writing, nothing,
+                                                             estimates, "table")
+    # Tables are not yet implemented: the error says what to do instead
+    err = @test_throws DataPipeline.ReadWriteException write_table!(writing,
+                                                                    nothing,
+                                                                    estimates,
+                                                                    "table")
+    @test occursin("tables are not yet implemented", err.value.msg)
+    @test occursin("link_write!(handle, \"$estimates\")", err.value.msg)
     raise_issue(writing, DataPipeline.WorkingConfig(), "deprecated $uid")
     @test length(writing.issues) == 1
     DataPipeline.finalise(writing)
@@ -545,7 +553,12 @@ Test.@testset "the released names, deprecated, and a repeated read" begin
     @test read_estimate(reading, estimates, "point") == 1.5
     @test read_distribution(reading, estimates, "spread")["distribution"] ==
           "Gaussian"
-    @test isnothing(read_table(reading, estimates, "table"))
+    @test_throws DataPipeline.ReadWriteException read_table(reading, estimates,
+                                                            "table")
+    err = @test_throws DataPipeline.ReadWriteException read_table!(reading,
+                                                                   estimates,
+                                                                   "table")
+    @test occursin("link_read!(handle, \"$estimates\")", err.value.msg)
     # A repeated read leaves the recorded input as it was
     recorded = reading.inputs[(estimates, "point")]
     @test read_estimate!(reading, estimates, "point") == 1.5
@@ -848,7 +861,7 @@ Test.@testset "identify()" begin
     @test (product.namespace, product.name) == (namespace, data_product)
     @test product.version == VersionNumber(version)
     @test product.newest == product.version          # nothing newer yet
-    @test isnothing(product.external_object)
+    @test isnothing(product.external_object) && isnothing(product.source)
     @test isempty(object.issues)
     # A handle may be given instead of a registry
     @test DataPipeline.identify(run_handle, stored).hash == id.hash
@@ -2033,6 +2046,30 @@ function can_hardlink(from, to)
         rm(source, force = true)
         rm(link, force = true)
     end
+end
+
+Test.@testset "a folder of links where no symbolic link can be made" begin
+    # As on Windows without the privilege: a hard link where one can be made,
+    # else a copy. A folder of a pattern read is placed this way, which the
+    # pattern test checks only where symbolic links can be made
+    source = joinpath(mktempdir(), "source-$uid.txt")
+    write(source, "a folder of links $uid\n")
+    folder = mktempdir()
+    placed = joinpath(folder, "placed.txt")
+    refused(from, to) = throw(Base.IOError("no symbolic links here", -1))
+    @test DataPipeline._placelink(source, placed, link = refused) == placed
+    @test !islink(placed)
+    @test read(placed, String) == "a folder of links $uid\n"
+    @test samefile(placed, source) == can_hardlink(dirname(source), folder)
+    # Where one can be made, it is a symbolic link
+    linked = DataPipeline._placelink(source, joinpath(folder, "linked.txt"))
+    @test islink(linked) && normpath(readlink(linked)) == normpath(source)
+    # Any other failure is not taken for a refusal
+    broken(from, to) = error("not a refusal")
+    @test_throws ErrorException DataPipeline._placelink(source,
+                                                        joinpath(folder,
+                                                                 "broken.txt"),
+                                                        link = broken)
 end
 
 Test.@testset "link_write!() with a path" begin

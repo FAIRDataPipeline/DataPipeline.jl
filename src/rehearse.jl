@@ -17,9 +17,8 @@ registers nothing. `path` is a user config, which is prepared as `fair run`
 prepares one, from the project the config is in and with `--local` if
 `local_only` is true: by `fair run --rehearse`, which writes the working config
 and the script into a new job folder, registers and stages nothing, and makes
-no git check; or, with a `fair` that has no such option, by `fair run --ci
---dirty`, which also adds the job to the project's staging. Or `path` is that
-job folder itself, or the working config in it. Return the job folder.
+no git check, and which `fair-cli` has from 0.11.0. Or `path` is that job
+folder itself, or the working config in it. Return the job folder.
 
 `outputs` is the folder the outputs are collected in, made if need be; by
 default a new folder under the system's temporary directory, which lasts as
@@ -35,11 +34,9 @@ token in the environment is not used by a rehearsal.
 
 The rehearsal's script reads the local registry, so the rehearsal keeps it
 running until `finalise` or `discard` ends it: through a session of the
-CLI's, which ends with it, where `fair` has the session commands - and, run by
-`fair run`, through the run's own session. A `fair` without them leaves
-running any registry its `fair run` started, and `finalise` and `discard`
-then say that `fair registry stop` stops it. A registry that `fair registry
-start` started runs until `fair registry stop` either way.
+CLI's, which ends with it - and, run by `fair run`, through the run's own
+session. A registry that `fair registry start` started runs until `fair
+registry stop` either way.
 
 The `fair` that prepares a user config is the one [`set_cli!`](@ref)
 recorded, else the `fair` on the path, else the copy [`install_cli`](@ref)
@@ -66,7 +63,7 @@ function rehearse(path::AbstractString;
     hold = _holdregistry()
     job, folder = try
         in_progress && _discardcurrent()
-        (_jobfolder(path, local_only, hold), _outputsfolder(outputs))
+        (_jobfolder(path, local_only), _outputsfolder(outputs))
     catch
         _releaseregistry(hold)
         rethrow()
@@ -155,9 +152,8 @@ end
 
 # The job folder that `path` names: a folder holding a working config; a
 # working config, whose folder it is; or a user config, for which `fair` makes
-# one, `hold` saying whether that `fair` has session commands
-function _jobfolder(path::AbstractString, local_only::Bool,
-                    hold::Union{Nothing, AbstractRegistryHold})
+# one
+function _jobfolder(path::AbstractString, local_only::Bool)
     if isdir(path)
         isfile(joinpath(path, "config.yaml")) ||
             throw(ArgumentError("$path holds no config.yaml: a job folder is one that `fair run --rehearse` or `fair run --ci` wrote"))
@@ -165,41 +161,34 @@ function _jobfolder(path::AbstractString, local_only::Bool,
     elseif isfile(path)
         _isworkingconfig(YAML.load_file(path)) &&
             return dirname(abspath(path))
-        return _preparejob(abspath(path), local_only, hold)
+        return _preparejob(abspath(path), local_only)
     end
     return throw(ArgumentError("no file or folder at $path"))
 end
 
 # Have `fair` prepare a job for a user config, from the root of the project
-# the config is in, and return the job folder: by `fair run --rehearse`, else,
-# from a `fair` without it, by `fair run --ci --dirty`. A `fair` without
-# session commands is not asked for a rehearsal, the two coming in one release
-function _preparejob(config::String, local_only::Bool,
-                     hold::Union{Nothing, AbstractRegistryHold})
+# the config is in, and return the job folder
+function _preparejob(config::String, local_only::Bool)
     root = _fairroot(dirname(config))
     isnothing(root) &&
         throw(ArgumentError("$config is in no FAIR project: run `fair init` in the repository that holds it"))
-    command = _faircommand(nothing)
     options = local_only ? ["--local"] : String[]
-    if !(hold isa RegistryNotHeld)
-        job = _rehearsedjob(command, root, config, options)
-        isnothing(job) || return job
-    end
-    return _cijob(command, root, config, options)
+    return _rehearsedjob(_faircommand(nothing), root, config, options)
 end
 
 # The job folder `fair run --rehearse` prepares, named in the one JSON object
-# it prints, what it wrote as its log being printed; `nothing` from a `fair`
-# that has no such option. A failure is an error carrying what it wrote, and
-# so is an exit of 0 naming no job folder, which is how it ends having written
-# a warning and prepared nothing
+# it prints, what it wrote as its log being printed. A `fair` with no such
+# option, told by its usage error, is refused; a failure is an error carrying
+# what it wrote, and so is an exit of 0 naming no job folder, which is how it
+# ends having written a warning and prepared nothing
 function _rehearsedjob(command::Cmd, root::AbstractString,
                        config::AbstractString, options::Vector{String})
     prepared = _capturefair(command, "run", "--rehearse", options..., config;
                             dir = root)
     (prepared.status == 2 &&
      occursin(r"[Nn]o such option", prepared.errors) &&
-     occursin("--rehearse", prepared.errors)) && return nothing
+     occursin("--rehearse", prepared.errors)) &&
+        throw(_oldcli(command, "`fair run --rehearse`"))
     prepared.status == 0 ||
         throw(ReadWriteException("`fair run --rehearse` failed in $root with exit status $(prepared.status):\n$(prepared.errors)"))
     reply = try
@@ -214,27 +203,6 @@ function _rehearsedjob(command::Cmd, root::AbstractString,
     end
     foreach(println, filter(!isempty, strip.(split(prepared.errors, '\n'))))
     return String(job)
-end
-
-# The job folder `fair run --ci --dirty` prepares and prints as its last line,
-# having checked that the folder is there: `fair` can fail and still exit 0.
-# Its other lines, the warnings about the repository among them, are printed.
-function _cijob(command::Cmd, root::AbstractString, config::AbstractString,
-                options::Vector{String})
-    output = IOBuffer()
-    process = run(pipeline(Cmd(ignorestatus(_withenvironment(`$command run --ci --dirty $options $config`)),
-                               dir = root),
-                           stdout = output, stderr = output))
-    text = String(take!(output))
-    success(process) ||
-        throw(ReadWriteException("`fair run --ci` failed in $root:\n$text"))
-    lines = filter(!isempty, strip.(split(text, '\n')))
-    job = isempty(lines) ? "" : String(last(lines))
-    if !(isdir(job) && isfile(joinpath(job, "config.yaml")))
-        throw(ReadWriteException("`fair run --ci` in $root printed no job folder:\n$text"))
-    end
-    foreach(println, lines[1:(end - 1)])
-    return job
 end
 
 # The outputs folder, made: the one asked for, else a new temporary one that

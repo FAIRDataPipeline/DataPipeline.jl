@@ -260,8 +260,9 @@ Test.@testset "_repositorylocation()" begin
 end
 
 Test.@testset "_getentries() follows pagination" begin
-    r = DataPipeline.RegistryEndpoint(get(ENV, "FDP_TEST_REGISTRY",
-                                          DataPipeline.DEFAULT_REGISTRY_URL),
+    # The registry of the run the tests were launched in
+    launched = DataPipeline._workingconfig(DataPipeline.FDP_PATH_CONFIG())
+    r = DataPipeline.RegistryEndpoint(launched["run_metadata"]["local_data_registry_url"],
                                       token = DataPipeline.FDP_LOCAL_TOKEN())
     # The registry pages at 100, so make more than one page of cheap rows.
     # Its namespace filter matches a name exactly, so the check is against the

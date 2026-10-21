@@ -32,7 +32,7 @@ print(read(joinpath(example, "seirs_sim.jl"), String))
 
 ## Running it
 
-With the pipeline installed and a local registry running (see the
+With the pipeline installed (see the
 [FAIR Data Pipeline documentation](https://www.fairdatapipeline.org/docs/)),
 from the root of a clone of this repository:
 
@@ -49,9 +49,8 @@ remote registry.
 The two blocks below do exactly that, through `DataPipeline.fair"..."`,
 which runs the CLI from Julia with its arguments as on the command line, when
 this documentation is built with the
-environment variable `FDP_DOCS_RUN_EXAMPLE` set to `true` and a registry
-running, as the package's own documentation build does; built without it,
-they only say so.
+environment variable `FDP_DOCS_RUN_EXAMPLE` set to `true`, as the package's
+own documentation build does; built without it, they only say so.
 
 ```@example seirs
 run_example = get(ENV, "FDP_DOCS_RUN_EXAMPLE", "") == "true"

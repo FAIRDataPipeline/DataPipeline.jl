@@ -1,5 +1,6 @@
 # FAIR data pipeline manual
-This is the manual for the FAIR `DataPipeline` package.
+This is the manual for the FAIR `DataPipeline` package, which works with the
+pipeline's command-line tool, `fair-cli`, from version 0.11.0.
 
 ```@contents
 Pages = ["fdp_manual.md"]
@@ -79,7 +80,6 @@ using DataPipeline
 DataPipeline.install_cli!()            # once: fair, with its Python, recorded
 DataPipeline.fair"registry install"    # once: the local registry
 DataPipeline.fair"init"                # once per project, from its root; asks questions
-DataPipeline.fair"registry start"
 DataPipeline.fair"pull config.yaml"
 DataPipeline.rehearse("config.yaml")
 ```
@@ -179,15 +179,12 @@ the place of what it says. A citation given as BibTeX by
 with no network. Run again, a fetch run registers nothing new for a file that
 has not changed.
 
-A deposit may instead be registered by `fair pull` from a `register:` entry
-with `no_file: true` (`fair-cli` 0.11.0 or later), or by `link_register!` in an
-earlier run. Either way a later run is offered it by a `read:` entry, and
-`link_read!` records it as an input and returns `nothing`, since it has no file.
+A deposit may instead be registered by `fair pull` from a `register:` entry with
+`no_file: true`, or by `link_register!` in an earlier run. Either way a later
+run is offered it by a `read:` entry, and `link_read!` records it as an input
+and returns `nothing`, since it has no file.
 
-Registering a source needs `data-registry` v1.4.0 or later. Wildcard entries in
-the working config need `fair-cli` 0.10.0 or later, a pattern read of a family
-written more than once 0.10.1, and reading a data product pulled from a remote
-registry, or pushing or pulling a deposit with no file, 0.10.2.
+Registering a source needs `data-registry` v1.4.0 or later.
 
 ```@docs
 register_citations!

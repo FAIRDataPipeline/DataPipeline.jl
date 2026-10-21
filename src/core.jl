@@ -528,9 +528,8 @@ end
 # rehearsal, whose script reads it after `rehearse` has returned, a recorded
 # run, or a block of calls outside a run: a session of the CLI's, opened by the
 # `fair` in `cli`, which named the registry's address and its token's file, and
-# closed when the use ends; the run that launched this process, which names its
-# session in `FDP_SESSION`; or nothing, where the CLI has no session commands,
-# and so leaves running a registry its commands start
+# closed when the use ends; or the run that launched this process, which names
+# its session in `FDP_SESSION`
 abstract type AbstractRegistryHold end
 struct RegistryHeldBySession <: AbstractRegistryHold
     id::String
@@ -539,7 +538,6 @@ struct RegistryHeldBySession <: AbstractRegistryHold
     token_file::String
 end
 struct RegistryHeldByRun <: AbstractRegistryHold end
-struct RegistryNotHeld <: AbstractRegistryHold end
 
 """
     SessionRun(mode, job, handle, ended, hold)
@@ -853,17 +851,6 @@ function _extractid(url::AbstractString)
     return String(match(r".*/([0-9]+)/", url)[1])
 end
 _extractid(urls::AbstractVector) = map(_extractid, urls)
-
-"""
-    _checkexists(registry, table, query)
-
-Return whether any entry of `table` matches `query`.
-"""
-function _checkexists(registry::RegistryEndpoint, table::String, query::Dict)
-    url = string(registry.url, table, "/")
-    r = _getentry(registry, URIs.URI(url * _convertquery(registry, query)))
-    return r["count"] != 0
-end
 
 """
     _wholeobjectcomponent(registry, object_url)

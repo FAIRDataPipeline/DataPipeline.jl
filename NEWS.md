@@ -1,5 +1,29 @@
 # NEWS
 
+- v0.57.0
+  - Breaking changes:
+    - `fair-cli` 0.11.0 or later is needed: a `fair` without its session commands
+      or `fair run --rehearse` is refused, naming the version, where the registry
+      went unheld and a rehearsal was prepared by `fair run --ci --dirty`.
+    - `read_table!` and `write_table!`, which returned `nothing` and read or wrote
+      nothing, throw a `ReadWriteException` saying tables are not yet implemented
+      and naming `link_read!` or `link_write!` for a table kept as a file.
+  - Reading:
+    - `link_read!` of a pattern puts a hard link to each file in its folder, else a
+      copy, where no symbolic link can be made - as on Windows without the
+      privilege - rather than failing.
+  - Tracing provenance:
+    - `identify` of a file gives the source of each data product it is registered
+      as, in the new `source` field of `DataProductRecord`, and shows it with the
+      address the file was fetched from, in place of the external object's URL.
+    - `DataPipeline.check_store` checks the data stores on this machine against the
+      local registry: registered files missing or changed - a hard-linked file
+      written to through another name, say - files it does not know, locations
+      nothing uses, and outputs a run left unfinished.
+  - Requirements:
+    - Seven dependencies the package did not use are dropped: AxisArrays, CSV,
+      FTPClient, NetCDF, PrettyTables, SQLite and UnicodePlots.
+
 - v0.56.1
   - `set_cli!` and `install_cli!` record their preference in the environment
     DataPipeline is loaded from, so a project that does not name it, with

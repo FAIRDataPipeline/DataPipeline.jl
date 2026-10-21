@@ -13,10 +13,8 @@ import BibInternal
 import BibParser
 import MicroMamba
 using Preferences: Preferences, @load_preference
-using CSV
 using DataFrames
 using Dates
-using FTPClient
 using HTTP
 using JSON
 using LibGit2
@@ -70,6 +68,7 @@ public ConfigDataProduct, ExistingDataProduct
 public canread, canwrite
 # Asking what the registry knows about a file or a git repository on disk
 public identify
+public check_store, StoreCheck
 public FileIdentification, RegisteredObject, DataProductRecord, IssueRecord
 public UpstreamIssue, OutdatedInput
 public RepositoryIdentification, RegisteredCommit, CodeRunRecord
@@ -98,6 +97,7 @@ include("rehearse.jl")
 include("data_prod_proc.jl")    # dp file handling
 include("provenance.jl")
 include("api_audit.jl")         # DR audits
+include("datastore.jl")
 include("releases.jl")
 include("downstream.jl")
 include("crate.jl")

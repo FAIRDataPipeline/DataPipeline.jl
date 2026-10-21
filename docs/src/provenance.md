@@ -2,20 +2,20 @@
 
 What the pipeline records of every run - the code at its commit, what it read
 and what it wrote - is there to be asked. This page is what the package asks
-of it: what the registry knows about a file, where a file came from, what was
-made from it, how one version supersedes another, and the crate that packs the
-files of a paper with the provenance of each. None of it needs a token, so it
-all works outside `fair run`, against the local registry or a remote one.
+of it: what the registry knows about a file, whether the data stores hold what
+it records, where a file came from, what was made from it, how one version
+supersedes another, and the crate that packs the files of a paper with the
+provenance of each. None of it needs a token, so it all works outside
+`fair run`, against the local registry or a remote one.
 
 ## Holding the local registry
 
 Outside a run, each of these functions holds the local registry up through a
-session of the FAIR CLI's while it works, where `fair` has session commands: a
-session starts the registry where nothing holds it, and the last to close
-stops one a session started. Calls in a `DataPipeline.registry_session` block
-share its session, given its endpoint first; `fair registry start` keeps the
-registry running until `fair registry stop`, which a `fair` without session
-commands needs.
+session of the FAIR CLI's while it works: a session starts the registry where
+nothing holds it, and the last to close stops one a session started. Calls in
+a `DataPipeline.registry_session` block share its session, given its endpoint
+first; `fair registry start` keeps the registry running until `fair registry
+stop`.
 
 ```julia
 DataPipeline.registry_session() do registry
@@ -48,9 +48,10 @@ DataPipeline.identify(DataPipeline.AllCommits(dirty = true))
 DataPipeline.identify(DataPipeline.AllCommits(repo = "https://github.com/FAIRDataPipeline/DataPipeline.jl"))
 ```
 
-A file's identification carries the issues raised on it and, behind it, the
-issues raised on anything a run on the way read, or on a run's own code,
-config or script, each with the run it reaches the file through; with
+A file's identification carries the source of a file registered from
+elsewhere, with the address it was fetched from; the issues raised on it and,
+behind it, the issues raised on anything a run on the way read, or on a run's
+own code, config or script, each with the run it reaches the file through; with
 `superseded = true` it lists the inputs behind the file that a newer version of
 has been registered since, as outdated rather than wrong.
 
@@ -70,6 +71,31 @@ DataPipeline.AncestorCommits
 DataPipeline.CheckedOutCommit
 DataPipeline.AllCommits
 DataPipeline.NamedCommit
+```
+
+## Checking the data store
+
+`DataPipeline.check_store` checks the data stores on this machine - the
+folders of registered files that each project writes to - against the local
+registry: the registered files that are missing or whose contents have
+changed, the files there that the registry does not know, the storage
+locations that nothing uses, and the outputs a run left unfinished. It changes
+nothing.
+
+```julia
+DataPipeline.check_store()                  # hashing every registered file
+DataPipeline.check_store(hashes = false)    # whether each is there, reading none
+DataPipeline.check_store(quiet = false)     # every missing file, and the CLI's own
+```
+
+A store whose folder has gone is reported in one line, and missing files
+beyond a few are counted rather than listed. A changed file with more than one
+name was most likely written to through another: a file given to `link_write!`
+or `link_register!` as a `path` is hard-linked into the store where it can be.
+
+```@docs
+DataPipeline.check_store
+DataPipeline.StoreCheck
 ```
 
 ## Where a file came from
@@ -172,10 +198,6 @@ release = DataPipeline.register_release!(DataPipeline.NamedCommit("v1.2.0"))
 raise_issue!(DataPipeline.AncestorCommits(of = release, including = false),
              "Bug X, fixed in v1.2.0")
 ```
-
-With `fair-cli` 0.10.2 a release is registered on each registry it belongs on -
-`register_release!(...; remote = "origin")` for the project's remote - since
-`fair push` does not carry it; and its data product is not to be `fair add`ed.
 
 ```@docs
 DataPipeline.register_release!

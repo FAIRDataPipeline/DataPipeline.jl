@@ -8,7 +8,8 @@
 
 Thrown when the registry or the data store does not hold what a read or write
 needs: a missing data product, a version already registered, a registry that
-is not running, a write with no registry token.
+is not running, a write with no registry token; or when a read or write asks
+for what is not yet implemented, such as a table.
 """
 struct ReadWriteException <: Exception
     msg::String
@@ -546,6 +547,21 @@ function _placefile(source::AbstractString, destination::AbstractString)
     return destination
 end
 
+# Make the file at `source` available at `destination` in a folder of links: a
+# symbolic link where one can be made, else as `_placefile` places it, since
+# Windows may refuse one. `link` makes the symbolic link; the tests replace it
+# with one that fails.
+function _placelink(source::AbstractString, destination::AbstractString;
+                    link::Function = symlink)
+    try
+        link(source, destination)
+    catch e
+        isa(e, Base.IOError) || rethrow()
+        _placefile(source, destination)
+    end
+    return destination
+end
+
 # Remove `directory` and its parents while they are empty, stopping at `stop`
 function _pruneempty(directory::AbstractString, stop::AbstractString)
     stop = rstrip(normpath(stop), '/')
@@ -766,8 +782,8 @@ function _getstoragelocation(registry::RegistryEndpoint, object_url::String)
                                   URIs.URI(obj_entry["storage_location"]))
     storage_root_entry = _getentry(registry,
                                    URIs.URI(storage_loc_entry["storage_root"]))
-    root = replace(storage_root_entry["root"], "file://" => "")
-    return (path = joinpath(root, storage_loc_entry["path"]),
+    return (path = joinpath(_rootfolder(storage_root_entry["root"]),
+                            storage_loc_entry["path"]),
             hash = String(storage_loc_entry["hash"]))
 end
 

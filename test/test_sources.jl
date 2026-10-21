@@ -66,7 +66,7 @@ end
 # A file of this text, outside the data store
 outside = mktempdir()
 function file_of(text::AbstractString)
-    path = joinpath(outside, "$(DataPipeline._randomhash()).txt")
+    path = tempname(outside) * ".txt"
     write(path, text)
     return path
 end
@@ -169,6 +169,22 @@ Test.@testset "a file registered with its source" begin
           sort([author(orcid), author_named(organisation)])
     @test !(DataPipeline._getauthorurl(registry) in object["authors"])
     @test licences_of(object) == [("CC-BY-4.0", spdx * "CC-BY-4.0")]
+    # identify gives the data product's source, with where the file was
+    # fetched from: the second location with its hash, holding no object
+    identified = DataPipeline.identify(registry, first_file)
+    found = only(record
+                 for object in identified.objects
+                 for record in object.data_products if record.name == full)
+    @test found.source.url == found.external_object ==
+          product["external_object"]
+    @test found.source.identifier == "https://doi.org/$doi"
+    @test found.source.title == "File one $uid"
+    @test found.source.version == "3.0.0"
+    @test !found.source.primary
+    @test found.source.location == fetched_from
+    shown = sprint(show, MIME"text/plain"(), identified)
+    @test occursin("source:    https://doi.org/$doi (supplement)", shown)
+    @test occursin("fetched from: $fetched_from", shown)
 
     # What the citation says stands where the call says nothing: the
     # deposit's title, its version in full and its date
@@ -181,6 +197,13 @@ Test.@testset "a file registered with its source" begin
     @test source["primary_not_supplement"] == true
     @test isnothing(source["description"])
     @test isnothing(source["original_store"])
+    identified = DataPipeline.identify(registry, second_file)
+    found = only(record
+                 for object in identified.objects
+                 for record in object.data_products if record.name == plain)
+    @test found.source.primary && isnothing(found.source.location)
+    @test !occursin("fetched from",
+                    sprint(show, MIME"text/plain"(), identified))
     @test isempty(object_of(product)["licences"])
     @test length(object_of(product)["authors"]) == 2
 
@@ -833,12 +856,7 @@ Test.@testset "a deposit that fair pull registers from a no_file entry" begin
                                        "pull", "--local", pulling,
                                        dir = DataPipeline._fairroot(pwd()))
     said = pulled.printed * pulled.errors
-    # A fair with no such entries asks for the root they leave out, as 0.10.2
-    # does, or names the key
-    if pulled.status != 0 &&
-       (occursin("Expected key 'root'", said) || occursin("no_file", said))
-        @info "this fair has no no_file entries: not reading a deposit it registered"
-    elseif pulled.status != 0 && occursin("not a valid identifier", said)
+    if pulled.status != 0 && occursin("not a valid identifier", said)
         @info "the CLI could not check the deposit's identifier online: not reading a deposit it registered"
     else
         # The run fair run would prepare reads it through its read: entry; a

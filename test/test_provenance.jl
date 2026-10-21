@@ -35,7 +35,7 @@ citations = """
 
 outside = mktempdir()
 function file_of(text::AbstractString)
-    path = joinpath(outside, DataPipeline._randomhash() * ".txt")
+    path = tempname(outside) * ".txt"
     write(path, text)
     return path
 end

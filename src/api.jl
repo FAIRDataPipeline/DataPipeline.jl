@@ -75,13 +75,9 @@ end
 
 # What holds the local registry for a run `initialise` opens: for a recorded
 # run, the run that launched this process, or else a session of its own, as in
-# a job `fair run --ci` prepared, closed at `finalise`; a CLI with no sessions
-# holds none, and having started nothing, there is nothing to say. A
-# rehearsal's hold is the one `rehearse` opened
-function _runhold(::RecordedRun)
-    hold = _holdregistry()
-    return hold isa RegistryNotHeld ? nothing : hold
-end
+# a job `fair run --ci` prepared, closed at `finalise`. A rehearsal's hold is
+# the one `rehearse` opened
+_runhold(::RecordedRun) = _holdregistry()
 _runhold(::Rehearsal) = nothing
 
 # Open a recorded code run: register the data store, the config, the script
@@ -228,15 +224,17 @@ to. `force` does nothing without `path`. A data product with no file takes no
 
 Given a pattern instead - a name with one or more `*`, each matching one
 segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
-`era5/t2m/a/b` - return the path of a temporary directory holding a symbolic
-link to the file of every `read:` data product that matches, each recorded as
-an input (the directory itself is not), a data product with no file being
-recorded and given no link. Where the working config keeps the
-pattern's own entry, as a CLI may, a pattern that matches nothing gives an
-empty directory; where it does not, that is an error. A link is named after its data
-product with `/` replaced by `_`, plus the file's extension; the directory is
-named by the SHA-1 of the sorted list of link names and file hashes, so the
-same set of files gives the same name. The directory is removed when Julia
+`era5/t2m/a/b` - return the path of a temporary directory holding the file of
+every `read:` data product that matches, each recorded as an input (the
+directory itself is not), a data product with no file being recorded and
+given none. Each is a symbolic link to the data store's file where one can be
+made, else a hard link, else a copy, as on a Windows machine that allows no
+symbolic links. Where the working config keeps the pattern's own entry, as a
+CLI may, a pattern that matches nothing gives an empty directory; where it
+does not, that is an error. Each is named after its data product with `/`
+replaced by `_`, plus the file's extension; the directory is named by the
+SHA-1 of the sorted list of those names and the files' hashes, so the same set
+of files gives the same name. The directory is removed when Julia
 exits. A pattern takes no `path`.
 
 See also: [`canread`](@ref)
@@ -329,12 +327,7 @@ function _link_read_directory!(handle::DataRegistryHandle, pattern::String)
     directory = joinpath(mktempdir(), bytes2hex(SHA.sha1(manifest)))
     mkdir(directory)
     for (link, (_, path)) in zip(links, held)
-        try
-            symlink(path, joinpath(directory, link))
-        catch e
-            isa(e, Base.IOError) || rethrow()
-            throw(ReadWriteException("cannot make a symbolic link in $directory: $(e.msg)"))
-        end
+        _placelink(path, joinpath(directory, link))
     end
     return directory
 end
@@ -377,19 +370,21 @@ array, recording it as an input.
 function read_array!(handle::DataRegistryHandle, data_product::String,
                      component::String)
     path = _inputpath(handle, data_product, component)
-    return process_h5_file(path, false)["/$component"]
+    return process_h5_file(path)["/$component"]
 end
 
 """
     read_table!(handle, data_product, component)
 
-Read a table data product. Not yet implemented: returns `nothing`.
+Read the table that is `component` of `data_product`. Not yet implemented: it
+throws a [`ReadWriteException`](@ref) saying so. A table kept as a file of its
+own, such as a CSV, is read from the path [`link_read!`](@ref) gives.
 
 See also: [`write_table!`](@ref), [`read_array!`](@ref).
 """
 function read_table!(handle::DataRegistryHandle, data_product::String,
                      component::String)
-    return nothing
+    return throw(ReadWriteException("tables are not yet implemented, so component $(repr(component)) of $(repr(data_product)) cannot be read as one: read a table kept as a file, such as a CSV, from the path link_read!(handle, $(repr(data_product))) gives"))
 end
 
 """
@@ -732,13 +727,16 @@ end
 """
     write_table!(handle, data, data_product, component)
 
-Write a table data product. Not yet implemented: returns `nothing`.
+Write `data` as the table that is `component` of `data_product`. Not yet
+implemented: it throws a [`ReadWriteException`](@ref) saying so. A table is
+written as a file of its own, such as a CSV, to the path
+[`link_write!`](@ref) gives.
 
 See also: [`write_array!`](@ref), [`read_array!`](@ref), [`read_table!`](@ref)
 """
 function write_table!(handle::DataRegistryHandle, data, data_product::String,
                       component::String)
-    return nothing
+    return throw(ReadWriteException("tables are not yet implemented, so component $(repr(component)) of $(repr(data_product)) cannot be written as one: write the table to a file, such as a CSV, at the path link_write!(handle, $(repr(data_product))) gives"))
 end
 
 """

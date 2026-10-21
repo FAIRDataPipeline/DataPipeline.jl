@@ -116,11 +116,8 @@ release - has the new version's data product registered and its release
 record changed to the new version, where the registry allows it; where not,
 a warning says that the record keeps the old version.
 
-`fair-cli` 0.10.2 neither pushes a release record nor moves a release's data
-product properly between registries: register a release on each registry it
-belongs on, with `remote` naming the CLI's remote registry, and do not
-`fair add` its data product. While the session rehearses a run, what would be
-registered is printed, and nothing is.
+While the session rehearses a run, what would be registered is printed, and
+nothing is.
 
 # Arguments
 - `commit`: the commit to release: [`CheckedOutCommit`](@ref), the default,

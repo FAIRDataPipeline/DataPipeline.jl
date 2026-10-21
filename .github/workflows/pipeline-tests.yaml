@@ -31,10 +31,6 @@ jobs:
   pipeline-tests:
     runs-on: ${{ inputs.os }}
     continue-on-error: ${{ inputs.experimental }}
-    env:
-      # fair run echoes the script's output; Julia's Pkg prints characters the
-      # Windows runner's default cp1252 stdout cannot encode
-      PYTHONUTF8: 1
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
@@ -140,9 +136,7 @@ jobs:
         fi
         fair init --ci
         fair pull --debug examples/fdp/SEIRSconfig.yaml
-        # --dirty: a pull_request checkout is a detached merge commit on no
-        # remote branch, which fair run otherwise refuses as not level with origin
-        fair run --debug --dirty examples/fdp/SEIRSconfig.yaml
+        fair run --debug examples/fdp/SEIRSconfig.yaml
         deactivate
       shell: bash
       env:

@@ -31,8 +31,8 @@ struct Downstream <: AbstractTraceDirection end
 """
     TraceSource
 
-The source of a data product in a [`Trace`](@ref): the external object it was
-registered from.
+The source of a data product, in a [`Trace`](@ref) or a
+[`DataProductRecord`](@ref): the external object it was registered from.
 
 # Fields
 - `url`: the external object's registry URL
