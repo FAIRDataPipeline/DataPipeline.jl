@@ -3,37 +3,24 @@
 # Helpers for the test suite, which runs as the script of a `fair run` and
 # builds its own working configs from the one it was launched with.
 
+# The folder that the tests' own pipeline, which `Pkg.test(test_args =
+# ["--fair"])` runs the suite in, is kept in between runs
+_testingspace() = @get_scratch!("tests")
+
 """
     _createconfig(path; kwargs...)
 
 Write a working config holding only a `run_metadata` section at `path` under
 the data store, and return its full path, having forgotten the session's run,
 since the config is for the next one. The metadata is that of the working
-config the tests were launched with (`\$FDP_CONFIG_DIR/config.yaml`) when
-there is one, else a fixed stand-in; any keyword overrides one key of it.
+config the tests were launched with (`\$FDP_CONFIG_DIR/config.yaml`), so
+outside `fair run` there is none, which is a [`ConfigFileException`](@ref);
+any keyword overrides one key of it.
 """
 function _createconfig(path; kwargs...)
     # The run this config is for is the session's next: the tests open many
     _resetsession!()
-    launch_config = FDP_PATH_CONFIG()
-    if isfile(launch_config)
-        run_metadata = YAML.load_file(launch_config)["run_metadata"]
-    else
-        write_data_store = expanduser("~/.fair/registry/datastore/")
-        run_metadata = Dict("public" => true,
-                            "latest_commit" => "b8af9e4c5d77521c608188ba63273f959149b532",
-                            "local_repo" => pwd(),
-                            "remote_data_registry_url" => "http://localhost:8001/api/",
-                            "default_input_namespace" => "testing",
-                            "default_output_namespace" => "testing",
-                            "write_data_store" => write_data_store,
-                            "script_path" => joinpath(write_data_store,
-                                     "script.sh"),
-                            "description" => "A description",
-                            "script" => "julia examples/fdp/seirs_sim.jl",
-                            "remote_repo" => "https://github.com/FAIRDataPipeline/DataPipeline.jl.git",
-                            "local_data_registry_url" => DEFAULT_REGISTRY_URL)
-    end
+    run_metadata = _workingconfig(FDP_PATH_CONFIG())["run_metadata"]
     for (key, value) in kwargs
         run_metadata[String(key)] = value
     end
