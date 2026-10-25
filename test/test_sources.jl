@@ -1061,6 +1061,14 @@ Test.@testset "a fetch run, and a run that reads what it fetched" begin
     @test isnothing(made["external_object"])
 end
 
+# How many rows the registry holds in each table a question must leave alone
+tables = ("author", "data_product", "object", "external_object", "licence",
+          "storage_location", "namespace")
+function counts()
+    return Dict(table => entry(string(registry.url, table, "/"))["count"]
+                for table in tables)
+end
+
 Test.@testset "isregistered()" begin
     name = "sources/isregistered/file/$uid"
     deposit = "sources/isregistered/deposit/$uid"
@@ -1106,12 +1114,6 @@ Test.@testset "isregistered()" begin
                    doi = md_doi, primary = true)
     DataPipeline.finalise(handle)
 
-    # How many rows the registry holds in each table a question must leave
-    # alone
-    tables = ("author", "data_product", "object", "external_object",
-              "licence", "storage_location", "namespace")
-    counts() = Dict(table => entry(string(registry.url, table, "/"))["count"]
-                    for table in tables)
     # A rehearsal, from a job folder made like the runs' configs
     function rehearsing()
         job = dirname(DataPipeline._createconfig(joinpath(dirname(cpath),
@@ -1197,6 +1199,136 @@ Test.@testset "isregistered()" begin
     @test !DataPipeline.isregistered(elsewhere, name)
     @test DataPipeline.isregistered(elsewhere, "$inputs_namespace:$name")
     DataPipeline.finalise(elsewhere)
+end
+
+Test.@testset "isregistered() of a label in the config" begin
+    other = "isregistered_$(uid[1:8])"
+    aliased = "sources/isregistered/aliased/$uid"
+    wild = "sources/isregistered/wild/$uid"
+    of(; keywords...) = (; bibtex = "deposit", primary = true,
+                         title = "Aliased $uid", licence = "CC-BY-4.0",
+                         keywords...)
+    # A run whose config gives `aliased_label` the name `aliased`, in another
+    # namespace, at `version`; covers names under `wild`'s folder by a
+    # pattern; has `aliased` at 0.0.1 under a `read:` label and a `read:`
+    # pattern, a label in both blocks, a label whose name holds the run's
+    # uuid, and a name two `write:` patterns cover
+    function configured(version; rehearsal = false)
+        config = DataPipeline._createconfig(rehearsal ?
+                                            joinpath(dirname(cpath),
+                                                     "isregistered-label",
+                                                     "config.yaml") : cpath)
+        DataPipeline._addwrite(config, "aliased_label", "an aliased file",
+                               file_type = "txt", use_data_product = aliased,
+                               use_namespace = other, use_version = version)
+        DataPipeline._addwrite(config, "sources/isregistered/wild/*",
+                               "files under a pattern", file_type = "txt",
+                               use_version = "0.0.1")
+        DataPipeline._addread(config, "read_label", use_data_product = aliased,
+                              use_namespace = other, use_version = "0.0.1")
+        DataPipeline._addread(config, "sources/isregistered/aliased/*",
+                              use_namespace = other)
+        DataPipeline._addwrite(config, "both_label", "written, and read",
+                               file_type = "txt", use_data_product = wild,
+                               use_version = "0.0.1")
+        DataPipeline._addread(config, "both_label",
+                              use_data_product = "$aliased/never",
+                              use_namespace = other, use_version = "0.0.1")
+        DataPipeline._addwrite(config, "run_label",
+                               "a name with the run's uuid",
+                               file_type = "txt",
+                               use_data_product = "sources/isregistered/run/\${{RUN_ID}}",
+                               use_version = "0.0.1")
+        for pattern in ("sources/isregistered/two/*", "sources/isregistered/*/x")
+            DataPipeline._addwrite(config, pattern, "one of two patterns",
+                                   file_type = "txt", use_version = "0.0.1")
+        end
+        if rehearsal
+            DataPipeline._replrehearse(dirname(config))
+            handle = DataPipeline.initialise()
+        else
+            handle = DataPipeline.initialise(config, config)
+        end
+        register_citations!(handle, citations)
+        register_authors!(handle, person => orcid)
+        return handle
+    end
+
+    # Registered: `aliased` at 0.0.1, and at 0.0.2 from another release under
+    # another licence; and a file under the pattern
+    handle = configured("0.0.1")
+    link_write!(handle, "aliased_label";
+                of(path = file_of("aliased $uid\n"))...)
+    link_write!(handle, wild;
+                of(path = file_of("wild $uid\n"), title = "Wild $uid")...)
+    DataPipeline.finalise(handle)
+    handle = configured("0.0.2")
+    link_write!(handle, "aliased_label";
+                of(path = file_of("aliased again $uid\n"),
+                   release_version = "2.2", licence = "CC0-1.0")...)
+    DataPipeline.finalise(handle)
+    label(name; keywords...) = DataPipeline.ConfigDataProduct(name; keywords...)
+    first, second = of(), of(release_version = "2.2", licence = "CC0-1.0")
+
+    for rehearsal in (false, true)
+        # The label stands for the name and namespace its entry gives, which
+        # the bare name in the default namespace is not; compared at the
+        # entry's version, 0.0.1, though 0.0.2 is the highest
+        asking = configured("0.0.1"; rehearsal)
+        before, authors = counts(), deepcopy(asking.authors)
+        @test DataPipeline.isregistered(asking, label("aliased_label"))
+        @test !DataPipeline.isregistered(asking, aliased)
+        @test DataPipeline.isregistered(asking, "$other:$aliased")
+        @test DataPipeline.isregistered(asking, label("aliased_label");
+                                        first...)
+        @test !DataPipeline.isregistered(asking, label("aliased_label");
+                                         second...)
+        # A name a pattern covers, written or not
+        @test DataPipeline.isregistered(asking, label(wild))
+        @test DataPipeline.isregistered(asking, label(wild);
+                                        of(title = "Wild $uid")...)
+        @test !DataPipeline.isregistered(asking,
+                                         label("sources/isregistered/wild/never"))
+        # `read:` after `write:`: a label of its own, a name its pattern
+        # covers, and a label in both blocks, taken as written
+        @test DataPipeline.isregistered(asking, label("read_label"))
+        @test DataPipeline.isregistered(asking, label(aliased))
+        @test DataPipeline.isregistered(asking, label("both_label"))
+        # A name holding the run's uuid is never registered
+        @test !DataPipeline.isregistered(asking, label("run_label"))
+        # Refused: a label no entry covers, or two patterns cover, a pattern,
+        # and a component
+        @test_throws DataPipeline.ConfigFileException DataPipeline.isregistered(asking,
+                                                                                label("never_configured"))
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.isregistered(asking,
+                                                                                      label("sources/isregistered/two/x"))
+        @test occursin("more than one wildcard in 'write'", err.value.msg)
+        @test_throws ArgumentError DataPipeline.isregistered(asking,
+                                                             label("sources/isregistered/wild/*"))
+        @test_throws ArgumentError DataPipeline.isregistered(asking,
+                                                             label("aliased_label",
+                                                                   component = "part"))
+        @test counts() == before
+        @test asking.authors == authors
+        rehearsal ? DataPipeline.discard(asking) : DataPipeline.finalise(asking)
+
+        # At a version not registered, the highest
+        asking = configured("0.0.3"; rehearsal)
+        @test DataPipeline.isregistered(asking, label("aliased_label"))
+        @test !DataPipeline.isregistered(asking, label("aliased_label");
+                                         first...)
+        @test DataPipeline.isregistered(asking, label("aliased_label");
+                                        second...)
+        rehearsal ? DataPipeline.discard(asking) : DataPipeline.finalise(asking)
+    end
+
+    # A name holding the run's uuid is that run's, registered once it ends
+    asking = configured("0.0.1")
+    write(link_write!(asking, "run_label"),
+          "written under the run's uuid $uid\n")
+    @test !DataPipeline.isregistered(asking, label("run_label"))
+    DataPipeline.finalise(asking)
+    @test DataPipeline.isregistered(asking, label("run_label"))
 end
 
 end

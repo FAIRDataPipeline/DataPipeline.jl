@@ -694,13 +694,21 @@ end
 Return whether the registry holds `data_product`, registering and recording
 nothing. It is named as [`link_register!`](@ref) names one,
 `namespace:name@version`: the namespace by default the run's default input
-namespace, so that one a `write:` entry puts elsewhere is written in full, and
-with no version the highest.
+namespace, and with no version the highest. Or it is a
+[`ConfigDataProduct`](@ref), the label a script gives [`link_write!`](@ref)
+or `link_read!`, resolved as the run resolves it: the `write:` entry naming it,
+or the one pattern covering it, under the name its `use:` block gives and in
+its namespace, else the run's default output namespace; else the `read:`
+entry naming it, or the kept entry whose pattern covers it. Its version is the
+entry's where that version is registered, else the highest, as `link_write!`
+compares an output at [`finalise`](@ref). A label no entry covers, or several
+patterns cover, is a [`ConfigFileException`](@ref), and a component of one an
+`ArgumentError`.
 
 With no source keyword, whether anything is registered under the name, or at
-that version. With the keywords `link_register!` or [`link_write!`](@ref)
+the version a name asks for. With the keywords `link_register!` or `link_write!`
 would be given, but no file, whether registering that file would register
-nothing new: whether that version, or the highest, records the same source -
+nothing new: whether the version asked about records the same source -
 its identifier, title and release version, from the citation that `doi` or
 `bibtex` names and from `title` and `release_version` - the same authors, and
 the same licence, `licence` or `license`. `primary` must be given, as there,
@@ -716,7 +724,8 @@ false with the source, it is registered with other facts.
 
 See also: [`canread`](@ref), [`identify`](@ref)
 """
-function isregistered(handle::DataRegistryHandle, data_product::String;
+function isregistered(handle::DataRegistryHandle,
+                      data_product::Union{String, ConfigDataProduct};
                       doi::Union{Nothing, AbstractString} = nothing,
                       bibtex::Union{Nothing, AbstractString} = nothing,
                       title::Union{Nothing, AbstractString} = nothing,
@@ -729,24 +738,56 @@ function isregistered(handle::DataRegistryHandle, data_product::String;
                                           AbstractString} = nothing,
                       release_version::Union{Nothing, VersionNumber,
                                              AbstractString} = nothing)
-    occursin('*', data_product) &&
-        throw(ArgumentError("'$data_product' is a pattern: a data product is looked up by a name of its own"))
-    named = _parsedataproduct(data_product,
-                              default = handle.config["run_metadata"]["default_input_namespace"])
+    asked = _askedname(handle, data_product)
     # The source is read whether or not the name is registered, so that what
     # was said of it is checked either way
     source = _source(handle; doi, bibtex, title, primary, description,
                      original_store, licence, license, release_date,
                      release_version, authorurl = _heldauthorurl)
     registry = handle.registry
-    product = isnothing(named.version) ?
-              _latestdataproduct(registry, named.namespace, named.name) :
-              _versioneddataproduct(registry, named.namespace, named.name,
-                                    named.version)
+    product = isnothing(asked.version) ? nothing :
+              _versioneddataproduct(registry, asked.namespace, asked.name,
+                                    asked.version)
+    if isnothing(product) && (isnothing(asked.version) || asked.fallback)
+        product = _latestdataproduct(registry, asked.namespace, asked.name)
+    end
     isnothing(product) && return false
     isnothing(source) && return true
     object = _getentry(registry, URIs.URI(product["object"]))
     return _recordssource(registry, product, object, source)
+end
+
+# The registry name `isregistered` asks about, as `(namespace, name, version,
+# fallback)`: a version a name asks for must be registered, where one a config
+# entry gives falls back to the highest, as `link_write!` compares an output
+function _askedname(handle::DataRegistryHandle, data_product::String)
+    occursin('*', data_product) &&
+        throw(ArgumentError("'$data_product' is a pattern: a data product is looked up by a name of its own"))
+    named = _parsedataproduct(data_product,
+                              default = handle.config["run_metadata"]["default_input_namespace"])
+    return (namespace = named.namespace, name = named.name,
+            version = named.version, fallback = false)
+end
+function _askedname(handle::DataRegistryHandle, target::ConfigDataProduct)
+    label = target.data_product
+    isnothing(target.component) ||
+        throw(ArgumentError("'$label' is asked about with its component '$(target.component)', which is not registered apart from its data product: ask about the data product"))
+    occursin('*', label) &&
+        throw(ArgumentError("'$label' is a pattern, which names no single data product: ask about the names it matches"))
+    written = _writeentry(handle, label)
+    if !isnothing(written)
+        version = get(get(written.entry, "use", Dict()), "version", nothing)
+        return (namespace = _writenamespace(handle, written.entry),
+                name = replace(written.name,
+                               RUN_ID_PLACEHOLDER => handle.code_run_uuid),
+                version = isnothing(version) ? nothing : string(version),
+                fallback = true)
+    end
+    read = _readentry(handle, label)
+    isnothing(read) &&
+        throw(ConfigFileException("'$label' not found in 'write' or 'read' - check config file."))
+    return (namespace = read.namespace, name = read.name,
+            version = read.version, fallback = true)
 end
 
 """

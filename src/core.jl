@@ -263,7 +263,9 @@ is in the working config's `read:` or `write:` section (the name passed to
 [`link_read!`](@ref), [`link_write!`](@ref) and the `read_*`/`write_*`
 functions), and optionally one named `component` of it. Resolved at
 [`finalise`](@ref), so it may name an output that is not yet written. A bare
-`String` given to `raise_issue!` means this target.
+`String` given to `raise_issue!` means this target. Given to
+[`isregistered`](@ref), with no component, it asks about the data product the
+label stands for.
 """
 struct ConfigDataProduct <: AbstractIssueTarget
     data_product::String

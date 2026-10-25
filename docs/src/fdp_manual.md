@@ -209,7 +209,8 @@ then stop before a code run is registered:
 ```julia
 using DataPipeline
 nothing_to_fetch = DataPipeline.rehearse() do handle
-    return DataPipeline.isregistered(handle, "my_namespace:era5/t2m/2020",
+    extract = DataPipeline.ConfigDataProduct("era5/t2m/2020")
+    return DataPipeline.isregistered(handle, extract,
                                      doi = "10.24381/cds.f17050d7",
                                      primary = false,
                                      title = "ERA5 2m temperature, 2020",
@@ -221,8 +222,10 @@ handle = DataPipeline.initialise()
 ```
 
 A name is spelled as `link_register!` spells it, its namespace by default the
-run's default input namespace, so a file that a `write:` entry puts in another
-namespace is named with it.
+run's default input namespace. A file that `link_write!` writes is asked about,
+as here, by the label `link_write!` is given, as a
+[`DataPipeline.ConfigDataProduct`](@ref): the working config's `write:` entry
+says what it is registered as, and in which namespace.
 
 A deposit may instead be registered by `fair pull` from a `register:` entry with
 `no_file: true`, or by `link_register!` in an earlier run. Either way a later
