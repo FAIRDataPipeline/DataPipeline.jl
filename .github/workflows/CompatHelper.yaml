@@ -20,7 +20,7 @@ jobs:
         julia-version:
           - '1'
         arch:
-          - x86
+          - x64
         os:
           - ubuntu-latest
     steps:
