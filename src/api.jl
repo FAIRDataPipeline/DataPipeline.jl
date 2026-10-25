@@ -685,6 +685,71 @@ function link_register!(handle::DataRegistryHandle, data_product::String;
 end
 
 """
+    isregistered(handle, data_product; doi = nothing, bibtex = nothing,
+                 title = nothing, primary = nothing, description = nothing,
+                 original_store = nothing, licence = nothing,
+                 license = nothing, release_date = nothing,
+                 release_version = nothing)
+
+Return whether the registry holds `data_product`, registering and recording
+nothing. It is named as [`link_register!`](@ref) names one,
+`namespace:name@version`: the namespace by default the run's default input
+namespace, so that one a `write:` entry puts elsewhere is written in full, and
+with no version the highest.
+
+With no source keyword, whether anything is registered under the name, or at
+that version. With the keywords `link_register!` or [`link_write!`](@ref)
+would be given, but no file, whether registering that file would register
+nothing new: whether that version, or the highest, records the same source -
+its identifier, title and release version, from the citation that `doi` or
+`bibtex` names and from `title` and `release_version` - the same authors, and
+the same licence, `licence` or `license`. `primary` must be given, as there,
+and is not compared; nor are `description`, `release_date` and
+`original_store`, which the registry keeps as a first registration said them;
+nor are the file's bytes. An author the registry has not got is not
+registered, and makes the answer false, as registering would add one. A `doi`
+with no citation is looked up at `doi.org` as the link calls look it up.
+
+So a script can ask before it fetches anything whether there is anything to
+fetch, and why: false by the name, nothing is registered; true by the name and
+false with the source, it is registered with other facts.
+
+See also: [`canread`](@ref), [`identify`](@ref)
+"""
+function isregistered(handle::DataRegistryHandle, data_product::String;
+                      doi::Union{Nothing, AbstractString} = nothing,
+                      bibtex::Union{Nothing, AbstractString} = nothing,
+                      title::Union{Nothing, AbstractString} = nothing,
+                      primary::Union{Nothing, Bool} = nothing,
+                      description::Union{Nothing, AbstractString} = nothing,
+                      original_store::Union{Nothing, AbstractString} = nothing,
+                      licence::Union{Nothing, AbstractString} = nothing,
+                      license::Union{Nothing, AbstractString} = nothing,
+                      release_date::Union{Nothing, Date, DateTime,
+                                          AbstractString} = nothing,
+                      release_version::Union{Nothing, VersionNumber,
+                                             AbstractString} = nothing)
+    occursin('*', data_product) &&
+        throw(ArgumentError("'$data_product' is a pattern: a data product is looked up by a name of its own"))
+    named = _parsedataproduct(data_product,
+                              default = handle.config["run_metadata"]["default_input_namespace"])
+    # The source is read whether or not the name is registered, so that what
+    # was said of it is checked either way
+    source = _source(handle; doi, bibtex, title, primary, description,
+                     original_store, licence, license, release_date,
+                     release_version, authorurl = _heldauthorurl)
+    registry = handle.registry
+    product = isnothing(named.version) ?
+              _latestdataproduct(registry, named.namespace, named.name) :
+              _versioneddataproduct(registry, named.namespace, named.name,
+                                    named.version)
+    isnothing(product) && return false
+    isnothing(source) && return true
+    object = _getentry(registry, URIs.URI(product["object"]))
+    return _recordssource(registry, product, object, source)
+end
+
+"""
     write_array!(handle, data, data_product, component, description;
                 supersede = false)
 

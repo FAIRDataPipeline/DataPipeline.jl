@@ -199,6 +199,31 @@ the place of what it says. A citation given as BibTeX by
 with no network. Run again, a fetch run registers nothing new for a file that
 has not changed.
 
+A fetch run can ask before it fetches. `DataPipeline.isregistered(handle, name)`
+says whether anything is registered under a name, and given the source keywords
+the link call would be given, but no file, whether registering the file would
+register nothing new - the same source, authors and licence. In a rehearsal in
+a block (see [Rehearsing a run](@ref)), a fetch run with nothing to fetch can
+then stop before a code run is registered:
+
+```julia
+using DataPipeline
+nothing_to_fetch = DataPipeline.rehearse() do handle
+    return DataPipeline.isregistered(handle, "my_namespace:era5/t2m/2020",
+                                     doi = "10.24381/cds.f17050d7",
+                                     primary = false,
+                                     title = "ERA5 2m temperature, 2020",
+                                     licence = "CC-BY-4.0",
+                                     release_version = "1.0.0")
+end
+nothing_to_fetch && exit()
+handle = DataPipeline.initialise()
+```
+
+A name is spelled as `link_register!` spells it, its namespace by default the
+run's default input namespace, so a file that a `write:` entry puts in another
+namespace is named with it.
+
 A deposit may instead be registered by `fair pull` from a `register:` entry with
 `no_file: true`, or by `link_register!` in an earlier run. Either way a later
 run is offered it by a `read:` entry, and `link_read!` records it as an input
@@ -210,6 +235,7 @@ Registering a source needs `data-registry` v1.4.0 or later.
 register_citations!
 register_authors!
 link_register!
+DataPipeline.isregistered
 ```
 
 ## Raising issues

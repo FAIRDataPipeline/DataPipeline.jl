@@ -13,6 +13,10 @@
     the script's `initialise()` opened the rehearsal and recorded nothing.
   - A rehearsal deletes only a job folder it had `fair` prepare: one given by
     path, such as a `fair run --ci` job, is kept.
+  - `DataPipeline.isregistered(handle, name)` says whether a data product is
+    registered, and given the source keywords of `link_register!` but no file,
+    whether registering it would register nothing new: a fetch run can ask
+    before it fetches.
 
 - v0.57.1
   - `fair"..."` is exported, so that after `using DataPipeline` the CLI runs from

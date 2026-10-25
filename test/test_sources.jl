@@ -1061,4 +1061,142 @@ Test.@testset "a fetch run, and a run that reads what it fetched" begin
     @test isnothing(made["external_object"])
 end
 
+Test.@testset "isregistered()" begin
+    name = "sources/isregistered/file/$uid"
+    deposit = "sources/isregistered/deposit/$uid"
+    looked = "sources/isregistered/looked/$uid"
+    of(; keywords...) = (; bibtex = "deposit", primary = true,
+                         title = "Asked about $uid", licence = "CC-BY-4.0",
+                         keywords...)
+    # The deposit's DOI cited with an author the registry has not got
+    reauthored = """
+    @dataset{reauthored,
+      author = {{Unregistered $uid}, Ada},
+      title = {A deposit of several files $uid},
+      date = {2021-03-04},
+      doi = {$doi},
+      version = {2.1}
+    }
+    """
+    # A DOI's metadata, as a lookup would read it, its creator with an ORCID
+    md_doi = "https://doi.org/10.5555/isregistered.$uid"
+    known, unknown = "$orcid-known", "$orcid-unknown"
+    function metadata(identifier)
+        record = Dict("doi" => "10.5555/isregistered.$uid",
+                      "titles" => [Dict("title" => "Looked up $uid")],
+                      "creators" => [
+                          Dict("givenName" => "Ada",
+                               "familyName" => "Looked $uid",
+                               "nameIdentifiers" =>
+                                   [Dict("nameIdentifier" => identifier,
+                                         "nameIdentifierScheme" => "ORCID")])],
+                      "dates" =>
+                          [Dict("date" => "2024-01-02",
+                                "dateType" => "Issued")])
+        return DataPipeline._datacitecitation(record, md_doi)
+    end
+
+    # Registered: a file and a deposit with no file from the citation, and a
+    # file from the DOI's metadata, which registers its creator's ORCID
+    handle = offering()
+    link_register!(handle, name; of(path = file_of("asked about $uid\n"))...)
+    link_register!(handle, deposit, bibtex = "deposit", primary = true)
+    handle.doi_lookups[md_doi] = metadata(known)
+    link_register!(handle, looked, path = file_of("looked up $uid\n"),
+                   doi = md_doi, primary = true)
+    DataPipeline.finalise(handle)
+
+    # How many rows the registry holds in each table a question must leave
+    # alone
+    tables = ("author", "data_product", "object", "external_object",
+              "licence", "storage_location", "namespace")
+    counts() = Dict(table => entry(string(registry.url, table, "/"))["count"]
+                    for table in tables)
+    # A rehearsal, from a job folder made like the runs' configs
+    function rehearsing()
+        job = dirname(DataPipeline._createconfig(joinpath(dirname(cpath),
+                                                          "isregistered",
+                                                          "config.yaml")))
+        DataPipeline._replrehearse(job)
+        rehearsal = DataPipeline.initialise()
+        register_citations!(rehearsal, citations)
+        register_authors!(rehearsal, person => orcid)
+        return rehearsal
+    end
+
+    # Asked in a recorded run and in a rehearsal alike
+    for make in (offering, rehearsing)
+        asking = make()
+        register_citations!(asking, reauthored)
+        before, authors = counts(), deepcopy(asking.authors)
+
+        # By name: anything registered under it, or at that version, in the
+        # run's default input namespace unless named
+        @test DataPipeline.isregistered(asking, name)
+        @test DataPipeline.isregistered(asking, "$inputs_namespace:$name")
+        @test DataPipeline.isregistered(asking, "$name@0.0.1")
+        @test !DataPipeline.isregistered(asking, "$name@0.0.2")
+        @test !DataPipeline.isregistered(asking, "$name/never")
+        @test !DataPipeline.isregistered(asking, "never_$(uid[1:8]):$name")
+        @test DataPipeline.isregistered(asking, deposit)
+
+        # With the source: the same identifier, title, release version,
+        # authors and licence; what the registry keeps from the first
+        # registration, and the bytes, not compared
+        @test DataPipeline.isregistered(asking, name; of()...)
+        @test DataPipeline.isregistered(asking, "$name@0.0.1"; of()...)
+        @test DataPipeline.isregistered(asking, name;
+                                        of(description = "said otherwise $uid",
+                                           primary = false,
+                                           release_date = "2000-01-01",
+                                           original_store = "https://elsewhere-$uid.org/f.txt")...)
+        @test DataPipeline.isregistered(asking, deposit, bibtex = "deposit",
+                                        primary = true)
+        @test !DataPipeline.isregistered(asking, name;
+                                         of(title = "Another title $uid")...)
+        @test !DataPipeline.isregistered(asking, name;
+                                         of(release_version = "9.9")...)
+        @test !DataPipeline.isregistered(asking, name;
+                                         of(licence = "CC0-1.0")...)
+        @test !DataPipeline.isregistered(asking, name; of(bibtex = "page")...)
+        @test !DataPipeline.isregistered(asking, "$name/never"; of()...)
+        # An author the registry has not got, by name or by an ORCID the
+        # metadata gives, makes it false and is not registered; the ORCID it
+        # has makes it true
+        @test !DataPipeline.isregistered(asking, name;
+                                         of(bibtex = "reauthored")...)
+        asking.doi_lookups[md_doi] = metadata(unknown)
+        @test !DataPipeline.isregistered(asking, looked, doi = md_doi,
+                                         primary = true)
+        asking.doi_lookups[md_doi] = metadata(known)
+        @test DataPipeline.isregistered(asking, looked, doi = md_doi,
+                                        primary = true)
+        @test isempty(DataPipeline._getentries(registry, "author",
+                                               Dict("identifier" => unknown)))
+        @test isempty(DataPipeline._getentries(registry, "author",
+                                               Dict("name" => "Ada Unregistered $uid")))
+        @test counts() == before
+        @test asking.authors == authors
+
+        # Refused as the link calls refuse: a pattern, a source not named, a
+        # source with no `primary`
+        @test_throws ArgumentError DataPipeline.isregistered(asking,
+                                                             "sources/*/$uid")
+        @test_throws ArgumentError DataPipeline.isregistered(asking, name,
+                                                             title = "Untold $uid")
+        @test_throws ArgumentError DataPipeline.isregistered(asking, name,
+                                                             bibtex = "deposit")
+        asking isa DataPipeline.DataRegistryHandle{DataPipeline.RecordedRun} ?
+        DataPipeline.finalise(asking) : DataPipeline.discard(asking)
+    end
+
+    # A run whose default input namespace is another looks there by default
+    config = DataPipeline._createconfig(cpath,
+                                        default_input_namespace = "elsewhere_$(uid[1:8])")
+    elsewhere = DataPipeline.initialise(config, config)
+    @test !DataPipeline.isregistered(elsewhere, name)
+    @test DataPipeline.isregistered(elsewhere, "$inputs_namespace:$name")
+    DataPipeline.finalise(elsewhere)
+end
+
 end

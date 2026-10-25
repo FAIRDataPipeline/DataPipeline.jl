@@ -272,18 +272,26 @@ Return the registry entry of a data product, or throw if there is none.
 """
 function _finddataproduct(registry::RegistryEndpoint, namespace::String,
                           data_product::String, version::String)
-    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
-    dp_entry = isnothing(namespace_id) ? nothing :
-               _getentry(registry, "data_product",
-                         Dict("name" => data_product,
-                              "namespace" => namespace_id,
-                              "version" => version))
+    dp_entry = _versioneddataproduct(registry, namespace, data_product,
+                                     version)
     if isnothing(dp_entry)
         msg = string("no data products found matching: ", data_product,
                      " :-(ns: ", namespace, " - v: ", version, ")")
         throw(ReadWriteException(msg))
     end
     return dp_entry
+end
+
+# The registry entry of a data product at a version, or `nothing` where there
+# is none
+function _versioneddataproduct(registry::RegistryEndpoint, namespace::String,
+                               data_product::String, version::String)
+    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
+    isnothing(namespace_id) && return nothing
+    return _getentry(registry, "data_product",
+                     Dict("name" => data_product,
+                          "namespace" => namespace_id,
+                          "version" => version))
 end
 
 """
