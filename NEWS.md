@@ -5,6 +5,14 @@
     `examples/fdp/SEIRSModel.jl`, which `seirs_sim.jl` includes: a script that
     has `using DataPipeline.SeirsModel` includes that file instead. Plots and
     DataFrames are no longer dependencies.
+  - `DataPipeline.rehearse() do handle ... end` rehearses the run `fair run`
+    launched the script for, as a check, and discards the rehearsal as the block
+    ends, so that `initialise()` then opens that run; given a path, a block
+    rehearses that.
+  - Under `fair run`, `rehearse(path)` is an error naming the block form, where
+    the script's `initialise()` opened the rehearsal and recorded nothing.
+  - A rehearsal deletes only a job folder it had `fair` prepare: one given by
+    path, such as a `fair run --ci` job, is kept.
 
 - v0.57.1
   - `fair"..."` is exported, so that after `using DataPipeline` the CLI runs from

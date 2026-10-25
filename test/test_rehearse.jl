@@ -4,6 +4,7 @@ module TestRehearse
 
 using DataPipeline
 using Dates
+using Logging
 using Test
 
 const URIs = DataPipeline.URIs
@@ -92,7 +93,7 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     before = counts()
 
     # The session holds the rehearsal from here: its folders, no handle yet
-    @test DataPipeline.rehearse(job, outputs = outputs) == job
+    @test DataPipeline._replrehearse(job, outputs = outputs) == job
     @test current().job == job
     @test current().mode.outputs == outputs
     @test isnothing(current().handle)
@@ -154,7 +155,7 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     @test !isfile(copied)
     @test counts() == before
     @test current().ended
-    # The job folder is not under jobs/, so it stays
+    # The job folder was given, not prepared, so it stays
     @test isfile(working)
 
     # A finalised handle cannot be finalised again, and the rehearsal that
@@ -190,7 +191,7 @@ Test.@testset "a rehearsal writing a version that exists" begin
         DataPipeline._addwrite(working, "placed", "a new file",
                                file_type = "txt", use_data_product = placed,
                                use_version = "0.0.1")
-        DataPipeline.rehearse(job, outputs = mktempdir())
+        DataPipeline._replrehearse(job, outputs = mktempdir())
         handle = DataPipeline.initialise()
         write(link_write!(handle, "placed"), "placed $name $uid\n")
         return handle
@@ -229,7 +230,7 @@ Test.@testset "a rehearsal repeated into the same folder replaces its files" beg
     outputs = mktempdir()
     placed = joinpath(outputs, namespace, whole, "0.0.1.txt")
     for text in ("first $uid\n", "second $uid\n")
-        DataPipeline.rehearse(job, outputs = outputs)
+        DataPipeline._replrehearse(job, outputs = outputs)
         handle = DataPipeline.initialise()
         write(link_write!(handle, whole), text)
         @test DataPipeline.finalise(handle) == outputs
@@ -245,7 +246,7 @@ Test.@testset "discard()" begin
                            file_type = "txt", use_version = "0.0.1")
     outputs = mktempdir()
     before = counts()
-    DataPipeline.rehearse(job, outputs = outputs)
+    DataPipeline._replrehearse(job, outputs = outputs)
     handle = DataPipeline.initialise()
     path = link_write!(handle, whole)
     write(path, "a discarded file $uid\n")
@@ -273,22 +274,22 @@ Test.@testset "a second rehearse(), and restart = true" begin
     other = job_folder("restart-other")
 
     # Prepared but never opened: a second rehearse refuses, and with restart
-    # discards it - its job folder, not being under jobs/, stays
-    DataPipeline.rehearse(job)
-    err = @test_throws ReadWriteException DataPipeline.rehearse(other)
+    # discards it - its job folder, given and not prepared, stays
+    DataPipeline._replrehearse(job)
+    err = @test_throws ReadWriteException DataPipeline._replrehearse(other)
     @test occursin(job, err.value.msg)
     @test occursin("restart = true", err.value.msg)
     @test current().job == job
-    @test DataPipeline.rehearse(other, restart = true) == other
+    @test DataPipeline._replrehearse(other, restart = true) == other
     @test current().job == other
     @test isfile(working)
 
     # Opened and written to: restart removes what was written
-    DataPipeline.rehearse(job, restart = true)
+    DataPipeline._replrehearse(job, restart = true)
     handle = DataPipeline.initialise()
     path = link_write!(handle, whole)
     write(path, "restarted $uid\n")
-    @test DataPipeline.rehearse(other, restart = true) == other
+    @test DataPipeline._replrehearse(other, restart = true) == other
     @test !isfile(path)
     @test isempty(handle.outputs)
     @test isnothing(current().handle)
@@ -303,7 +304,7 @@ Test.@testset "initialise() once per rehearsal" begin
     DataPipeline._addwrite(working, whole, "a file written once",
                            file_type = "txt", use_version = "0.0.1")
     outputs = mktempdir()
-    DataPipeline.rehearse(job, outputs = outputs)
+    DataPipeline._replrehearse(job, outputs = outputs)
     handle = DataPipeline.initialise()
     path = link_write!(handle, whole)
     write(path, "once $uid\n")
@@ -319,7 +320,7 @@ Test.@testset "initialise() once per rehearsal" begin
     # restart
     err = @test_throws ReadWriteException DataPipeline.initialise()
     @test occursin("rehearse again", err.value.msg)
-    DataPipeline.rehearse(job, outputs = outputs)
+    DataPipeline._replrehearse(job, outputs = outputs)
     again = DataPipeline.initialise()
     @test current().handle === again
     write(link_write!(again, whole), "again $uid\n")
@@ -332,24 +333,24 @@ Test.@testset "what rehearse() accepts" begin
     # A refused call leaves the session's run, ended by the test before, as
     # it is
     before = current()
-    @test_throws ArgumentError DataPipeline.rehearse(joinpath(outside,
-                                                              "nowhere"))
+    @test_throws ArgumentError DataPipeline._replrehearse(joinpath(outside,
+                                                                   "nowhere"))
     # A folder with no config.yaml
-    @test_throws ArgumentError DataPipeline.rehearse(outside)
+    @test_throws ArgumentError DataPipeline._replrehearse(outside)
     # A user config outside any project, so that fair cannot prepare it
     user = joinpath(outside, "user.yaml")
     DataPipeline.YAML.write_file(user,
                                  Dict("run_metadata" =>
                                           Dict("description" => "A user config",
                                                "script" => "julia script.jl")))
-    err = @test_throws ArgumentError DataPipeline.rehearse(user)
+    err = @test_throws ArgumentError DataPipeline._replrehearse(user)
     @test occursin("fair init", err.value.msg)
     @test current() === before
     # A working config is taken as its folder, and the default outputs folder
     # is a new temporary one. That it outlives the session (made with
     # `cleanup = false`) is not tested here: it would take a second process
     job = job_folder("config")
-    @test DataPipeline.rehearse(joinpath(job, "config.yaml")) == job
+    @test DataPipeline._replrehearse(joinpath(job, "config.yaml")) == job
     @test current().job == job
     folder = current().mode.outputs
     @test isdir(folder)
@@ -393,7 +394,7 @@ Test.@testset "rehearse() from a user config, through fair" begin
     staged() = isfile(staging) ? read(staging, String) : ""
     staged_before = staged()
     # fair prepares the job under the data store's jobs/
-    job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
+    job = DataPipeline._replrehearse(user, outputs = outputs, local_only = true)
     @test staged() == staged_before
     @test isdir(job)
     @test !startswith(relpath(job, joinpath(datastore, "jobs")), "..")
@@ -406,18 +407,26 @@ Test.@testset "rehearse() from a user config, through fair" begin
     @test DataPipeline.finalise(handle) == outputs
     @test read(joinpath(outputs, "testing", name, "0.0.1.txt"), String) ==
           "rehearsed through fair $uid\n"
-    # The job folder, being under jobs/, is deleted
+    # The job folder fair prepared is deleted
     @test !isdir(job)
     @test current().ended
     @test counts() == before
 
-    # Prepared twice: restart deletes the first job folder, under jobs/
-    first = DataPipeline.rehearse(user, local_only = true)
-    second = DataPipeline.rehearse(user, local_only = true, restart = true)
+    # Prepared twice: restart deletes the first job folder fair prepared
+    first = DataPipeline._replrehearse(user, local_only = true)
+    second = DataPipeline._replrehearse(user, local_only = true, restart = true)
     @test !isdir(first)
     @test isdir(second)
     DataPipeline._discardcurrent()
     @test !isdir(second)
+    @test isnothing(current())
+
+    # In a block, the job folder fair prepared goes as the block ends
+    third = DataPipeline.rehearse(user, local_only = true) do handle
+        @test isfile(link_read!(handle, "parameters"))
+        return current().job
+    end
+    @test !isdir(third)
     @test isnothing(current())
     rm(user)
 end
@@ -428,7 +437,7 @@ Test.@testset "rehearse() of a script in another shell, through fair" begin
                        script = "println(\"a rehearsed Julia script $uid\")\n")
     outputs = mktempdir()
     # fair writes the script as script.jl, which the working config names
-    job = DataPipeline.rehearse(user, outputs = outputs, local_only = true)
+    job = DataPipeline._replrehearse(user, outputs = outputs, local_only = true)
     @test isfile(joinpath(job, "script.jl"))
     handle = DataPipeline.initialise()
     write(link_write!(handle, name), "rehearsed in another shell $uid\n")
@@ -448,8 +457,8 @@ Test.@testset "rehearse() through the package's copy of fair" begin
     outputs = mktempdir()
     @test DataPipeline.set_cli!(copy) == copy
     try
-        job = DataPipeline.rehearse(user, outputs = outputs,
-                                    local_only = true)
+        job = DataPipeline._replrehearse(user, outputs = outputs,
+                                         local_only = true)
         @test isfile(joinpath(job, "config.yaml"))
         handle = DataPipeline.initialise()
         write(link_write!(handle, name), "rehearsed through the copy $uid\n")
@@ -485,6 +494,154 @@ function printed_by(f::Function)
     end
 end
 
+Test.@testset "rehearse() in a block" begin
+    # Made first: making a job folder forgets the session's run
+    job = job_folder("block")
+    working = joinpath(job, "config.yaml")
+    written = "rehearse/block/$uid"
+    DataPipeline._addwrite(working, written, "a file written in a block",
+                           file_type = "txt", use_version = "0.0.1")
+    commit = replace(launch.config["run_metadata"]["latest_commit"],
+                     r"-dirty$" => "")
+    dirty = dirname(DataPipeline._createconfig(joinpath("coderun", datetime,
+                                                        "rehearse-block-dirty",
+                                                        "config.yaml"),
+                                               latest_commit = commit *
+                                                               "-dirty"))
+    unworking = mktempdir()
+    write(joinpath(unworking, "config.yaml"),
+          "run_metadata:\n  description: not a working config\n")
+    before = counts()
+
+    # Under fair run the plain form is refused, naming the block, and the
+    # block runs: its handle a rehearsal's, its value returned, what it wrote
+    # removed, the session empty after it, the job folder given kept, and the
+    # outputs folder made for it gone
+    withenv("FDP_SESSION" => "the-run") do
+        err = @test_throws ReadWriteException DataPipeline.rehearse(job)
+        @test occursin("rehearse() do handle", err.value.msg)
+        @test isnothing(current())
+        path = Ref("")
+        folder = Ref("")
+        value = DataPipeline.rehearse(job) do handle
+            @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
+            @test current().inblock && current().handle === handle
+            folder[] = handle.mode.outputs
+            path[] = link_write!(handle, written)
+            write(path[], "written in a block $uid\n")
+            return 42
+        end
+        @test value == 42
+        @test !isfile(path[])
+        @test isnothing(current())
+        @test isfile(working)
+        @test !isdir(folder[])
+    end
+
+    # A block prints one line, where a plain rehearsal says what the run
+    # after it says again: the warning of uncommitted changes, the config read
+    # and the repository
+    DataPipeline._replrehearse(dirty)
+    # Each check of the logs is outside the capture of what is printed, which
+    # would otherwise hold its report of a failure
+    plain = @test_logs((:warn, r"uncommitted changes"), match_mode=:any,
+                       printed_by(() -> DataPipeline.discard(DataPipeline.initialise())))
+    @test occursin("processing config file", plain)
+    @test occursin("rehearsal: nothing is registered", plain)
+    said = @test_logs(min_level=Logging.Warn,
+                      printed_by(() -> DataPipeline.rehearse(_ -> nothing,
+                                                             dirty)))
+    @test count('\n', said) == 1
+    @test occursin("checking the run prepared in", said)
+
+    # What the block throws is passed on, what it wrote removed
+    path = Ref("")
+    err = @test_throws ErrorException DataPipeline.rehearse(job) do handle
+        path[] = link_write!(handle, written)
+        write(path[], "thrown in a block $uid\n")
+        return error("the block failed $uid")
+    end
+    @test occursin("the block failed", err.value.msg)
+    @test !isfile(path[])
+    @test isnothing(current())
+
+    # A handle the block finalised or discarded itself, and an outputs folder
+    # given, are left as they are
+    given = mktempdir()
+    DataPipeline.rehearse(job, outputs = given) do handle
+        write(link_write!(handle, written), "finalised in a block $uid\n")
+        return DataPipeline.finalise(handle)
+    end
+    @test read(joinpath(given, namespace, written, "0.0.1.txt"), String) ==
+          "finalised in a block $uid\n"
+    @test isnothing(current())
+    @test isnothing(DataPipeline.rehearse(DataPipeline.discard, job))
+    @test isnothing(current())
+
+    # Refused while a rehearsal is in progress, unless restarting, which
+    # discards it
+    DataPipeline._replrehearse(job)
+    err = @test_throws ReadWriteException DataPipeline.rehearse(_ -> nothing,
+                                                                job)
+    @test occursin("restart = true", err.value.msg)
+    @test DataPipeline.rehearse(_ -> 1, job, restart = true) == 1
+    @test isnothing(current())
+
+    # With no path, there must be a job FDP_CONFIG_DIR names
+    withenv("FDP_CONFIG_DIR" => nothing) do
+        err = @test_throws ArgumentError DataPipeline.rehearse(_ -> nothing)
+        @test occursin("FDP_CONFIG_DIR", err.value.msg)
+    end
+    # A folder holding no working config fails in the block's initialise, and
+    # leaves the session empty and the folder given as it was
+    @test_throws ConfigFileException DataPipeline.rehearse(_ -> nothing,
+                                                           unworking)
+    @test isnothing(current())
+    @test isfile(joinpath(unworking, "config.yaml"))
+    @test counts() == before
+
+    # After the block, initialise() opens the run the script was launched
+    # for, as under fair run; and once it is recorded, no block rehearses
+    withenv("FDP_SESSION" => "the-run", "FDP_CONFIG_DIR" => job) do
+        @test DataPipeline.rehearse(handle -> handle.config_dir) == job
+        run = DataPipeline.initialise()
+        @test run isa DataPipeline.DataRegistryHandle{RecordedRun}
+        @test run.config_dir == job
+        DataPipeline.finalise(run)
+        err = @test_throws ReadWriteException DataPipeline.rehearse(_ -> nothing)
+        @test occursin("has recorded a code run", err.value.msg)
+    end
+    DataPipeline._resetsession!()
+end
+
+Test.@testset "a job folder given by path is kept, under the store's jobs/ too" begin
+    # Made first: making a job folder forgets the session's run
+    other = job_folder("kept-other")
+    jobs = joinpath(datastore, "jobs")
+    mkpath(jobs)
+    given = tempname(jobs)
+    cp(job_folder("kept"), given)
+    # Ended by finalise, by discard, by a restart before a handle is opened
+    # and after, and by a block
+    DataPipeline._replrehearse(given)
+    DataPipeline.finalise(DataPipeline.initialise())
+    @test isdir(given)
+    DataPipeline._replrehearse(given)
+    DataPipeline.discard(DataPipeline.initialise())
+    @test isdir(given)
+    DataPipeline._replrehearse(given)
+    DataPipeline._replrehearse(other, restart = true)
+    @test isdir(given)
+    DataPipeline._replrehearse(given, restart = true)
+    DataPipeline.initialise()
+    DataPipeline._replrehearse(other, restart = true)
+    @test isdir(given)
+    DataPipeline._discardcurrent()
+    @test isnothing(DataPipeline.rehearse(_ -> nothing, given))
+    @test isdir(given)
+    rm(given, recursive = true)
+end
+
 @static if !Sys.iswindows()
     Test.@testset "how rehearse() finds fair" begin
         # Stand-ins for fair: one printing a prepared job folder as fair does,
@@ -509,7 +666,7 @@ end
         # only a fair that runs
         @test DataPipeline.set_cli!(fake) == fake
         try
-            @test DataPipeline.rehearse(user) == prepared
+            @test DataPipeline._replrehearse(user) == prepared
             DataPipeline._discardcurrent()
             @test_throws ArgumentError DataPipeline.set_cli!(failing)
             @test_throws ArgumentError DataPipeline.set_cli!(joinpath(fakebin,
@@ -518,13 +675,13 @@ end
             # One that exits 0 printing no folder passes set_cli!, and
             # prepares no job
             DataPipeline.set_cli!(silent)
-            err = @test_throws ReadWriteException DataPipeline.rehearse(user)
+            err = @test_throws ReadWriteException DataPipeline._replrehearse(user)
             @test occursin("no job folder", err.value.msg)
             # The record of a file since gone
             DataPipeline.set_cli!(fake)
             mv(fake, fake * ".gone")
             try
-                err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                err = @test_throws ArgumentError DataPipeline._replrehearse(user)
                 @test occursin("set_cli!", err.value.msg)
             finally
                 mv(fake * ".gone", fake)
@@ -536,7 +693,7 @@ end
 
         # Then the path
         withenv("PATH" => fakebin) do
-            @test DataPipeline.rehearse(user) == prepared
+            @test DataPipeline._replrehearse(user) == prepared
             DataPipeline._discardcurrent()
         end
 
@@ -548,7 +705,7 @@ end
         mv(copy, aside)
         try
             withenv("PATH" => "") do
-                err = @test_throws ArgumentError DataPipeline.rehearse(user)
+                err = @test_throws ArgumentError DataPipeline._replrehearse(user)
                 @test occursin("install_cli!", err.value.msg)
             end
         finally
@@ -567,7 +724,7 @@ end
                                                   "cli" => failing,
                                                   force = true)
         try
-            err = @test_throws ReadWriteException DataPipeline.rehearse(user)
+            err = @test_throws ReadWriteException DataPipeline._replrehearse(user)
             @test occursin("no such thing", err.value.msg)
         finally
             DataPipeline.set_cli!(nothing)
@@ -578,7 +735,7 @@ end
         cp(user, elsewhere)
         DataPipeline.set_cli!(fake)
         try
-            err = @test_throws ArgumentError DataPipeline.rehearse(elsewhere)
+            err = @test_throws ArgumentError DataPipeline._replrehearse(elsewhere)
             @test occursin("fair init", err.value.msg)
         finally
             DataPipeline.set_cli!(nothing)
@@ -619,7 +776,7 @@ end
             withenv("FDP_SESSION" => nothing) do
                 # Opened by rehearse in this process's name, closed by
                 # finalise
-                DataPipeline.rehearse(folder["main"])
+                DataPipeline._replrehearse(folder["main"])
                 @test calls()[end] == opening
                 @test current().hold isa DataPipeline.RegistryHeldBySession
                 @test current().hold.id == "s1"
@@ -629,20 +786,26 @@ end
                 # Restarted, the new session opens before the old one closes,
                 # so that the registry is held throughout; discarded, it
                 # closes
-                DataPipeline.rehearse(folder["earlier"])
-                DataPipeline.rehearse(folder["later"], restart = true)
+                DataPipeline._replrehearse(folder["earlier"])
+                DataPipeline._replrehearse(folder["later"], restart = true)
                 @test calls()[(end - 2):end] ==
                       [opening, opening, "registry session close s2"]
                 DataPipeline._discardcurrent()
                 @test calls()[end] == "registry session close s3"
                 @test isnothing(current())
             end
-            # A run that names its session holds the registry: nothing opened
+            # A run that names its session refuses the plain form, naming the
+            # block, and holds the registry for a block: nothing opened
             withenv("FDP_SESSION" => "the-run") do
                 before = length(calls())
-                DataPipeline.rehearse(folder["run"])
-                @test current().hold isa DataPipeline.RegistryHeldByRun
-                DataPipeline._discardcurrent()
+                err = @test_throws ReadWriteException DataPipeline.rehearse(folder["run"])
+                @test occursin("rehearse() do handle", err.value.msg)
+                @test isnothing(current())
+                held = DataPipeline.rehearse(folder["run"]) do _
+                    return current().hold
+                end
+                @test held isa DataPipeline.RegistryHeldByRun
+                @test isnothing(current())
                 @test length(calls()) == before
             end
             # A session whose fair has gone is warned of, not an error
@@ -665,7 +828,7 @@ end
         @test DataPipeline.set_cli!(old) == old
         try
             withenv("FDP_SESSION" => nothing) do
-                err = @test_throws ReadWriteException DataPipeline.rehearse(folder["none"])
+                err = @test_throws ReadWriteException DataPipeline._replrehearse(folder["none"])
                 @test occursin("has no session commands", err.value.msg)
                 @test occursin("fair-cli 0.11.0 or later", err.value.msg)
                 @test isnothing(current())
@@ -688,7 +851,7 @@ end
             DataPipeline.set_cli!(cli)
             try
                 withenv("FDP_SESSION" => nothing) do
-                    err = @test_throws ReadWriteException DataPipeline.rehearse(folder["refused"])
+                    err = @test_throws ReadWriteException DataPipeline._replrehearse(folder["refused"])
                     @test occursin(says, err.value.msg)
                 end
                 @test isnothing(current())
@@ -732,28 +895,35 @@ end
                               "echo 'Warning: nothing to prepare' >&2")
         failing = stand_in("failing", "echo 'cannot prepare it' >&2; exit 1")
         calls() = isfile(calls_file) ? readlines(calls_file) : String[]
-        # Held by the run, so that only the runs are called: the option alone,
-        # without `--ci` or `--dirty`, its log printed; and from a fair without
-        # it, which fair-cli has from 0.11.0, a refusal naming the version
-        # needed
+        # Held by the run, so that only the runs are called, and so in a block,
+        # as a script `fair run` launched rehearses: the option alone, without
+        # `--ci` or `--dirty`, its log printed; and from a fair without it,
+        # which fair-cli has from 0.11.0, a refusal naming the version needed
         withenv("FDP_SESSION" => "the-run") do
             @test DataPipeline.set_cli!(rehearsing) == rehearsing
             try
                 rm(calls_file, force = true)
+                job = Ref{Any}(nothing)
                 said = printed_by() do
-                    @test DataPipeline.rehearse(user, local_only = true) ==
-                          prepared
+                    job[] = DataPipeline.rehearse(user, local_only = true) do _
+                        return current().job
+                    end
                 end
+                @test job[] == prepared
                 @test calls() == ["run --rehearse --local $user"]
                 @test occursin("a log line", said)
-                DataPipeline._discardcurrent()
+                @test isnothing(current())
+                # Prepared outside the store's jobs/, where fair writes none,
+                # it is not known to hold the job alone, so stays
+                @test isdir(prepared)
             finally
                 DataPipeline.set_cli!(nothing)
             end
             @test DataPipeline.set_cli!(lacking) == lacking
             try
                 rm(calls_file, force = true)
-                err = @test_throws ReadWriteException DataPipeline.rehearse(user,
+                err = @test_throws ReadWriteException DataPipeline.rehearse(_ -> nothing,
+                                                                            user,
                                                                             local_only = true)
                 @test occursin("has no `fair run --rehearse`", err.value.msg)
                 @test occursin("fair-cli 0.11.0 or later", err.value.msg)
@@ -768,7 +938,8 @@ end
                 (failing, "cannot prepare it"))
                 DataPipeline.set_cli!(cli)
                 try
-                    err = @test_throws ReadWriteException DataPipeline.rehearse(user)
+                    err = @test_throws ReadWriteException DataPipeline.rehearse(_ -> nothing,
+                                                                                user)
                     @test occursin(says, err.value.msg)
                     @test isnothing(current())
                 finally
@@ -782,7 +953,7 @@ end
 
 Test.@testset "a token in the environment is not a rehearsal's" begin
     @test haskey(ENV, "FDP_LOCAL_TOKEN")
-    DataPipeline.rehearse(job_folder("token"))
+    DataPipeline._replrehearse(job_folder("token"))
     handle = DataPipeline.initialise(token = "not used")
     @test handle isa DataPipeline.DataRegistryHandle{Rehearsal}
     @test isnothing(handle.registry.token)

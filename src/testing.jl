@@ -101,3 +101,17 @@ the length of the SHA-1 the Python and R APIs use for the same purpose.
 function _randomhash()
     return bytes2hex(rand(UInt8, 20))
 end
+
+"""
+    _replrehearse(path; kwargs...)
+
+Prepare a rehearsal of `path` as `rehearse` prepares one in a REPL, with
+`FDP_SESSION` unset, and return the job folder: the suite runs as the script
+of a `fair run`, where `rehearse(path)` is refused, and a REPL's rehearsal
+holds the registry through a session of the CLI's own.
+"""
+function _replrehearse(path::AbstractString; kwargs...)
+    return withenv("FDP_SESSION" => nothing) do
+        return rehearse(path; kwargs...)
+    end
+end

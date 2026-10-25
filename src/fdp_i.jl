@@ -76,14 +76,14 @@ _runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
 # or the recorded run, in the folder its files are in
 function _opened(handle::DataRegistryHandle{Rehearsal}, ::Nothing)
     session = SESSION[]
-    SESSION[] = SessionRun(session.mode, session.job, handle, false,
-                           session.hold)
+    SESSION[] = SessionRun(session.mode, session.job, session.prepared,
+                           session.inblock, handle, false, session.hold)
     return nothing
 end
 function _opened(handle::DataRegistryHandle{RecordedRun},
                  hold::Union{Nothing, AbstractRegistryHold})
-    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false,
-                           hold)
+    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, false, false,
+                           handle, false, hold)
     return nothing
 end
 
@@ -98,8 +98,8 @@ function _ended(handle::DataRegistryHandle)
     session = SESSION[]
     (!isnothing(session) && session.handle === handle) ||
         return nothing
-    SESSION[] = SessionRun(session.mode, session.job, handle, true,
-                           session.hold)
+    SESSION[] = SessionRun(session.mode, session.job, session.prepared,
+                           session.inblock, handle, true, session.hold)
     return nothing
 end
 

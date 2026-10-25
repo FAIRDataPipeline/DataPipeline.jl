@@ -52,7 +52,7 @@ function initialise(config_file::Union{Nothing, String} = nothing,
         job = _launchedjob()
         config_file = joinpath(job, "config.yaml")
     end
-    println("processing config file: ", config_file)
+    _inblock() || println("processing config file: ", config_file)
     config = _workingconfig(config_file)
     isnothing(submission_script) &&
         (submission_script = _submissionscript(config, job))

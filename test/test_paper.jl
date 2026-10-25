@@ -455,7 +455,7 @@ end
                   files["paper.tex"] * "% an edit\n")
             job = dirname(offering("rehearsed", clean, "0.0.3"))
             outputs = mktempdir()
-            DataPipeline.rehearse(job, outputs = outputs)
+            DataPipeline._replrehearse(job, outputs = outputs)
             rehearsal = DataPipeline.initialise()
             @test_logs((:warn,
                         r"^a recorded run would stop here: files the paper uses are not as the run's commit has them: paper\.tex"),

@@ -46,7 +46,7 @@ Its `finalise` checks the outputs as a recorded run would, saying which are
 registered already, unchanged, moves them to the outputs folder as
 `<namespace>/<data product>/<version>.<extension>` with the working config
 beside them, prints the issues a recorded run would have raised, deletes the
-job folder, and returns the folder. `discard` ends a
+job folder `fair` prepared for it, and returns the folder. `discard` ends a
 rehearsal without collecting anything.
 
 A session has one run, opened once: `initialise()` is an error while a run
@@ -59,6 +59,27 @@ temporary directory, unless `outputs =` names one, in which case a repeated
 rehearsal replaces its files. `local_only = true` passes `--local` to
 `fair run`. Nothing of a rehearsal reaches the registry, so a model run can
 be rehearsed only once the fetch run it reads from has been recorded.
+
+A script can also rehearse the run it belongs to, as a check before that run
+starts. In a script that `fair run` launched, `DataPipeline.rehearse() do
+handle ... end` rehearses the job `fair run` prepared, passes the block the
+rehearsal's handle, and discards the rehearsal as the block ends, so that the
+script's `initialise()` then opens the recorded run as usual. A fetch run that
+finds nothing left to fetch can stop there, before a code run is registered:
+
+```julia
+using DataPipeline
+nothing_to_fetch = DataPipeline.rehearse() do handle
+    return all_fetched(handle)    # the script's own check
+end
+nothing_to_fetch && exit()
+handle = DataPipeline.initialise()
+```
+
+Under `fair run` a script rehearses in a block only: `rehearse` given a path is
+refused there, since the script's `initialise()` would open that rehearsal in
+place of the run, and record nothing. Elsewhere a block takes a path, as
+`rehearse` does.
 
 The `fair` used is the one `DataPipeline.set_cli!(path)` has recorded, a
 preference of the environment DataPipeline is loaded from that holds across

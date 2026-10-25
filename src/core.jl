@@ -540,21 +540,26 @@ end
 struct RegistryHeldByRun <: AbstractRegistryHold end
 
 """
-    SessionRun(mode, job, handle, ended, hold)
+    SessionRun(mode, job, prepared, inblock, handle, ended, hold)
 
 The run this session is in, kept in `SESSION`: a recorded run opened by the
 script's `initialise()`, or a rehearsal from [`rehearse`](@ref) on. `mode` is
 its [`AbstractRunMode`](@ref); `job` the folder its files are in - the job
-folder a rehearsal was prepared in, known before its handle is; `handle` the
+folder a rehearsal was prepared in, known before its handle is; `prepared`
+whether `rehearse` had `fair` prepare that folder, which ending the rehearsal
+then deletes; `inblock` whether the rehearsal is a block's, which prints
+little and leaves the session empty as the block ends; `handle` the
 [`DataRegistryHandle`](@ref) once `initialise` has opened one; `ended`
 whether `finalise` or `discard` has ended it; `hold` what keeps the local
 registry up for a rehearsal until it ends, `nothing` for a recorded run and
-once released. A session has one run, opened once: `initialise` refuses while
-it is open and after it has ended.
+once released. A session's run is opened once: `initialise` refuses while it
+is open and after it has ended.
 """
 struct SessionRun
     mode::AbstractRunMode
     job::Union{Nothing, String}
+    prepared::Bool
+    inblock::Bool
     handle::Union{Nothing, DataRegistryHandle}
     ended::Bool
     hold::Union{Nothing, AbstractRegistryHold}
