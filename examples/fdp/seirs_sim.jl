@@ -5,7 +5,7 @@ using DataPipeline
 using CSV
 using DataFrames
 using Plots
-include("SEIRSModel.jl")
+include(joinpath(@__DIR__, "SEIRSModel.jl"))
 using .SEIRSModel
 
 # Initialise code run
