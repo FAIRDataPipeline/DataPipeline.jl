@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>SEIRS model example · FAIRDataPipeline DataPipeline.jl docs</title><meta name="title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta property="og:title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta property="twitter:title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta name="description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><meta property="og:description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><meta property="twitter:description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="FAIRDataPipeline DataPipeline.jl docs logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">FAIRDataPipeline DataPipeline.jl docs</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">DataPipeline.jl</a></li><li><a class="tocitem" href="../fdp_manual/">FAIR data pipeline manual</a></li><li><a class="tocitem" href="../provenance/">Tracing provenance</a></li><li><a class="tocitem" href="../paper/">Building a paper</a></li><li class="is-active"><a class="tocitem" href>SEIRS model example</a><ul class="internal"><li><a class="tocitem" href="#The-user-config"><span>The user config</span></a></li><li><a class="tocitem" href="#The-model-script"><span>The model script</span></a></li><li><a class="tocitem" href="#Running-it"><span>Running it</span></a></li><li><a class="tocitem" href="#Rehearsing-it"><span>Rehearsing it</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>SEIRS model example</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>SEIRS model example</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FAIRDataPipeline/DataPipeline.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/main/docs/src/SEIRS.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="SEIRS-model-example"><a class="docs-heading-anchor" href="#SEIRS-model-example">SEIRS model example</a><a id="SEIRS-model-example-1"></a><a class="docs-heading-anchor-permalink" href="#SEIRS-model-example" title="Permalink"></a></h1><p>The package ships a worked example in <code>examples/fdp/</code>: an SEIRS epidemic model whose one input, its parameter table, and two outputs, a results table and a figure, are tracked by the FAIR Data Pipeline. It is the example the package&#39;s own tests are built on.</p><h2 id="The-user-config"><a class="docs-heading-anchor" href="#The-user-config">The user config</a><a id="The-user-config-1"></a><a class="docs-heading-anchor-permalink" href="#The-user-config" title="Permalink"></a></h2><p><code>examples/fdp/SEIRSconfig.yaml</code> is the config handed to <code>fair</code>. Its <code>register:</code> block names the parameter table as an external object, so <code>fair pull</code> downloads and registers it; its <code>write:</code> block declares the two outputs; and <code>run_metadata.script</code> is the command <code>fair run</code> executes.</p><pre><code class="language-julia hljs">using DataPipeline
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>SEIRS model example · FAIRDataPipeline DataPipeline.jl docs</title><meta name="title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta property="og:title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta property="twitter:title" content="SEIRS model example · FAIRDataPipeline DataPipeline.jl docs"/><meta name="description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><meta property="og:description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><meta property="twitter:description" content="Documentation for FAIRDataPipeline DataPipeline.jl docs."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="FAIRDataPipeline DataPipeline.jl docs logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">FAIRDataPipeline DataPipeline.jl docs</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">DataPipeline.jl</a></li><li><a class="tocitem" href="../fdp_manual/">FAIR data pipeline manual</a></li><li><a class="tocitem" href="../provenance/">Tracing provenance</a></li><li><a class="tocitem" href="../paper/">Building a paper</a></li><li class="is-active"><a class="tocitem" href>SEIRS model example</a><ul class="internal"><li><a class="tocitem" href="#The-user-config"><span>The user config</span></a></li><li><a class="tocitem" href="#The-model-script"><span>The model script</span></a></li><li><a class="tocitem" href="#The-model"><span>The model</span></a></li><li><a class="tocitem" href="#Running-it"><span>Running it</span></a></li><li><a class="tocitem" href="#Rehearsing-it"><span>Rehearsing it</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>SEIRS model example</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>SEIRS model example</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/FAIRDataPipeline/DataPipeline.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/FAIRDataPipeline/DataPipeline.jl/blob/main/docs/src/SEIRS.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="SEIRS-model-example"><a class="docs-heading-anchor" href="#SEIRS-model-example">SEIRS model example</a><a id="SEIRS-model-example-1"></a><a class="docs-heading-anchor-permalink" href="#SEIRS-model-example" title="Permalink"></a></h1><p>The package ships a worked example in <code>examples/fdp/</code>: an SEIRS epidemic model whose one input, its parameter table, and two outputs, a results table and a figure, are tracked by the FAIR Data Pipeline. It is the example the package&#39;s own tests are built on. The example has its own environment, <code>examples/fdp/Project.toml</code>, holding the packages the model uses as well as <code>DataPipeline</code>.</p><h2 id="The-user-config"><a class="docs-heading-anchor" href="#The-user-config">The user config</a><a id="The-user-config-1"></a><a class="docs-heading-anchor-permalink" href="#The-user-config" title="Permalink"></a></h2><p><code>examples/fdp/SEIRSconfig.yaml</code> is the config handed to <code>fair</code>. Its <code>register:</code> block names the parameter table as an external object, so <code>fair pull</code> downloads and registers it; its <code>write:</code> block declares the two outputs; and <code>run_metadata.script</code> is the command <code>fair run</code> executes.</p><pre><code class="language-julia hljs">using DataPipeline
 example = joinpath(pkgdir(DataPipeline), &quot;examples&quot;, &quot;fdp&quot;)
 print(read(joinpath(example, &quot;SEIRSconfig.yaml&quot;), String))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">run_metadata:
   default_input_namespace: testing
@@ -40,10 +40,11 @@ write:
 
 ### SEIRS model example
 using DataPipeline
-using DataPipeline.SeirsModel
 using CSV
 using DataFrames
 using Plots
+include(joinpath(@__DIR__, &quot;SEIRSModel.jl&quot;))
+using .SEIRSModel
 
 # Initialise code run
 handle = DataPipeline.initialise()
@@ -79,7 +80,110 @@ path = link_write!(handle, &quot;figure&quot;)
 savefig(g, path)
 
 # Register code run in local registry
-DataPipeline.finalise(handle)</code></pre><h2 id="Running-it"><a class="docs-heading-anchor" href="#Running-it">Running it</a><a id="Running-it-1"></a><a class="docs-heading-anchor-permalink" href="#Running-it" title="Permalink"></a></h2><p>With the pipeline installed (see the <a href="https://www.fairdatapipeline.org/docs/">FAIR Data Pipeline documentation</a>), from the root of a clone of this repository:</p><pre><code class="language-sh hljs">fair init
+DataPipeline.finalise(handle)</code></pre><h2 id="The-model"><a class="docs-heading-anchor" href="#The-model">The model</a><a id="The-model-1"></a><a class="docs-heading-anchor-permalink" href="#The-model" title="Permalink"></a></h2><p><code>examples/fdp/SEIRSModel.jl</code> is the model itself, a module the script includes, which knows nothing of the pipeline: it takes the parameters and returns the results table, and plots it.</p><pre><code class="language-julia hljs">print(read(joinpath(example, &quot;SEIRSModel.jl&quot;), String))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"># SPDX-License-Identifier: LGPL-3.0-or-later
+
+# The SEIRS model that `seirs_sim.jl` runs through the pipeline: the
+# example&#39;s own module, which knows nothing of the pipeline
+module SEIRSModel
+
+using DataFrames
+using Plots
+
+export modelseirs, plotseirs, getparameter
+
+&quot;&quot;&quot;
+    modelseirs(initial_state, timesteps, years, alpha, beta, inv_gamma, inv_omega, inv_mu, inv_sigma)
+
+Run SEIRS model
+&quot;&quot;&quot;
+function modelseirs(initial_state::Dict, timesteps::Int64, years::Int64,
+                    alpha::Float64, beta::Float64, inv_gamma::Float64,
+                    inv_omega::Float64, inv_mu::Float64, inv_sigma::Float64)
+    S = initial_state[&quot;S&quot;]
+    E = initial_state[&quot;E&quot;]
+    I = initial_state[&quot;I&quot;]
+    R = initial_state[&quot;R&quot;]
+    time_unit_years = years / timesteps
+    time_unit_days = time_unit_years * 365.25
+
+    # Convert parameters to days
+    alpha = alpha * time_unit_days
+    beta = beta * time_unit_days
+    gamma = time_unit_days / inv_gamma
+    omega = time_unit_days / (inv_omega * 365.25)
+    mu = time_unit_days / (inv_mu * 365.25)
+    sigma = time_unit_days / inv_sigma
+
+    results = DataFrames.DataFrame(time = 0, S = S, E = E, I = I, R = R)
+
+    for t in 1:timesteps
+        N = S + E + I + R
+        birth = mu * N
+        infection = (beta * results.I[t] * results.S[t]) / N
+        lost_immunity = omega * results.R[t]
+        death_S = mu * results.S[t]
+        death_E = mu * results.E[t]
+        death_I = (mu + alpha) * results.I[t]
+        death_R = mu * results.R[t]
+        latency = sigma * results.E[t]
+        recovery = gamma * results.I[t]
+
+        S_rate = birth - infection + lost_immunity - death_S
+        E_rate = infection - latency - death_E
+        I_rate = latency - recovery - death_I
+        R_rate = recovery - lost_immunity - death_R
+
+        new_S = results.S[t] + S_rate
+        new_E = results.E[t] + E_rate
+        new_I = results.I[t] + I_rate
+        new_R = results.R[t] + R_rate
+
+        new = DataFrames.DataFrame(time = t * time_unit_days,
+                                   S = new_S, E = new_E,
+                                   I = new_I, R = new_R)
+
+        results = vcat(results, new)
+    end
+
+    results.time = results.time / 365.25
+    return results
+end
+
+&quot;&quot;&quot;
+    plotseirs(results)
+
+Plot model output
+&quot;&quot;&quot;
+function plotseirs(results::DataFrames.DataFrame)
+    # Left plot
+    x = results.time
+    y1 = Matrix(results[:, 2:5]) .* 100
+    p1 = plot(x, y1, label = [&quot;S&quot; &quot;E&quot; &quot;I&quot; &quot;R&quot;], lw = 3)
+    xlabel!(&quot;Years&quot;)
+    ylabel!(&quot;Relative group size (%)&quot;)
+
+    # Right plot
+    y2 = y1[:, 2:3]
+    p2 = plot(x, y2, label = [&quot;E&quot; &quot;I&quot;], lw = 3)
+    xlabel!(&quot;Years&quot;)
+    ylabel!(&quot;Relative group size (%)&quot;)
+
+    # Join plots together
+    pp = plot(p1, p2, plot_title = &quot;SEIRS model trajectories&quot;)
+    return pp
+end
+
+&quot;&quot;&quot;
+    getparameter(data, parameter)
+
+Get parameter from DataFrame
+&quot;&quot;&quot;
+function getparameter(data::DataFrames.DataFrame, parameter::String)
+    output = filter(row -&gt; row.param == parameter, data).value[1]
+    return output
+end
+
+end</code></pre><h2 id="Running-it"><a class="docs-heading-anchor" href="#Running-it">Running it</a><a id="Running-it-1"></a><a class="docs-heading-anchor-permalink" href="#Running-it" title="Permalink"></a></h2><p>With the pipeline installed (see the <a href="https://www.fairdatapipeline.org/docs/">FAIR Data Pipeline documentation</a>), from the root of a clone of this repository:</p><pre><code class="language-sh hljs">fair init
 fair pull examples/fdp/SEIRSconfig.yaml
 fair run examples/fdp/SEIRSconfig.yaml</code></pre><p><code>fair run</code> ends by printing the URL of the registered code run. <code>fair add</code> with that run&#39;s uuid, then <code>fair push</code>, sends it and its data products to a remote registry.</p><p>The two blocks below do exactly that, through <code>fair&quot;...&quot;</code>, which runs the CLI from Julia with its arguments as on the command line, when this documentation is built with the environment variable <code>FDP_DOCS_RUN_EXAMPLE</code> set to <code>true</code>, as the package&#39;s own documentation build does; built without it, they only say so.</p><pre><code class="language-julia hljs">run_example = get(ENV, &quot;FDP_DOCS_RUN_EXAMPLE&quot;, &quot;&quot;) == &quot;true&quot;
 run_example || println(&quot;Not run: FDP_DOCS_RUN_EXAMPLE is not set.&quot;)
@@ -93,10 +197,11 @@ There are no items in the [read] block to pull from registry: &#39;origin&#39;.<
     fair&quot;run --local examples/fdp/SEIRSconfig.yaml&quot;
 end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Preparing the job and running its script, please wait
     Updating registry at `~/.julia/registries/General.toml`
+   Installed DocStringExtensions ─ v0.10.2
     Updating `~/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/Project.toml`
   [336ed68f] + CSV v1.1.0
   [a93c6f00] + DataFrames v1.8.2
-  [9ced6f0a] + DataPipeline v0.57.1 `../..`
+  [9ced6f0a] + DataPipeline v0.58.0 `../..`
   [91a5bcdd] + Plots v1.41.7
     Updating `~/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/Manifest.toml`
   [66dad0bd] + AliasTables v1.1.3
@@ -113,12 +218,12 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [a8cc5b0e] + Crayons v4.2.0
   [9a962f9c] + DataAPI v1.16.0
   [a93c6f00] + DataFrames v1.8.2
-  [9ced6f0a] + DataPipeline v0.57.1 `../..`
+  [9ced6f0a] + DataPipeline v0.58.0 `../..`
   [48204bd6] + DataStrings v1.1.0
   [864edb3b] + DataStructures v0.19.6
   [e2d170a0] + DataValueInterfaces v1.0.0
   [8bb1440f] + DelimitedFiles v1.9.1
-  [ffbed154] + DocStringExtensions v0.10.1
+  [ffbed154] + DocStringExtensions v0.10.2
   [41ac09f5] + Durations v1.4.1
   [4e289a0a] + EnumX v1.0.7
   [c87230d0] + FFMPEG v0.4.6
@@ -126,14 +231,14 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [1fa38f19] + Format v1.3.7
   [28b8d3ca] + GR v0.73.27
   [f67ccb44] + HDF5 v0.17.4
-  [cd3eb016] + HTTP v2.11.1
+  [cd3eb016] + HTTP v2.12.3
 ⌅ [842dd82b] + InlineStrings v1.4.6
   [41ab1584] + InvertedIndices v1.3.1
   [92d709cd] + IrrationalConstants v0.2.7
   [82899510] + IteratorInterfaceExtensions v1.0.0
   [1019f520] + JLFzf v0.1.11
   [692b3bcd] + JLLWrappers v1.8.0
-  [682c06a0] + JSON v1.11.0
+  [682c06a0] + JSON v1.12.2
   [b964fa9f] + LaTeXStrings v1.4.1
   [23fbe1c1] + Latexify v0.16.12
   [2ab3a3ac] + LogExpFunctions v1.0.3
@@ -168,13 +273,13 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [2913bbd2] + StatsBase v0.34.13
   [69024149] + StringEncodings v0.3.7
   [892a3eda] + StringManipulation v0.6.1
-  [ec057cc2] + StructUtils v2.10.0
+  [ec057cc2] + StructUtils v2.11.1
   [3783bdb8] + TableTraits v1.0.1
   [bd369af6] + Tables v1.14.0
   [62fd8b95] + TensorCore v0.1.1
   [1c621080] + TestItems v1.1.0
   [3bb67fe8] + TranscodingStreams v0.11.3
-  [5c2747f8] + URIs v1.7.1
+  [5c2747f8] + URIs v1.7.2
   [1cfade01] + UnicodeFun v0.4.1
   [41fe7b60] + Unzip v0.2.0
   [ddb6d928] + YAML v0.4.17
@@ -327,13 +432,12 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [3f19e933] + p7zip_jll v17.8.3+0
         Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading. To see why use `status --outdated -m`
 Precompiling packages...
-   5.8 s  ✓ DocStringExtensions
-   0.7 s  ✓ LogExpFunctions
+   1.0 s  ✓ DocStringExtensions
+   0.5 s  ✓ LogExpFunctions
    2.0 s  ✓ StatsBase
-  47.5 s  ✓ Plots
-   4.3 s  ✓ DataPipeline
-  5 dependencies successfully precompiled in 61 seconds. 222 already precompiled.
-processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-21_11_35_50_311066/config.yaml
+  49.8 s  ✓ Plots
+  4 dependencies successfully precompiled in 53 seconds. 223 already precompiled.
+processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-25_21_51_19_472786/config.yaml
 pipeline initialised.
 data product found: SEIRS_model/parameters
 finished - code run locally registered as: http://127.0.0.1:8000/api/code_run/1/</code></pre><h2 id="Rehearsing-it"><a class="docs-heading-anchor" href="#Rehearsing-it">Rehearsing it</a><a id="Rehearsing-it-1"></a><a class="docs-heading-anchor-permalink" href="#Rehearsing-it" title="Permalink"></a></h2><p>Before a run is recorded, the script can be rehearsed: run through the pipeline from the same config, reading the registered parameter table and writing its outputs, with nothing registered. From the root of the clone, in Julia:</p><pre><code class="language-julia hljs">using DataPipeline
@@ -341,11 +445,11 @@ DataPipeline.rehearse(&quot;examples/fdp/SEIRSconfig.yaml&quot;, local_only = tr
 include(&quot;examples/fdp/seirs_sim.jl&quot;)</code></pre><p><code>rehearse</code> has <code>fair</code> prepare the job as a run would, and the script, unchanged, opens a rehearsal in its <code>DataPipeline.initialise</code> and ends by collecting its two outputs in a folder, whose path <code>DataPipeline.finalise</code> prints and returns. Run after the recorded run above, it finds the results table registered already with the same bytes, and says so. The block below does this under the same condition as the two above.</p><pre><code class="language-julia hljs">run_example &amp;&amp; cd(pkgdir(DataPipeline)) do
     DataPipeline.rehearse(&quot;examples/fdp/SEIRSconfig.yaml&quot;, local_only = true)
     include(joinpath(example, &quot;seirs_sim.jl&quot;))
-end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rehearsing the run prepared in /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-21_11_37_27_345256
-run the script, or its lines, in this session: DataPipeline.finalise collects its outputs in /tmp/fdp-rehearsal-ho0wyv, and DataPipeline.discard throws them away
-processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-21_11_37_27_345256/config.yaml
-rehearsal: nothing is registered, and the outputs go to /tmp/fdp-rehearsal-ho0wyv
-would keep the code repository&#39;s object at 789ccfd6228cd1330dd5f8442d010f7aab3c77d4, http://127.0.0.1:8000/api/object/4/
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rehearsing the run prepared in /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-25_21_52_52_182925
+run the script, or its lines, in this session: DataPipeline.finalise collects its outputs in /tmp/fdp-rehearsal-ZWP4Fu, and DataPipeline.discard throws them away
+processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-25_21_52_52_182925/config.yaml
+rehearsal: nothing is registered, and the outputs go to /tmp/fdp-rehearsal-ZWP4Fu
+would keep the code repository&#39;s object at 28cf7c3972bec16cd794f5a85c59d1b04f670a00, http://127.0.0.1:8000/api/object/4/
   with the licence https://spdx.org/licenses/LGPL-3.0-or-later
   with the keywords FAIR data, data management, julia, reproducibility, workflows
 data product found: SEIRS_model/parameters
@@ -354,7 +458,7 @@ rehearsal finished - nothing registered
   inputs:
     PSU:SEIRS_model/parameters (1.0.0) /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/PSU/SEIRS_model/parameters/1.0.0.csv
   outputs:
-    testing:SEIRS_model/results/figure/julia (0.0.2) /tmp/fdp-rehearsal-ho0wyv/testing/SEIRS_model/results/figure/julia/0.0.2.pdf
+    testing:SEIRS_model/results/figure/julia (0.0.2) /tmp/fdp-rehearsal-ZWP4Fu/testing/SEIRS_model/results/figure/julia/0.0.2.pdf
   unchanged, registered already:
-    testing:SEIRS_model/results/model_output/julia (0.0.2) /tmp/fdp-rehearsal-ho0wyv/testing/SEIRS_model/results/model_output/julia/0.0.2.csv
-  outputs folder: /tmp/fdp-rehearsal-ho0wyv</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../paper/">« Building a paper</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 21 October 2026 11:37">Wednesday 21 October 2026</span>. Using Julia version 1.13.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+    testing:SEIRS_model/results/model_output/julia (0.0.2) /tmp/fdp-rehearsal-ZWP4Fu/testing/SEIRS_model/results/model_output/julia/0.0.2.csv
+  outputs folder: /tmp/fdp-rehearsal-ZWP4Fu</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../paper/">« Building a paper</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Sunday 25 October 2026 21:53">Sunday 25 October 2026</span>. Using Julia version 1.13.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
