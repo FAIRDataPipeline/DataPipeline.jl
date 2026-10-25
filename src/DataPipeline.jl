@@ -13,12 +13,10 @@ import BibInternal
 import BibParser
 import MicroMamba
 using Preferences: Preferences, @load_preference
-using DataFrames
 using Dates
 using HTTP
 using JSON
 using LibGit2
-using Plots
 using SHA
 using Scratch: @get_scratch!
 using YAML
@@ -64,8 +62,9 @@ public setup_paper, check_paper, update_paper, PaperCheck
 public ReadWriteException, ConfigFileException
 public WorkingConfig, SubmissionScript, CodeRepository
 public ConfigDataProduct, ExistingDataProduct
-# Asking what the working config lets a run read and write
-public canread, canwrite
+# Asking what the working config lets a run read and write, and whether the
+# registry holds a data product already
+public canread, canwrite, isregistered
 # Asking what the registry knows about a file or a git repository on disk
 public identify
 public check_store, StoreCheck
@@ -104,13 +103,5 @@ include("crate.jl")
 
 include("testing.jl")
 include("deprecated.jl")
-
-# ---- SEIRS model ----
-module SeirsModel
-
-include("model.jl")
-export modelseirs, plotseirs, getparameter
-
-end
 
 end

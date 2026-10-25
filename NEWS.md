@@ -1,5 +1,23 @@
 # NEWS
 
+- v0.58.0
+  - The example's SEIRS model has left the package for
+    `examples/fdp/SEIRSModel.jl`, which `seirs_sim.jl` includes: a script that
+    has `using DataPipeline.SeirsModel` includes that file instead. Plots and
+    DataFrames are no longer dependencies.
+  - `DataPipeline.rehearse() do handle ... end` rehearses the run `fair run`
+    launched the script for, as a check, and discards the rehearsal as the block
+    ends, so that `initialise()` then opens that run; given a path, a block
+    rehearses that.
+  - Under `fair run`, `rehearse(path)` is an error naming the block form, where
+    the script's `initialise()` opened the rehearsal and recorded nothing.
+  - A rehearsal deletes only a job folder it had `fair` prepare: one given by
+    path, such as a `fair run --ci` job, is kept.
+  - `DataPipeline.isregistered(handle, name)` says whether a data product is
+    registered, by name or by `ConfigDataProduct(label)` for a `link_write!`
+    label; given a link call's source keywords but no file, whether registering
+    it would register nothing new. A fetch run can ask before it fetches.
+
 - v0.57.1
   - `fair"..."` is exported, so that after `using DataPipeline` the CLI runs from
     Julia as `fair"pull config.yaml"`; the docs' front page shows the whole

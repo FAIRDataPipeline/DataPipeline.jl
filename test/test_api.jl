@@ -1632,8 +1632,8 @@ Test.@testset "identify() a git repository" begin
     # While the session rehearses, printed and not registered
     saved = DataPipeline.SESSION[]
     DataPipeline.SESSION[] = DataPipeline.SessionRun(DataPipeline.Rehearsal(mktempdir()),
-                                                     mktempdir(), nothing,
-                                                     false, nothing)
+                                                     mktempdir(), false, false,
+                                                     nothing, false, nothing)
     printed = mktemp() do path, io
         result = redirect_stdout(io) do
             return raise_issue!(registry, before, "rehearsed $uid")
@@ -2555,7 +2555,8 @@ end
     err = @test_throws DataPipeline.ReadWriteException DataPipeline.initialise(config,
                                                                                config)
     @test occursin("recorded in this session already", err.value.msg)
-    @test_throws DataPipeline.ReadWriteException DataPipeline.rehearse(dirname(config))
+    err = @test_throws DataPipeline.ReadWriteException DataPipeline._replrehearse(dirname(config))
+    @test occursin("has recorded a code run", err.value.msg)
     # Forgotten, the session opens another
     DataPipeline._resetsession!()
     another = DataPipeline.initialise(config, config)

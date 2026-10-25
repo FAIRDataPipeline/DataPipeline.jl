@@ -46,7 +46,7 @@ Its `finalise` checks the outputs as a recorded run would, saying which are
 registered already, unchanged, moves them to the outputs folder as
 `<namespace>/<data product>/<version>.<extension>` with the working config
 beside them, prints the issues a recorded run would have raised, deletes the
-job folder, and returns the folder. `discard` ends a
+job folder `fair` prepared for it, and returns the folder. `discard` ends a
 rehearsal without collecting anything.
 
 A session has one run, opened once: `initialise()` is an error while a run
@@ -59,6 +59,27 @@ temporary directory, unless `outputs =` names one, in which case a repeated
 rehearsal replaces its files. `local_only = true` passes `--local` to
 `fair run`. Nothing of a rehearsal reaches the registry, so a model run can
 be rehearsed only once the fetch run it reads from has been recorded.
+
+A script can also rehearse the run it belongs to, as a check before that run
+starts. In a script that `fair run` launched, `DataPipeline.rehearse() do
+handle ... end` rehearses the job `fair run` prepared, passes the block the
+rehearsal's handle, and discards the rehearsal as the block ends, so that the
+script's `initialise()` then opens the recorded run as usual. A fetch run that
+finds nothing left to fetch can stop there, before a code run is registered:
+
+```julia
+using DataPipeline
+nothing_to_fetch = DataPipeline.rehearse() do handle
+    return all_fetched(handle)    # the script's own check
+end
+nothing_to_fetch && exit()
+handle = DataPipeline.initialise()
+```
+
+Under `fair run` a script rehearses in a block only: `rehearse` given a path is
+refused there, since the script's `initialise()` would open that rehearsal in
+place of the run, and record nothing. Elsewhere a block takes a path, as
+`rehearse` does.
 
 The `fair` used is the one `DataPipeline.set_cli!(path)` has recorded, a
 preference of the environment DataPipeline is loaded from that holds across
@@ -178,6 +199,34 @@ the place of what it says. A citation given as BibTeX by
 with no network. Run again, a fetch run registers nothing new for a file that
 has not changed.
 
+A fetch run can ask before it fetches. `DataPipeline.isregistered(handle, name)`
+says whether anything is registered under a name, and given the source keywords
+the link call would be given, but no file, whether registering the file would
+register nothing new - the same source, authors and licence. In a rehearsal in
+a block (see [Rehearsing a run](@ref)), a fetch run with nothing to fetch can
+then stop before a code run is registered:
+
+```julia
+using DataPipeline
+nothing_to_fetch = DataPipeline.rehearse() do handle
+    extract = DataPipeline.ConfigDataProduct("era5/t2m/2020")
+    return DataPipeline.isregistered(handle, extract,
+                                     doi = "10.24381/cds.f17050d7",
+                                     primary = false,
+                                     title = "ERA5 2m temperature, 2020",
+                                     licence = "CC-BY-4.0",
+                                     release_version = "1.0.0")
+end
+nothing_to_fetch && exit()
+handle = DataPipeline.initialise()
+```
+
+A name is spelled as `link_register!` spells it, its namespace by default the
+run's default input namespace. A file that `link_write!` writes is asked about,
+as here, by the label `link_write!` is given, as a
+[`DataPipeline.ConfigDataProduct`](@ref): the working config's `write:` entry
+says what it is registered as, and in which namespace.
+
 A deposit may instead be registered by `fair pull` from a `register:` entry with
 `no_file: true`, or by `link_register!` in an earlier run. Either way a later
 run is offered it by a `read:` entry, and `link_read!` records it as an input
@@ -189,6 +238,7 @@ Registering a source needs `data-registry` v1.4.0 or later.
 register_citations!
 register_authors!
 link_register!
+DataPipeline.isregistered
 ```
 
 ## Raising issues

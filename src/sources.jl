@@ -5,16 +5,18 @@
 
 """
     _source(handle; doi, bibtex, title, primary, description, original_store,
-            licence, release_date, release_version)
+            licence, release_date, release_version,
+            authorurl = _sourceauthorurl)
 
 Return the [`SourceRecord`](@ref) that the source keywords of a link call
 describe, or `nothing` when they name no source. The link calls say what each
 keyword is. The source's authors are found in the registry as the call is
-made, those it has not got being registered.
+made, by `authorurl(handle, name, identifier)`: by default those it has not
+got are registered, and with `_heldauthorurl` nothing is.
 """
 function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
                  description, original_store, licence, license, release_date,
-                 release_version)
+                 release_version, authorurl::Function = _sourceauthorurl)
     if isnothing(doi) && isnothing(bibtex)
         said = (; title, primary, description, original_store, licence,
                 license, release_date, release_version)
@@ -33,9 +35,8 @@ function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
     given = _eitherspelling(licence, license)
     terms = _licence(something(given, facts.licence, Some(nothing)))
     # Nothing is registered until everything that was said has been read
-    authors = unique!(String[_sourceauthorurl(handle, name,
-                                              get(facts.identifiers, name,
-                                                  nothing))
+    authors = unique!(String[authorurl(handle, name,
+                                       get(facts.identifiers, name, nothing))
                              for name in facts.authors])
     description = isnothing(facts.description) ? nothing :
                   String(facts.description)
@@ -75,6 +76,23 @@ function _sourceauthorurl(handle::DataRegistryHandle, name::AbstractString,
     url = _geturl(handle.registry, "author",
                   Dict("identifier" => author.second))
     # Only a rehearsal leaves an author unregistered
+    return something(url, _unregisteredauthor(author.first))
+end
+
+# ... as `_sourceauthorurl` finds it, but registering nothing and changing
+# nothing in the handle: an author the registry has not got stands as one
+# unregistered, which no registered file has
+function _heldauthorurl(handle::DataRegistryHandle, name::AbstractString,
+                        ::Nothing)
+    return _authorurl(handle, name) do
+        return _unregisteredauthor(name)
+    end
+end
+function _heldauthorurl(handle::DataRegistryHandle, name::AbstractString,
+                        identifier::AbstractString)
+    author = _author(name, identifier)
+    url = _geturl(handle.registry, "author",
+                  Dict("identifier" => author.second))
     return something(url, _unregisteredauthor(author.first))
 end
 

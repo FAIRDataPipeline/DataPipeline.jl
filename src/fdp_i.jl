@@ -76,14 +76,14 @@ _runtoken(::Rehearsal, ::Union{Nothing, AbstractString}) = nothing
 # or the recorded run, in the folder its files are in
 function _opened(handle::DataRegistryHandle{Rehearsal}, ::Nothing)
     session = SESSION[]
-    SESSION[] = SessionRun(session.mode, session.job, handle, false,
-                           session.hold)
+    SESSION[] = SessionRun(session.mode, session.job, session.prepared,
+                           session.inblock, handle, false, session.hold)
     return nothing
 end
 function _opened(handle::DataRegistryHandle{RecordedRun},
                  hold::Union{Nothing, AbstractRegistryHold})
-    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, handle, false,
-                           hold)
+    SESSION[] = SessionRun(RecordedRun(), handle.config_dir, false, false,
+                           handle, false, hold)
     return nothing
 end
 
@@ -98,8 +98,8 @@ function _ended(handle::DataRegistryHandle)
     session = SESSION[]
     (!isnothing(session) && session.handle === handle) ||
         return nothing
-    SESSION[] = SessionRun(session.mode, session.job, handle, true,
-                           session.hold)
+    SESSION[] = SessionRun(session.mode, session.job, session.prepared,
+                           session.inblock, handle, true, session.hold)
     return nothing
 end
 
@@ -272,18 +272,26 @@ Return the registry entry of a data product, or throw if there is none.
 """
 function _finddataproduct(registry::RegistryEndpoint, namespace::String,
                           data_product::String, version::String)
-    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
-    dp_entry = isnothing(namespace_id) ? nothing :
-               _getentry(registry, "data_product",
-                         Dict("name" => data_product,
-                              "namespace" => namespace_id,
-                              "version" => version))
+    dp_entry = _versioneddataproduct(registry, namespace, data_product,
+                                     version)
     if isnothing(dp_entry)
         msg = string("no data products found matching: ", data_product,
                      " :-(ns: ", namespace, " - v: ", version, ")")
         throw(ReadWriteException(msg))
     end
     return dp_entry
+end
+
+# The registry entry of a data product at a version, or `nothing` where there
+# is none
+function _versioneddataproduct(registry::RegistryEndpoint, namespace::String,
+                               data_product::String, version::String)
+    namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
+    isnothing(namespace_id) && return nothing
+    return _getentry(registry, "data_product",
+                     Dict("name" => data_product,
+                          "namespace" => namespace_id,
+                          "version" => version))
 end
 
 """
@@ -392,8 +400,16 @@ function _writemetadata(handle::DataRegistryHandle, data_product::String)
     if !haskey(handle.config, "write")
         throw(ConfigFileException("no 'write' section found - check config file."))
     end
-    entries = handle.config["write"]
+    found = _writeentry(handle, data_product)
+    isnothing(found) &&
+        throw(ConfigFileException("'$data_product' not found in 'write' - check config file."))
+    return found
+end
 
+# The `write:` entry covering `data_product` and the name it is registered
+# under, as `_writemetadata` finds them, or `nothing` where no entry covers it
+function _writeentry(handle::DataRegistryHandle, data_product::String)
+    entries = get(handle.config, "write", [])
     for entry in entries
         if entry["data_product"] == data_product
             use = get(entry, "use", Dict())
@@ -401,19 +417,48 @@ function _writemetadata(handle::DataRegistryHandle, data_product::String)
                     name = get(use, "data_product", data_product))
         end
     end
+    pattern = _coveringpattern(entries, data_product, "write")
+    return isnothing(pattern) ? nothing :
+           (entry = pattern, name = data_product)
+end
 
+# The registry name, namespace and version that the `read:` entry naming
+# `data_product` stands for, as `link_read!` resolves it; else, where the
+# pattern of a kept entry covers the name, the name itself in that entry's
+# namespace, at no version, a pattern's own version meaning nothing; else
+# `nothing`
+function _readentry(handle::DataRegistryHandle, data_product::String)
+    entries = get(handle.config, "read", [])
+    default = handle.config["run_metadata"]["default_input_namespace"]
+    for entry in entries
+        entry["data_product"] == data_product || continue
+        use = get(entry, "use", Dict())
+        version = get(use, "version", nothing)
+        return (namespace = get(use, "namespace", default),
+                name = get(use, "data_product", data_product),
+                version = isnothing(version) ? nothing : string(version))
+    end
+    pattern = _coveringpattern(entries, data_product, "read")
+    isnothing(pattern) && return nothing
+    return (namespace = get(get(pattern, "use", Dict()), "namespace", default),
+            name = data_product, version = nothing)
+end
+
+# The one entry of a config section whose pattern matches `data_product`, or
+# `nothing`; the patterns of several matching it are a `ConfigFileException`,
+# since a name a caller passes never itself holds `*`, so the ambiguity is the
+# config's to resolve
+function _coveringpattern(entries::AbstractVector, data_product::String,
+                          section::String)
     patterns = [entry
                 for entry in entries
                 if occursin('*', entry["data_product"]) &&
         occursin(_globregex(entry["data_product"]), data_product)]
-    if length(patterns) == 1
-        return (entry = only(patterns), name = data_product)
-    elseif isempty(patterns)
-        throw(ConfigFileException("'$data_product' not found in 'write' - check config file."))
-    end
+    isempty(patterns) && return nothing
+    length(patterns) == 1 && return only(patterns)
     matched = join(("'$(entry["data_product"])'" for entry in patterns), ", ")
-    msg = string("'", data_product, "' matches more than one wildcard in ",
-                 "'write' (", matched, ") - check config file.")
+    msg = string("'", data_product, "' matches more than one wildcard in '",
+                 section, "' (", matched, ") - check config file.")
     return throw(ConfigFileException(msg))
 end
 

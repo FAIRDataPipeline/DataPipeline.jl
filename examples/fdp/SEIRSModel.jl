@@ -1,7 +1,13 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
+# The SEIRS model that `seirs_sim.jl` runs through the pipeline: the
+# example's own module, which knows nothing of the pipeline
+module SEIRSModel
+
 using DataFrames
 using Plots
+
+export modelseirs, plotseirs, getparameter
 
 """
     modelseirs(initial_state, timesteps, years, alpha, beta, inv_gamma, inv_omega, inv_mu, inv_sigma)
@@ -93,4 +99,6 @@ Get parameter from DataFrame
 function getparameter(data::DataFrames.DataFrame, parameter::String)
     output = filter(row -> row.param == parameter, data).value[1]
     return output
+end
+
 end

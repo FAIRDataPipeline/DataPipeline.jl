@@ -141,6 +141,14 @@ author by the name alone, with a warning where the run has registered the
 name with several identifiers, since it cannot say which of them is meant.
 """
 function _authorurl(handle::DataRegistryHandle, name::AbstractString)
+    return _authorurl(handle, name) do
+        return _newnamedauthor(handle, name)
+    end
+end
+# ... `create()` giving the author by the name alone where the registry has
+# none
+function _authorurl(create::Function, handle::DataRegistryHandle,
+                    name::AbstractString)
     identifiers = get(handle.authors, name, String[])
     # Only a rehearsal leaves an identifier given in the run unregistered
     length(identifiers) == 1 &&
@@ -149,7 +157,7 @@ function _authorurl(handle::DataRegistryHandle, name::AbstractString)
                          _unregisteredauthor(name))
     isempty(identifiers) ||
         @warn "'$name' is registered in this run with $(length(identifiers)) identifiers, $(join(identifiers, ", ")): a citation cannot say which is meant, so its author is recorded by the name alone"
-    return _namedauthorurl(handle, name)
+    return _namedauthorurl(create, handle.registry, name)
 end
 
 # The URL of the registry's author of exactly this name and no identifier:
