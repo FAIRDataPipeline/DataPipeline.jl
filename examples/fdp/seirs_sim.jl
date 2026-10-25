@@ -2,10 +2,11 @@
 
 ### SEIRS model example
 using DataPipeline
-using DataPipeline.SeirsModel
 using CSV
 using DataFrames
 using Plots
+include("SEIRSModel.jl")
+using .SEIRSModel
 
 # Initialise code run
 handle = DataPipeline.initialise()

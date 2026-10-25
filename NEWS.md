@@ -1,5 +1,11 @@
 # NEWS
 
+- v0.58.0
+  - The example's SEIRS model has left the package for
+    `examples/fdp/SEIRSModel.jl`, which `seirs_sim.jl` includes: a script that
+    has `using DataPipeline.SeirsModel` includes that file instead. Plots and
+    DataFrames are no longer dependencies.
+
 - v0.57.1
   - `fair"..."` is exported, so that after `using DataPipeline` the CLI runs from
     Julia as `fair"pull config.yaml"`; the docs' front page shows the whole

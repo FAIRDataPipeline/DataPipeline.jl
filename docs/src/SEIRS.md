@@ -3,7 +3,9 @@
 The package ships a worked example in `examples/fdp/`: an SEIRS epidemic model
 whose one input, its parameter table, and two outputs, a results table and a
 figure, are tracked by the FAIR Data Pipeline. It is the example the package's
-own tests are built on.
+own tests are built on. The example has its own environment,
+`examples/fdp/Project.toml`, holding the packages the model uses as well as
+`DataPipeline`.
 
 ## The user config
 
@@ -28,6 +30,16 @@ files by their hash, registers them, and attaches everything to the code run.
 
 ```@example seirs
 print(read(joinpath(example, "seirs_sim.jl"), String))
+```
+
+## The model
+
+`examples/fdp/SEIRSModel.jl` is the model itself, a module the script includes,
+which knows nothing of the pipeline: it takes the parameters and returns the
+results table, and plots it.
+
+```@example seirs
+print(read(joinpath(example, "SEIRSModel.jl"), String))
 ```
 
 ## Running it

@@ -13,12 +13,10 @@ import BibInternal
 import BibParser
 import MicroMamba
 using Preferences: Preferences, @load_preference
-using DataFrames
 using Dates
 using HTTP
 using JSON
 using LibGit2
-using Plots
 using SHA
 using Scratch: @get_scratch!
 using YAML
@@ -104,13 +102,5 @@ include("crate.jl")
 
 include("testing.jl")
 include("deprecated.jl")
-
-# ---- SEIRS model ----
-module SeirsModel
-
-include("model.jl")
-export modelseirs, plotseirs, getparameter
-
-end
 
 end
