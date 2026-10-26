@@ -1149,6 +1149,24 @@ Test.@testset "initialise() registers the code repository at its commit" begin
     @test opened(run_from(with_metadata)) == object
     @test length(licences(object)) == 1 && length(keywords(object)) == 2
 
+    # ... nor a licence it holds under an identifier that the SPDX list has
+    # since replaced, given by the identifier replacing it or by name
+    replaced = DataPipeline._createentry(registry, "object",
+                                         Dict("description" => "replaced licence $uid",
+                                              "authors" => [runner["url"]]))["url"]
+    gpl = ("GPL-3.0+", "https://spdx.org/licenses/GPL-3.0+")
+    DataPipeline._createentry(registry, "licence",
+                              Dict("object" => replaced,
+                                   "licence_info" => gpl[1],
+                                   "identifier" => gpl[2]))
+    for given in ("GPL-3.0-or-later", "GNU General Public License v3.0 or later")
+        DataPipeline._addlicence!(registry, replaced, given)
+    end
+    @test licences(replaced) == [gpl]
+    DataPipeline._addlicence!(registry, replaced, "MIT")
+    @test Set(licences(replaced)) ==
+          Set([gpl, ("MIT", "https://spdx.org/licenses/MIT")])
+
     # An object the registry holds at the commit already is kept, whatever its
     # authors, and given the licence and keywords
     held_clone = fixture("codemeta.json" => codemeta)

@@ -238,10 +238,10 @@ Test.@testset "what may be said of a source" begin
                    refused(bibtex = "absent", primary = true))
     # Nothing saying what the file is to its source
     @test occursin("`primary = true`", refused(bibtex = "deposit"))
-    # A licence that is neither an identifier in the SPDX list nor a URL;
-    # and one given under both spellings of the keyword
+    # A licence that is neither an identifier nor a name in the SPDX list nor
+    # a URL; and one given under both spellings of the keyword
     for words in (" ", "Creative Commons Attribution 4.0", "CC-BY-4")
-        @test occursin("not an identifier in the SPDX licence list",
+        @test occursin("neither an identifier nor a name in the SPDX licence list",
                        refused(bibtex = "deposit", primary = true,
                                licence = words))
     end
@@ -351,21 +351,90 @@ end
 
 Test.@testset "a licence" begin
     cc0 = (info = "CC0-1.0", identifier = spdx * "CC0-1.0")
-    # One in the SPDX list is known by its identifier there, in any case or
-    # as the address of its page, and is identified by that page
+    # One in the SPDX list is known by its identifier there, in any case,
+    # with any dash or as the address of its page, and is identified by that
+    # page
     for written in ("CC0-1.0", "cc0-1.0", spdx * "CC0-1.0",
-        spdx * "CC0-1.0.html", "http://spdx.org/licenses/cc0-1.0")
+        spdx * "CC0-1.0.html", "http://spdx.org/licenses/cc0-1.0",
+        "CC0\u20101.0", "cc0\u22121.0")
         @test DataPipeline._licence(written) == cc0
     end
-    # ... one that the list has deprecated included
-    @test DataPipeline._licence("GPL-3.0").info == "GPL-3.0"
+    # ... or by its name there, in any case, with its runs of white space and
+    # dashes as any others, the list's own stray spaces among them
+    for written in ("Creative Commons Zero v1.0 Universal",
+                    " creative commons  ZERO v1.0\tuniversal")
+        @test DataPipeline._licence(written) == cc0
+    end
+    for written in ("Data licence Germany \u2013 attribution \u2013 version 2.0",
+        "Data licence Germany - attribution - version 2.0",
+        "Data licence Germany--attribution--version 2.0")
+        @test DataPipeline._licence(written).info == "DL-DE-BY-2.0"
+    end
+    @test DataPipeline._licence("Creative Commons Public Domain Mark 1.0 Universal").info ==
+          "CC-PDM-1.0"
+    @test DataPipeline._licence("Licence Libre du Qu\u00e9bec - Permissive version 1.1").info ==
+          "LiLiQ-P-1.1"
+    # One that the list has deprecated in favour of one other is that other,
+    # by identifier or by the name the two share
+    for written in ("GPL-3.0+", spdx * "GPL-3.0+",
+        "GNU General Public License v3.0 or later", "GPL-3.0-or-later")
+        @test DataPipeline._licence(written).info == "GPL-3.0-or-later"
+    end
+    @test DataPipeline._licence("GPL-3.0").info == "GPL-3.0-only"
+    @test DataPipeline._licence("Nunit").info == "zlib-acknowledgement"
+    # ... and as it is where the list replaces it by an expression, or by none
+    @test DataPipeline._licence("eCos-2.0").info == "eCos-2.0"
+    @test DataPipeline._licence("Net-SNMP").info == "Net-SNMP"
     # Any other is the URL of a licence, whether or not it is at spdx.org
     for url in (own_terms, spdx * "Not-Yet-In-The-Copy-1.0")
         @test DataPipeline._licence(url) == (info = url, identifier = url)
     end
     @test isnothing(DataPipeline._licence(nothing))
-    @test_throws ArgumentError DataPipeline._licence("CC0")
+    # Not a licence: an abbreviation, an identifier with spaces for dashes,
+    # part of a name, a name with an accent written as a letter and a
+    # combining mark where the list has one character
+    for written in ("CC0", "CC0 1.0", "Creative Commons Zero",
+                    "Licence Libre du Que\u0301bec - Permissive version 1.1")
+        @test_throws ArgumentError DataPipeline._licence(written)
+    end
     @test length(DataPipeline.SPDX_IDENTIFIERS) > 700
+
+    # A licence the registry holds is as it would be recorded now, or as it
+    # is held where it cannot be read
+    @test DataPipeline._heldlicence(Dict("licence_info" => "GPL-3.0+",
+                                         "identifier" => spdx * "GPL-3.0+")) ==
+          DataPipeline._licence("GPL-3.0-or-later")
+    @test DataPipeline._heldlicence(Dict("licence_info" => "Our terms",
+                                         "identifier" => nothing)) ==
+          (info = "Our terms", identifier = nothing)
+
+    # In the copy, each licence replacing another is in it and not replaced
+    # itself, and a name that several identifiers share is one licence's
+    replacements = DataPipeline.SPDX_REPLACEMENTS
+    @test length(replacements) >= 20
+    listed(identifier) = haskey(DataPipeline.SPDX_IDENTIFIERS,
+                                DataPipeline._spdxidkey(identifier))
+    @test filter(!listed, collect(values(replacements))) == String[]
+    @test filter(in(keys(replacements)), collect(values(replacements))) ==
+          String[]
+    named = Dict{String, Set{String}}()
+    for entry in DataPipeline.SPDX_ENTRIES
+        push!(get!(named, DataPipeline._spdxnamekey(entry[2]), Set{String}()),
+              get(replacements, entry[1], entry[1]))
+    end
+    @test [name for (name, licences) in named if length(licences) > 1] ==
+          String[]
+
+    # The source of a licence's entry names what replaces it in the element
+    # with no `expression`: the one licence, if any
+    @test DataPipeline._obsoletedby("""
+    <obsoletedBys>
+      <obsoletedBy>GPL-2.0-only</obsoletedBy>
+      <obsoletedBy expression="GPL-2.0+">GPL-2.0-or-later</obsoletedBy>
+    </obsoletedBys>
+    """) == "GPL-2.0-only"
+    @test isnothing(DataPipeline._obsoletedby("<crossRefs></crossRefs>"))
+    @test isnothing(DataPipeline._obsoletedby("<obsoletedBy>A</obsoletedBy>\n<obsoletedBy>B</obsoletedBy>"))
 
     # The copy of the list that the package keeps is the list as it is
     # published. With no network there is nothing to compare it with, and
@@ -388,9 +457,11 @@ Test.@testset "a licence" begin
         @test published["licenseListVersion"] == DataPipeline.SPDX_LIST_VERSION
         @test sort!(symdiff(kept, listed)) == String[]
         # ... and writing it afresh would change nothing, however a checkout
-        # ends its lines
+        # ends its lines. The replacements are the copy's own: they come from
+        # the source of the list at its version, which does not change
         copy = replace(read(DataPipeline.SPDX_LIST, String), "\r\n" => "\n")
-        @test (DataPipeline._spdxlisttext(published) == copy) == true
+        @test (DataPipeline._spdxlisttext(published, replacements) == copy) ==
+              true
     end
 end
 
@@ -936,6 +1007,43 @@ Test.@testset "link_register!() with a file" begin
     link_register!(offering(), fetched;
                    of(path = changed, release_version = "2.2")...)
     @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
+end
+
+Test.@testset "a licence held under an identifier the list has replaced" begin
+    replaced = "sources/register/replaced/$uid"
+    file = file_of("replaced licence $uid\n")
+    function of(; keywords...)
+        return (; bibtex = "deposit", primary = true,
+                title = "Replaced licence $uid", keywords...)
+    end
+
+    # Registered with no licence, then given one under an identifier that the
+    # SPDX list has since replaced by another, as an earlier version of the
+    # package or another client records it
+    handle = offering()
+    link_register!(handle, replaced; of(path = file)...)
+    DataPipeline.finalise(handle)
+    object = registered(replaced, "0.0.1")["object"]
+    DataPipeline._createentry(registry, "licence",
+                              Dict("object" => object,
+                                   "licence_info" => "GPL-3.0+",
+                                   "identifier" => spdx * "GPL-3.0+"))
+
+    # It is the licence replacing it, however that is given, and registering
+    # the file with that licence registers nothing new
+    handle = offering()
+    for licence in ("GPL-3.0-or-later", "GPL-3.0+",
+        "GNU General Public License v3.0 or later")
+        @test DataPipeline.isregistered(handle, replaced; of(; licence)...)
+    end
+    @test !DataPipeline.isregistered(handle, replaced;
+                                     of(licence = "GPL-3.0-only")...)
+    link_register!(handle, replaced;
+                   of(path = file, licence = "GPL-3.0-or-later")...)
+    DataPipeline.finalise(handle)
+    @test registered_versions(replaced) == ["0.0.1"]
+    @test licences_of(object_of(registered(replaced, "0.0.1"))) ==
+          [("GPL-3.0+", spdx * "GPL-3.0+")]
 end
 
 Test.@testset "link_register!() with supersede = true" begin

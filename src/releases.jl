@@ -590,9 +590,9 @@ function _comparerelease(identifier::String, citation::SourceCitation,
     return nothing
 end
 
-# A licence as two records of it are compared: in lower case, as its SPDX
-# identifier where it has one, the deprecated `+` read as `-or-later` and a GNU
-# licence with no suffix as `-only`, as SPDX now writes them
+# A licence as two records of it are compared: in lower case, as `_licence`
+# records it, else as it is written, a `+` at the end, as in `AGPL-3.0+`, which
+# the SPDX list has no identifier for, read as `-or-later`
 function _licencekey(licence::AbstractString)
     named = try
         _licence(licence).info
@@ -600,9 +600,7 @@ function _licencekey(licence::AbstractString)
         err isa ArgumentError || rethrow()
         licence
     end
-    key = replace(lowercase(named), r"\+$" => "-or-later")
-    occursin(r"^(a|l)?gpl-\d\.\d$|^gfdl-\d\.\d$", key) && (key *= "-only")
-    return key
+    return replace(lowercase(named), r"\+$" => "-or-later")
 end
 
 # The DOI of the version that Zenodo archived of a GitHub repository's release

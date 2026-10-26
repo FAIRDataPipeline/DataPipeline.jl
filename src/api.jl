@@ -462,9 +462,11 @@ and comes before any that [`register_authors!`](@ref) was given, else as
   when it is one that other people can reach, and not for a file on this
   machine.
 - `licence`, which may be written `license`, is the licence's identifier in
-  the SPDX licence list, https://spdx.org/licenses/, as `CC-BY-4.0`; or the
-  URL of a licence that is not in the list. An identifier is looked for in
-  the copy of the list that the package keeps.
+  the SPDX licence list, https://spdx.org/licenses/, as `CC-BY-4.0`, or its
+  name there; or the URL of a licence that is not in the list. A licence in
+  the list is looked for in the copy that the package keeps, in any case and
+  with any dash, and is recorded by its identifier, or by that of the licence
+  the list has replaced it by.
 - `release_date` and `release_version` are the source's own, in place of
   what the citation says or lacks: a `Date`, a `DateTime` or text in ISO form
   as far as it goes; and a version, which is written in full, `2.1` as

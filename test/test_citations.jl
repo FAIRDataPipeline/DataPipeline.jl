@@ -71,11 +71,9 @@ end
 
 Test.@testset "BibTeX as doi.org gives it" begin
     handle = new_handle()
-    # Zenodo's licence is its name, which cannot be recorded
-    gpl = (:warn,
-           r"gives its licence as 'GNU General Public License v3\.0 or later'")
-    keys = @test_logs gpl register_citations!(handle,
-                                              saved.(first.(LOOKED_UP))...)
+    # Zenodo's licence is its name in the SPDX list, read with nothing said
+    keys = @test_logs register_citations!(handle,
+                                          saved.(first.(LOOKED_UP))...)
     @test keys == ["https://doi.org/10.24381/cds.f17050d7",
         "https://doi.org/10.5067/modis/mod13c1.061",
         "https://doi.org/10.5281/zenodo.5562602", "Fick_2017"]
@@ -91,7 +89,10 @@ Test.@testset "BibTeX as doi.org gives it" begin
     @test modis.identifier == "https://doi.org/10.5067/modis/mod13c1.061"
     @test modis.authors == ["Kamel Didan"]
     @test zenodo.authors == ["Ryan Field", "Dennis Reddyhoff"]
-    @test isnothing(zenodo.licence) && isempty(zenodo.identifiers)
+    @test isempty(zenodo.identifiers)
+    # ... a name that the list's deprecated GPL-3.0+ shares with the licence
+    # replacing it, which is the one recorded
+    @test zenodo.licence == "GPL-3.0-or-later"
 
     # Crossref writes the entry on one line, the month as a bare `May`
     @test worldclim.identifier == "https://doi.org/10.1002/joc.5086"
@@ -108,13 +109,13 @@ Test.@testset "a licence in BibTeX" begin
               @misc{words, title = {W}, copyright = {All rights reserved}}
               @misc{none, title = {N}}
               """
-    # An SPDX identifier, as written, before a copyright; a URL; and words,
-    # which are warned of and are no licence
+    # An SPDX identifier, as the list writes it, before a copyright; a URL;
+    # and words, which are warned of and are no licence
     words = (:warn, r"'words' gives its licence as 'All rights reserved'")
     @test_logs words register_citations!(handle, entries)
     @test [handle.citations[key].licence
            for key in ("spdx", "address", "words", "none")] ==
-          ["cc-by-4.0", "https://example.org/terms", nothing, nothing]
+          ["CC-BY-4.0", "https://example.org/terms", nothing, nothing]
 end
 
 Test.@testset "what a DOI's metadata gives" begin
@@ -149,10 +150,14 @@ Test.@testset "what a DOI's metadata gives" begin
                "C.A. Cobbold" => "https://orcid.org/0000-0001-8814-7688",
                "R. Reeve" => "https://orcid.org/0000-0003-2589-8091")
 
-    # Zenodo: a version, a full date, and the SPDX right, not "Open Access"
+    # Zenodo: a version, a full date, and the SPDX right, not "Open Access",
+    # its deprecated GPL-3.0+ recorded as the licence replacing it, as the
+    # BibTeX of the same DOI gives it by name
     @test zenodo.release_version == "v0.2.0"
     @test zenodo.release_date == DateTime(2021, 10, 11)
-    @test zenodo.licence == "GPL-3.0+"
+    @test zenodo.licence == "GPL-3.0-or-later"
+    @test zenodo.licence ==
+          only(DataPipeline._readcitations(saved("pydatapipeline.bib"))).licence
     @test zenodo.description ==
           "Package for interfacing with the FAIR Data Pipeline in Python"
     @test length(zenodo.identifiers) == 2

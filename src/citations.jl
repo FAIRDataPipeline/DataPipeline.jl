@@ -34,8 +34,8 @@ to identify the source; its `title`; its `author`s, a person as given names
 then family name and an organisation as it is written; its `date`, or its
 `year`, `month` and `day` as far as they go, as the source's release date; its
 `version`; its `note`, as a description; and its `license` or `copyright`, as
-its licence, when that is an identifier in the SPDX licence list or a URL -
-any other is warned of and passed over. Braces are dropped, and LaTeX
+its licence, when that is an identifier or a name in the SPDX licence list, or
+a URL - any other is warned of and passed over. Braces are dropped, and LaTeX
 commands are left as they are.
 """
 function register_citations!(handle::DataRegistryHandle,
@@ -156,18 +156,18 @@ function _sourcecitation(entry::BibInternal.Entry)
 end
 
 # The licence that a BibTeX entry gives in a `license` or `copyright` field,
-# if it is one that can be recorded: an identifier in the SPDX licence list,
-# or a URL. Any other is warned of, and is no licence.
+# as it is recorded, if it is one that can be: one in the SPDX licence list,
+# by its identifier or its name, or a URL. Any other is warned of, and is no
+# licence.
 function _bibtexlicence(entry::BibInternal.Entry)
     for field in ("license", "copyright")
         written = _unbrace(get(entry.fields, field, ""))
         isnothing(written) && continue
         try
-            _licence(written)
-            return written
+            return _licence(written).info
         catch e
             e isa ArgumentError || rethrow()
-            @warn "the citation '$(entry.id)' gives its licence as '$written', which is neither an identifier in the SPDX licence list nor a URL, so it is not recorded: give `licence` to record one"
+            @warn "the citation '$(entry.id)' gives its licence as '$written', which is neither an identifier nor a name in the SPDX licence list nor a URL, so it is not recorded: give `licence` to record one"
             return nothing
         end
     end
@@ -369,7 +369,8 @@ name and an organisation as it is written, with the ORCIDs and ROR ids the
 record gives them; the first of its Issued, Available, Created and Submitted
 dates, or else its year; its version; its abstract; and its licence, by its
 identifier in the SPDX licence list where a right gives one that the list
-has, else by the first right whose address is a web page.
+has, as `_licence` records it, else by the first right whose address is a web
+page.
 """
 function _datacitecitation(record::AbstractDict, doi::AbstractString)
     authors = String[]
@@ -482,14 +483,14 @@ function _datacitedate(record::AbstractDict)
 end
 
 # The licence that a DataCite record's rights give: an identifier in the SPDX
-# licence list, as the list writes it, else the first right's web address
+# licence list, as `_licence` records it, else the first right's web address
 function _datacitelicence(rights::AbstractVector)
     for right in rights
         scheme = something(get(right, "rightsIdentifierScheme", nothing), "")
         identifier = something(get(right, "rightsIdentifier", nothing), "")
         lowercase(scheme) == "spdx" || continue
-        haskey(SPDX_IDENTIFIERS, lowercase(identifier)) &&
-            return SPDX_IDENTIFIERS[lowercase(identifier)]
+        listed = _spdxidentifier(identifier)
+        isnothing(listed) || return listed
     end
     for right in rights
         address = something(get(right, "rightsUri", nothing), "")
