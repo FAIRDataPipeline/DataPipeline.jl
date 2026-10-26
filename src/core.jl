@@ -331,8 +331,8 @@ registry's record of a file's source is drawn from.
   first, or `nothing`
 - `release_version`: its version as the citation writes it, or `nothing`
 - `description`: the citation's note or abstract, or `nothing`
-- `licence`: its licence, an identifier in the SPDX licence list or a URL, or
-  `nothing`
+- `licence`: its licence, an identifier in the SPDX licence list as it is
+  recorded, or a URL, or `nothing`
 - `identifiers`: the ORCIDs and ROR ids the citation gives its authors, by
   name
 """

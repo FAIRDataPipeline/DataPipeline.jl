@@ -1129,8 +1129,9 @@ function _repositoryauthors(registry::RegistryEndpoint,
     return isempty(authors) ? [_getauthorurl(registry)] : authors
 end
 
-# Add a repository's licence to its object unless the object has it, a licence
-# that is neither in the SPDX list nor a URL passed over with a warning
+# Add a repository's licence to its object unless the object has it, as
+# `_licence` would record it now, a licence that is neither in the SPDX list
+# nor a URL passed over with a warning
 _addlicence!(::RegistryEndpoint, ::String, ::Nothing) = nothing
 function _addlicence!(registry::RegistryEndpoint, object_url::String,
                       licence::String)
@@ -1141,8 +1142,8 @@ function _addlicence!(registry::RegistryEndpoint, object_url::String,
         @warn "the repository's licence '$licence' is not recorded: $(err.msg)"
         return nothing
     end
-    query = Dict("object" => object_url, "identifier" => named.identifier)
-    isnothing(_getentry(registry, "licence", query)) &&
+    held = _getentries(registry, "licence", Dict("object" => object_url))
+    any(entry -> _heldlicence(entry) == named, held) ||
         _createentry(registry, "licence",
                      Dict("object" => object_url, "licence_info" => named.info,
                           "identifier" => named.identifier))

@@ -1,5 +1,12 @@
 # NEWS
 
+- v0.58.1
+  - A licence may be given by its name in the SPDX licence list, as doi.org's
+    BibTeX often gives one, and in an identifier or a name any dash may stand
+    for another; it is recorded by its identifier.
+  - A licence that the SPDX list has deprecated in favour of one other, such as
+    `GPL-3.0+`, is recorded as that other, `GPL-3.0-or-later`, and a file whose
+    licence is held under the old identifier still has the same licence.
 - v0.58.0
   - The example's SEIRS model has left the package for
     `examples/fdp/SEIRSModel.jl`, which `seirs_sim.jl` includes: a script that

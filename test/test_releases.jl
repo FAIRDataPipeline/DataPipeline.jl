@@ -219,6 +219,11 @@ end
           DataPipeline._licencekey("https://spdx.org/licenses/LGPL-3.0-or-later")
     @test DataPipeline._licencekey("GPL-3.0") ==
           DataPipeline._licencekey("gpl-3.0-only")
+    @test DataPipeline._licencekey("GNU Lesser General Public License v3.0 or later") ==
+          DataPipeline._licencekey("LGPL-3.0-or-later")
+    # ... and an expression that the list has no identifier for
+    @test DataPipeline._licencekey("AGPL-3.0+") ==
+          DataPipeline._licencekey("AGPL-3.0-or-later")
     @test DataPipeline._licencekey("MIT") !=
           DataPipeline._licencekey("Apache-2.0")
 
@@ -254,7 +259,7 @@ end
                       "the DOI names Martin J Burke and the files do not; " *
                       "the files name Ada Lovelace and the DOI does not; " *
                       "the DOI's title is 'DataPipeline.jl' and the files' 'Something else'; " *
-                      "the DOI's licence is LGPL-3.0\\+ and the files' MIT; " *
+                      "the DOI's licence is LGPL-3.0-or-later and the files' MIT; " *
                       "the DOI is of version v0.54.1 and the release 0.55.0\$")),
                (:info,
                 Regex("^the release's DOI $identifier and the repository's metadata files: " *

@@ -234,14 +234,14 @@ function _recordssource(registry::RegistryEndpoint, data_product::AbstractDict,
 end
 
 # Whether a registered object has these authors, in any order, as the
-# registry keeps them in none, and this licence alone, or none
+# registry keeps them in none, and this licence alone, or none, a licence held
+# as `_licence` would record it now
 function _recordsauthorship(registry::RegistryEndpoint, object::AbstractDict,
                             authors::Vector{String},
                             licence::Union{Nothing, NamedTuple})
     sort(object["authors"]) == sort(authors) || return false
-    licences = [(info = held["licence_info"], identifier = held["identifier"])
-                for held in (_getentry(registry, URIs.URI(licence_url))
-                             for licence_url in object["licences"])]
+    licences = [_heldlicence(_getentry(registry, URIs.URI(licence_url)))
+                for licence_url in object["licences"]]
     return licences == (isnothing(licence) ? [] : [licence])
 end
 
