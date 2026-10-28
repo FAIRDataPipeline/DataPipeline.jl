@@ -275,6 +275,35 @@ const PNG = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
             end
             @test occursin("could not build", msg)
             @test occursin("broken.latexmk.log", msg)
+
+            # A figure moved to another folder TeX searches leaves a kept
+            # build up to date in latexmk's eyes, its listing naming the old
+            # place: the build is forced, and lists the new
+            moving = folder_of(Dict("moving.tex" => """
+                                    \\documentclass{article}
+                                    \\usepackage{graphicx}
+                                    \\graphicspath{{pipeline/}{include/}}
+                                    \\begin{document}
+                                    \\includegraphics[width=1cm]{dot}
+                                    \\end{document}
+                                    """))
+            mkpath(joinpath(moving, "pipeline"))
+            mkpath(joinpath(moving, "include"))
+            write(joinpath(moving, "pipeline", "dot.png"), PNG)
+            kept = mktempdir()
+            # The folder each listed copy of the figure is in
+            placed(built) = [basename(dirname(file))
+                             for file in built.files
+                             if basename(file) == "dot.png"]
+            first = DataPipeline._latexmk(joinpath(moving, "moving.tex"), kept,
+                                          DataPipeline.PdfLaTeXEngine())
+            @test placed(first) == ["pipeline"]
+            mv(joinpath(moving, "pipeline", "dot.png"),
+               joinpath(moving, "include", "dot.png"))
+            moved = DataPipeline._latexmk(joinpath(moving, "moving.tex"), kept,
+                                          DataPipeline.PdfLaTeXEngine())
+            @test placed(moved) == ["include"]
+            @test all(ispath, moved.files)
         end
     end
 end

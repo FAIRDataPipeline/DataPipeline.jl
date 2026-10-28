@@ -17,6 +17,9 @@
     release date, neither of which it compares.
   - `DataPipeline.check_paper` reports a check that a registry answers with an
     error as not made, with the status, where it threw.
+  - `build_paper!` and `DataPipeline.check_paper` build a paper afresh where a
+    file it uses has moved to another folder TeX searches, which latexmk took
+    as up to date, listing the file where it was.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand

@@ -56,23 +56,31 @@ function _latexmk(tex::AbstractString, outdir::AbstractString,
     mkpath(outdir)
     listing = joinpath(outdir, "$stem.deps")
     log = joinpath(outdir, "$stem.latexmk.log")
-    command = Cmd(`$latexmk $(_latexmkflag(engine)) -interaction=nonstopmode -halt-on-error -outdir=$outdir -deps-out=$listing -jobname=$stem $options $(basename(tex))`,
-                  dir = folder)
-    if !isnothing(texinputs)
-        # A trailing separator keeps TeX's own search path after the folder
-        separator = Sys.iswindows() ? ";" : ":"
-        command = addenv(command,
-                         "TEXINPUTS" =>
-                             abspath(texinputs) * separator *
-                             get(ENV, "TEXINPUTS", ""))
+    # Run latexmk with `flags` too, and return the files its listing names
+    function build(flags::Vector{String})
+        command = Cmd(`$latexmk $(_latexmkflag(engine)) $flags -interaction=nonstopmode -halt-on-error -outdir=$outdir -deps-out=$listing -jobname=$stem $options $(basename(tex))`,
+                      dir = folder)
+        if !isnothing(texinputs)
+            # A trailing separator keeps TeX's own search path after the folder
+            separator = Sys.iswindows() ? ";" : ":"
+            command = addenv(command,
+                             "TEXINPUTS" =>
+                                 abspath(texinputs) * separator *
+                                 get(ENV, "TEXINPUTS", ""))
+        end
+        built = open(log, "w") do io
+            return success(pipeline(command, stdout = io, stderr = io))
+        end
+        built ||
+            throw(ReadWriteException("latexmk could not build $tex - the end of its log, $log:\n$(_logtail(log))"))
+        return _dependencies(read(listing, String), folder)
     end
-    built = open(log, "w") do io
-        return success(pipeline(command, stdout = io, stderr = io))
-    end
-    built ||
-        throw(ReadWriteException("latexmk could not build $tex - the end of its log, $log:\n$(_logtail(log))"))
-    return (files = _dependencies(read(listing, String), folder),
-            pdf = joinpath(outdir, "$stem.pdf"))
+    files = build(String[])
+    # latexmk takes a kept build as up to date when a file it used has moved to
+    # another folder TeX searches, and lists the file where it was: such a
+    # build is forced, once
+    all(ispath, files) || (files = build(["-g"]))
+    return (files = files, pdf = joinpath(outdir, "$stem.pdf"))
 end
 
 # The last lines of a log, to say why a command failed
