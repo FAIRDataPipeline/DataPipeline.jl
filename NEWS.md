@@ -26,6 +26,9 @@
   - A registry that sends nothing for ten minutes in answer to a request is
     taken not to answer, with an error saying so, where the call waited for
     ever.
+  - In a recorded run, the PDF `build_paper!` registers is copied beside the
+    `.tex` file as `<stem>.pdf`, where `latexmk` builds one, unless git tracks
+    that file; `DataPipeline.check_paper` notes it where git does not ignore it.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand

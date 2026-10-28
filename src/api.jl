@@ -203,6 +203,7 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     open(joinpath(handle.config_dir, "coderuns.txt"), "a") do io
         return println(io, handle.code_run_uuid)
     end
+    _copyregistered(handle)
     println("finished - code run locally registered as: ", url, "\n")
     _ended(handle)
     session = SESSION[]

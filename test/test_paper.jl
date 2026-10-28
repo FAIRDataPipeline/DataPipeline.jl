@@ -385,15 +385,22 @@ end
             info = DataPipeline._pdfdocumentinfo(read(stored))
             @test info["Author"] == "Morag Fairlie; Tobias Quennell"
             @test info["Keywords"] == "invented-$uid"
+            # ... and copied beside the LaTeX, where latexmk builds a PDF, git
+            # tracking nothing there: a copy, not a link
+            beside = joinpath(top, "paper.pdf")
+            @test read(beside) == read(stored)
+            @test !samefile(beside, stored)
 
             # Built again, unchanged: the same bytes, authors and licence, so
-            # nothing registered
+            # nothing registered, and the registered PDF copied beside it again
+            write(beside, "A PDF built elsewhere.\n")
             config = offering("again", sha, "0.0.2")
             handle = DataPipeline.initialise(config, config)
             build_paper!(handle, joinpath(top, "paper.tex"))
             @test haskey(handle.unchanged, ("paper", nothing))
             DataPipeline.finalise(handle)
             @test versions() == ["0.0.1"]
+            @test read(beside) == read(stored)
 
             # What is refused, before anything is registered
             refused(name, commit, version = "0.0.3") = begin
@@ -449,7 +456,8 @@ end
                                                    product["object"]).hash
 
             # A rehearsal says what a recorded run would refuse, and
-            # registers nothing
+            # registers nothing, nor copies its PDF beside the LaTeX
+            write(beside, "Not the rehearsal's.\n")
             write(joinpath(top, "paper.tex"), files["paper.tex"])
             clean = commit!("restored")
             write(joinpath(top, "paper.tex"),
@@ -465,17 +473,23 @@ end
             DataPipeline.finalise(rehearsal)
             @test isfile(joinpath(outputs, namespace, pdf, "0.0.3.pdf"))
             @test versions() == ["0.0.1"]
+            @test read(beside, String) == "Not the rehearsal's.\n"
 
             # A run from uncommitted changes, as `fair run --dirty` records
-            # one, takes the paper's files as they are, and names them
+            # one, takes the paper's files as they are, and names them. The
+            # commits since have put the PDF beside the LaTeX in git, so it is
+            # left as it is
             config = offering("dirty", clean * "-dirty", "0.0.3")
             handle = DataPipeline.initialise(config, config)
             @test_logs((:info,
                         r"^the run is from uncommitted changes, so these files the paper uses are taken as they are: paper\.tex \(changed since the commit\)"),
+                       (:warn,
+                        r"^git tracks paper\.pdf, so the registered PDF is not copied there"),
                        match_mode=:any,
                        build_paper!(handle, joinpath(top, "paper.tex")))
             DataPipeline.finalise(handle)
             @test versions() == ["0.0.1", "0.0.3"]
+            @test read(beside, String) == "Not the rehearsal's.\n"
             close(repo)
         end
 
@@ -573,6 +587,8 @@ end
                   ["paper/pipeline/results.tex", "paper/pipeline/table.tex"]
             @test sort(check.uses.own) ==
                   ["paper/article.tex", "paper/include/notes.tex"]
+            @test any(startswith("git does not ignore paper/article.pdf"),
+                      check.notes)
             @test check.metadata == "the top level of CITATION.cff"
             @test "paper/pipeline/table.tex is $(label("table", "0.0.1")), its newest version" in
                   check.notes

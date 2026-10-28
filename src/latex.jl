@@ -168,6 +168,24 @@ function _uncommitted(top::AbstractString, paths::AbstractVector{String})
     return found
 end
 
+# Whether git tracks the file at `path`, from the top level of the repository
+# at `top` with `/` between folders, and whether it ignores it, as `(tracked,
+# ignored)`, whether or not the file exists
+function _githolding(top::AbstractString, path::AbstractString)
+    return LibGit2.with(LibGit2.GitRepo(top)) do repo
+        status = LibGit2.status(repo, path)
+        C = LibGit2.Consts
+        !isnothing(status) &&
+            status & (C.STATUS_WT_NEW | C.STATUS_IGNORED) == 0 &&
+            return (tracked = true, ignored = false)
+        ignored = Ref{Cint}(0)
+        LibGit2.@check ccall((:git_ignore_path_is_ignored, LibGit2.libgit2),
+                             Cint, (Ptr{Cint}, Ptr{Cvoid}, Cstring), ignored,
+                             repo, path)
+        return (tracked = false, ignored = ignored[] == 1)
+    end
+end
+
 # What git's status flags for a file say of it
 function _gitstate(flags::Integer)
     C = LibGit2.Consts

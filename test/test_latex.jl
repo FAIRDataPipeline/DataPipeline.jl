@@ -224,6 +224,36 @@ const PNG = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
         close(repo)
     end
 
+    @testset "what git holds of the PDF beside a paper" begin
+        # Whether git tracks a path and ignores it, the file there or not; and
+        # what a check of the paper says of each
+        dir = folder_of(Dict("paper.tex" => "\\documentclass{article}\n",
+                             ".gitignore" => "ignored.pdf\n"))
+        repo = LibGit2.init(dir)
+        held(path) = DataPipeline._githolding(dir, path)
+        paper = DataPipeline.LaTeXPaper(joinpath(dir, "paper.tex"))
+        function noted()
+            notes = String[]
+            DataPipeline._checkpdfbeside!(notes, paper, dir)
+            return notes
+        end
+        @test held("paper.pdf") == (tracked = false, ignored = false)
+        @test held("ignored.pdf") == (tracked = false, ignored = true)
+        write(joinpath(dir, "paper.pdf"), "a PDF")
+        @test held("paper.pdf") == (tracked = false, ignored = false)
+        @test startswith(only(noted()), "git does not ignore paper.pdf")
+        LibGit2.add!(repo, "paper.pdf")
+        @test held("paper.pdf") == (tracked = true, ignored = false)
+        @test startswith(only(noted()), "git tracks paper.pdf")
+        write(joinpath(dir, ".gitignore"), "*.pdf\n")
+        @test held("paper.pdf").tracked
+        rm(joinpath(dir, "paper.pdf"))
+        LibGit2.remove!(repo, "paper.pdf")
+        @test held("paper.pdf") == (tracked = false, ignored = true)
+        @test isempty(noted())
+        close(repo)
+    end
+
     # The engine is the flag latexmk is given
     @test DataPipeline._latexmkflag(DataPipeline.PdfLaTeXEngine()) == "-pdf"
     @test DataPipeline._latexmkflag(DataPipeline.LuaLaTeXEngine()) == "-pdflua"

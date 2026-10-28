@@ -159,9 +159,11 @@ registered last; the files the paper is built from that are not committed;
 whether the config is what `update_paper` would write; the files the paper
 uses from elsewhere in the repository that are registered, and so are
 likely files from the pipeline; and the files in the pipeline folder that are
-not registered, but for the environment there and any file git ignores. A
-check that needs a registry that cannot be reached, or that answers with an
-error, is said not to have been made, and why.
+not registered, but for the environment there and any file git ignores;
+and whether git ignores the PDF beside the `.tex` file, where a recorded build
+copies the registered PDF. A check that needs a registry that cannot be
+reached, or that answers with an error, is said not to have been made, and
+why.
 
 `remote` names a remote registry in the CLI configuration of the paper's
 project, `"origin"` being the one `fair init` writes, or is its
@@ -833,6 +835,7 @@ function _checkpaper(paper::LaTeXPaper,
         end
     end
     _checkuncommitted!(actions, paper, top, meta, uses)
+    _checkpdfbeside!(notes, paper, top)
 
     # What the registries know of them
     if !isnothing(uses)
@@ -901,6 +904,21 @@ function _ifanswered(check::Function, unchecked::Vector{String},
         push!(unchecked,
               "$what: the registry at $addresses answered with HTTP status $(err.status)")
     end
+    return nothing
+end
+
+# Add to `notes` that git does not ignore the PDF beside the paper's `.tex`
+# file, where a recorded build copies the registered PDF and a plain `latexmk`
+# builds one; and where git tracks it, that the copy is not made
+function _checkpdfbeside!(notes::Vector{String}, paper::LaTeXPaper,
+                          top::AbstractString)
+    beside = _gitpath(_pdfbeside(paper), top)
+    held = _githolding(top, beside)
+    held.ignored && return nothing
+    push!(notes,
+          held.tracked ?
+          "git tracks $beside, so a recorded build does not copy the registered pdf there: untrack and ignore it to have the copy" :
+          "git does not ignore $beside, where a recorded build copies the registered pdf and a plain `latexmk` builds one: ignore it")
     return nothing
 end
 

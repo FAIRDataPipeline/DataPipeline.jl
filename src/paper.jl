@@ -94,6 +94,11 @@ paper gives the same bytes and is found unchanged rather than registered
 again. A rehearsal builds in a folder of its own, registers nothing, and warns
 of what a recorded run would refuse rather than stopping. A change of authors
 from the version registered before is said.
+
+In a recorded run, once [`finalise`](@ref) has registered it, the pdf is also
+copied to `<stem>.pdf` beside the `.tex` file, where `latexmk` builds one, so
+that the file there is the registered one - but not where git tracks that
+file, which is then left as it is, with a warning.
 """
 function build_paper!(handle::DataRegistryHandle, paper::LaTeXPaper;
                       data_product::Union{Nothing, AbstractString} = nothing)
@@ -129,6 +134,7 @@ function build_paper!(handle::DataRegistryHandle, paper::LaTeXPaper;
         cp(built.pdf, copied)
         return _linkwrite!(handle, entry, copied, described, false)
     end
+    _copybeside!(handle, entry, paper, top)
     _sayauthorchange(handle, previous, described)
     return path
 end
@@ -144,6 +150,53 @@ function _paperproblem(::RecordedRun, message::AbstractString)
 end
 function _paperproblem(::Rehearsal, message::AbstractString)
     @warn "a recorded run would stop here: $message"
+    return nothing
+end
+
+# The pdf beside a paper's `.tex` file, where `latexmk` builds one by default
+function _pdfbeside(paper::LaTeXPaper)
+    return joinpath(dirname(paper.tex),
+                    splitext(basename(paper.tex))[1] * ".pdf")
+end
+
+# Have `finalise` copy the pdf the run writes under `entry` beside the paper's
+# `.tex` file once it is registered, in a recorded run, unless git tracks the
+# file there, which every run would then change; a rehearsal copies nothing
+function _copybeside!(::DataRegistryHandle{Rehearsal}, ::String, ::LaTeXPaper,
+                      ::AbstractString)
+    return nothing
+end
+function _copybeside!(handle::DataRegistryHandle{RecordedRun}, entry::String,
+                      paper::LaTeXPaper, top::AbstractString)
+    beside = _pdfbeside(paper)
+    if _githolding(top, _gitpath(beside, top)).tracked
+        @warn "git tracks $(_gitpath(beside, top)), so the registered PDF is not copied there: untrack and ignore it to have the copy"
+        return nothing
+    end
+    key = (entry, nothing)
+    written = haskey(handle.outputs, key) ? handle.outputs[key] :
+              handle.unchanged[key]
+    written["copy_to"] = beside
+    return nothing
+end
+
+# Copy each registered file that is to be copied elsewhere too, as a paper's
+# PDF is beside its `.tex` file: a copy, since a plain build there writes the
+# file in place, which through a link would change the registered file. The
+# run is registered by then, so a copy that fails is a warning
+function _copyregistered(handle::DataRegistryHandle)
+    for written in Iterators.flatten((values(handle.outputs),
+                                      values(handle.unchanged)))
+        target = get(written, "copy_to", nothing)
+        isnothing(target) && continue
+        try
+            cp(written["path"], target, force = true)
+            println("copied to ", target)
+        catch err
+            err isa Union{Base.IOError, SystemError} || rethrow()
+            @warn "the registered file $(written["path"]) could not be copied to $target: $(sprint(showerror, err))"
+        end
+    end
     return nothing
 end
 
