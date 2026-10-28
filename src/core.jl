@@ -382,6 +382,17 @@ struct SourceRecord
     licence::Union{Nothing, @NamedTuple{info::String, identifier::String}}
 end
 
+# What `isregistered` compares of a source with a registered one, as a
+# `SourceRecord` holds it: what makes it one source, and its file's authors and
+# licence
+struct _ComparedSource
+    identifier::String
+    title::String
+    version::String
+    authors::Vector{String}
+    licence::Union{Nothing, @NamedTuple{info::String, identifier::String}}
+end
+
 """
     OutputDescription
 

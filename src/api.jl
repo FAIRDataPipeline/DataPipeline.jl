@@ -726,10 +726,11 @@ would be given, but no file, whether registering that file would register
 nothing new: whether the version asked about records the same source -
 its identifier, title and release version, from the citation that `doi` or
 `bibtex` names and from `title` and `release_version` - the same authors, and
-the same licence, `licence` or `license`. `primary` must be given, as there,
-and is not compared; nor are `description`, `release_date` and
-`original_store`, which the registry keeps as a first registration said them;
-nor are the file's bytes. An author the registry has not got is not
+the same licence, `licence` or `license`. `primary`, `description`,
+`release_date` and `original_store` are not compared, the registry keeping the
+last three as a first registration said them, so may be left out, though what
+is given is checked as the link calls check it; nor are the file's bytes
+compared. An author the registry has not got is not
 registered, and makes the answer false, as registering would add one. A `doi`
 with no citation is looked up at `doi.org` as the link calls look it up.
 
@@ -758,7 +759,8 @@ function isregistered(handle::DataRegistryHandle,
     # was said of it is checked either way
     source = _source(handle; doi, bibtex, title, primary, description,
                      original_store, licence, license, release_date,
-                     release_version, authorurl = _heldauthorurl)
+                     release_version, authorurl = _heldauthorurl,
+                     compared = true)
     registry = handle.registry
     product = isnothing(asked.version) ? nothing :
               _versioneddataproduct(registry, asked.namespace, asked.name,

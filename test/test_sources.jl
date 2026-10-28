@@ -1263,6 +1263,7 @@ Test.@testset "isregistered()" begin
     name = "sources/isregistered/file/$uid"
     deposit = "sources/isregistered/deposit/$uid"
     looked = "sources/isregistered/looked/$uid"
+    dateless = "sources/isregistered/dateless/$uid"
     of(; keywords...) = (; bibtex = "deposit", primary = true,
                          title = "Asked about $uid", licence = "CC-BY-4.0",
                          keywords...)
@@ -1274,6 +1275,13 @@ Test.@testset "isregistered()" begin
       date = {2021-03-04},
       doi = {$doi},
       version = {2.1}
+    }
+    """
+    # A citation that gives no date, so that registering needs one
+    undated = """
+    @misc{dateless,
+      title = {A deposit with no date $uid},
+      url = {https://example.org/$uid/dateless}
     }
     """
     # A DOI's metadata, as a lookup would read it, its creator with an ORCID
@@ -1294,11 +1302,15 @@ Test.@testset "isregistered()" begin
         return DataPipeline._datacitecitation(record, md_doi)
     end
 
-    # Registered: a file and a deposit with no file from the citation, and a
-    # file from the DOI's metadata, which registers its creator's ORCID
+    # Registered: a file and a deposit with no file from the citation, a
+    # deposit from the citation with no date, and a file from the DOI's
+    # metadata, which registers its creator's ORCID
     handle = offering()
+    register_citations!(handle, undated)
     link_register!(handle, name; of(path = file_of("asked about $uid\n"))...)
     link_register!(handle, deposit, bibtex = "deposit", primary = true)
+    link_register!(handle, dateless, bibtex = "dateless", primary = true,
+                   release_date = "2020")
     handle.doi_lookups[md_doi] = metadata(known)
     link_register!(handle, looked, path = file_of("looked up $uid\n"),
                    doi = md_doi, primary = true)
@@ -1319,7 +1331,7 @@ Test.@testset "isregistered()" begin
     # Asked in a recorded run and in a rehearsal alike
     for make in (offering, rehearsing)
         asking = make()
-        register_citations!(asking, reauthored)
+        register_citations!(asking, reauthored, undated)
         before, authors = counts(), deepcopy(asking.authors)
 
         # By name: anything registered under it, or at that version, in the
@@ -1352,6 +1364,15 @@ Test.@testset "isregistered()" begin
                                          of(licence = "CC0-1.0")...)
         @test !DataPipeline.isregistered(asking, name; of(bibtex = "page")...)
         @test !DataPipeline.isregistered(asking, "$name/never"; of()...)
+        # `primary` and a release date are not compared, so may be left out,
+        # though what is given is checked as the link calls check it
+        @test DataPipeline.isregistered(asking, name; of(primary = nothing)...)
+        @test DataPipeline.isregistered(asking, deposit, bibtex = "deposit")
+        @test DataPipeline.isregistered(asking, dateless, bibtex = "dateless")
+        @test !DataPipeline.isregistered(asking, dateless, bibtex = "dateless",
+                                         release_version = "9.9")
+        @test_throws ArgumentError DataPipeline.isregistered(asking, name;
+                                                             of(release_date = "June 2021")...)
         # An author the registry has not got, by name or by an ORCID the
         # metadata gives, makes it false and is not registered; the ORCID it
         # has makes it true
@@ -1370,14 +1391,11 @@ Test.@testset "isregistered()" begin
         @test counts() == before
         @test asking.authors == authors
 
-        # Refused as the link calls refuse: a pattern, a source not named, a
-        # source with no `primary`
+        # Refused as the link calls refuse: a pattern, and a source not named
         @test_throws ArgumentError DataPipeline.isregistered(asking,
                                                              "sources/*/$uid")
         @test_throws ArgumentError DataPipeline.isregistered(asking, name,
                                                              title = "Untold $uid")
-        @test_throws ArgumentError DataPipeline.isregistered(asking, name,
-                                                             bibtex = "deposit")
         asking isa DataPipeline.DataRegistryHandle{DataPipeline.RecordedRun} ?
         DataPipeline.finalise(asking) : DataPipeline.discard(asking)
     end

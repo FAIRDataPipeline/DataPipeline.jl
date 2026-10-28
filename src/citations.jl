@@ -552,7 +552,7 @@ const METADATA_READERS = ("application/vnd.datacite.datacite+json" =>
 
 """
     _sourcefacts(citation; primary, title, description, release_date,
-                 release_version)
+                 release_version, dated = true)
 
 Return what the registry records of a source, drawn from its citation and
 from what the caller says of it, as `(identifier, title, version,
@@ -568,11 +568,12 @@ a file of a deposit has a title of its own; `description`; `release_date`, a
 `release_version`. The version is written in full, `2.1` as `2.1.0`, and is
 the registry's default when neither gives one; one that is not a version, or
 that has a leading zero, as `061`, is an error, since writing it in full
-would alter it. A source with no identifier, title or release date from
-either is an error, as are those the registry refuses: an identifier that is
-not a URL with a host, and a title that is blank or longer than
-$SOURCE_TITLE_LENGTH characters. The title is stripped of the white space around
-it, as the registry stores it.
+would alter it. A source with no identifier or title from either is an
+error, as is one with no release date unless `dated` is false, when its date
+is `nothing`; so are those the registry refuses: an identifier that is not a
+URL with a host, and a title that is blank or longer than $SOURCE_TITLE_LENGTH
+characters. The title is stripped of the white space around it, as the
+registry stores it.
 """
 function _sourcefacts(citation::SourceCitation; primary::Bool,
                       title::Union{Nothing, AbstractString} = nothing,
@@ -580,7 +581,8 @@ function _sourcefacts(citation::SourceCitation; primary::Bool,
                       release_date::Union{Nothing, Date, DateTime,
                                           AbstractString} = nothing,
                       release_version::Union{Nothing, VersionNumber,
-                                             AbstractString} = nothing)
+                                             AbstractString} = nothing,
+                      dated::Bool = true)
     lacks(what,
           keyword) = ArgumentError("the citation '$(citation.key)' gives no $what: give `$keyword`")
     isnothing(citation.identifier) &&
@@ -596,12 +598,13 @@ function _sourcefacts(citation::SourceCitation; primary::Bool,
         throw(ArgumentError("the source's title has $(length(title)) characters, more than the $SOURCE_TITLE_LENGTH the registry takes: give a shorter `title`"))
     release_date = something(release_date, citation.release_date,
                              Some(nothing))
-    isnothing(release_date) && throw(lacks("date", "release_date"))
+    isnothing(release_date) && dated && throw(lacks("date", "release_date"))
     version = something(release_version, citation.release_version,
                         DEFAULT_RELEASE_VERSION)
     return (identifier = citation.identifier, title = String(title),
             version = _releaseversion(version),
-            release_date = _releasedate(release_date),
+            release_date = isnothing(release_date) ? nothing :
+                           _releasedate(release_date),
             description = something(description, citation.description,
                                     Some(nothing)),
             primary = primary, authors = citation.authors,

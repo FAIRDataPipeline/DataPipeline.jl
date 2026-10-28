@@ -13,6 +13,8 @@
     takes, an identifier that is not a URL with a host - is refused at the link
     call, where its data product was registered without it. A source's title is
     recorded without the white space around it, as the registry keeps it.
+  - `DataPipeline.isregistered` given a source no longer needs `primary` or a
+    release date, neither of which it compares.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand
