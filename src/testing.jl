@@ -36,17 +36,19 @@ end
     _addwrite(path, data_product, description; version, file_type,
               use_data_product, use_component, use_version, use_namespace)
 
-Append a `write:` entry to the working config at `path` and return `path`.
+Append a `write:` entry to the working config at `path`, with no `description`
+where it is `nothing`, and return `path`.
 """
-function _addwrite(path::String, data_product::String, description::String;
+function _addwrite(path::String, data_product::String,
+                   description::Union{Nothing, String};
                    version = nothing, file_type = nothing,
                    use_data_product = nothing, use_component = nothing,
                    use_version = nothing, use_namespace = nothing)
     data = YAML.load_file(path)
     writes = get(data, "write", Vector{Dict}())
 
-    new_write = Dict{String, Any}("data_product" => data_product,
-                                  "description" => description)
+    new_write = Dict{String, Any}("data_product" => data_product)
+    isnothing(description) || (new_write["description"] = description)
     isnothing(version) || (new_write["version"] = version)
     isnothing(file_type) || (new_write["file_type"] = file_type)
     new_write["use"] = _usesection(use_data_product, use_component,

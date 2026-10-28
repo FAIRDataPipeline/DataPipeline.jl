@@ -5,6 +5,10 @@
     file under the output's hash that the registry has no record of, as after a
     registry is reset: a file of those bytes is kept, any other replaced with a
     warning. Nor does a rehearsal into an outputs folder used before.
+  - A `write:` entry with no `description`, which `fair run` accepts, registers
+    its output with none, where it failed with a `KeyError`. A run with none,
+    which the registry refuses, is refused by `initialise`, naming the field,
+    before anything is registered.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand

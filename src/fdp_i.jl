@@ -156,7 +156,7 @@ reusing any of the three that already exist, and return the object entry.
 - `path::String`: the file's full path, or its path within `root`.
 - `root::String`: the storage root: a directory for a local file, a host URL
   for a repository.
-- `description::String`: the object's description.
+- `description`: the object's description, or `nothing` for none.
 - `hash::String`: the storage location's hash; the SHA-1 of the file unless
   given, so a repository passes its commit.
 - `local_root::Bool`: whether the storage root is on this machine.
@@ -170,7 +170,7 @@ reusing any of the three that already exist, and return the object entry.
   author that `fair init` attached to the user unless given.
 """
 function _registerobject(registry::RegistryEndpoint, path::String,
-                         root::String, description::String;
+                         root::String, description::Union{Nothing, String};
                          hash::String = _getfilehash(joinpath(root, path)),
                          local_root::Bool = true, public::Bool = true,
                          file_type::Union{Nothing, String} = _extension(path),
@@ -192,9 +192,9 @@ function _registerobject(registry::RegistryEndpoint, path::String,
                                        "storage_root" => root_url))["url"]
     end
 
-    object_query = Dict{String, Any}("description" => description,
-                                     "storage_location" => location_url,
+    object_query = Dict{String, Any}("storage_location" => location_url,
                                      "authors" => authors)
+    isnothing(description) || (object_query["description"] = description)
     if !isnothing(file_type)
         object_query["file_type"] = _getfiletype(registry, file_type)
     end
@@ -799,7 +799,7 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
                 "use_version" => use_version,
                 "path" => path,
                 "public" => public,
-                "dataproduct_description" => wmd["description"],
+                "dataproduct_description" => get(wmd, "description", nothing),
                 "component_description" => description)
 end
 

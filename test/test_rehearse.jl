@@ -329,6 +329,20 @@ Test.@testset "initialise() once per rehearsal" begin
           "again $uid\n"
 end
 
+Test.@testset "a rehearsal of a run with no description" begin
+    # Refused as a recorded run would be
+    job = job_folder("undescribed")
+    working = joinpath(job, "config.yaml")
+    data = DataPipeline.YAML.load_file(working)
+    delete!(data["run_metadata"], "description")
+    DataPipeline.YAML.write_file(working, data)
+    DataPipeline._replrehearse(job)
+    err = @test_throws ConfigFileException DataPipeline.initialise()
+    @test occursin("gives the run no description", err.value.msg)
+    DataPipeline._discardcurrent()
+    @test isnothing(current())
+end
+
 Test.@testset "a file given by path, rehearsed twice into one folder" begin
     # Each rehearsal hard-links the file into the data store where it can, and
     # moves that to the outputs folder, so that the second's output is the

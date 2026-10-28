@@ -2278,6 +2278,53 @@ Test.@testset "an output whose file the store holds unregistered" begin
     @test samefile(output.stored, output.file) == linkable
 end
 
+Test.@testset "a write entry with no description" begin
+    # The CLI's working config may give none, and the registry needs none
+    name = "data_product/undescribed/$uid"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, name, nothing, file_type = "txt",
+                           use_version = "0.0.1")
+    handle = DataPipeline.initialise(config, config)
+    write(link_write!(handle, name), "undescribed $uid\n")
+    DataPipeline.finalise(handle)
+
+    # Its object is registered with none, and read back as none
+    component = DataPipeline._getentry(handle.registry,
+                                       URIs.URI(only(code_run_of(handle)["outputs"])))
+    object = DataPipeline._getentry(handle.registry,
+                                    URIs.URI(component["object"]))
+    @test isnothing(object["description"])
+    stored = handle.outputs[(name, nothing)]["path"]
+    @test only(DataPipeline.identify(handle.registry, stored).objects).description ==
+          ""
+    trace = DataPipeline.provenance(handle.registry, stored)
+    @test isnothing(only(values(trace.products)).description)
+end
+
+Test.@testset "a run with no description" begin
+    # The registry requires one of every code run, so a working config giving
+    # none, or a blank one, is refused before anything is registered: its
+    # bytes are its own, and nothing holds them
+    registry = handle.registry
+    for description in (nothing, " ")
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, "data_product/undescribed_run/$uid",
+                               "description", file_type = "txt",
+                               use_version = "0.0.1")
+        working = DataPipeline.YAML.load_file(config)
+        if isnothing(description)
+            delete!(working["run_metadata"], "description")
+        else
+            working["run_metadata"]["description"] = description
+        end
+        DataPipeline.YAML.write_file(config, working)
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config,
+                                                                                    config)
+        @test occursin("gives the run no description", err.value.msg)
+        @test isempty(DataPipeline.identify(registry, config).objects)
+    end
+end
+
 Test.@testset "an output that is registered already" begin
     name = "data_product/unchanged/$uid"
     tabled = "data_product/unchanged/tabled/$uid"

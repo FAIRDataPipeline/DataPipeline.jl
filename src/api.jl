@@ -16,7 +16,9 @@ registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 With no arguments, the files are those in the folder `fair run` names in
 `FDP_CONFIG_DIR` when it launches a script: a call with that unset, or with a
 file that is not a working config, throws a [`ConfigFileException`](@ref)
-saying so. The submission script is the one the working config names as
+saying so. So does a working config that gives the run no `description`, which
+the registry requires of a code run; nothing is then registered. The
+submission script is the one the working config names as
 `run_metadata.script_path` - the copy `fair run` wrote in that folder,
 `script.sh`, or `script.jl` for a user config with `shell: julia`, and so on -
 else `script.sh` (`script.bat` on Windows) in the folder. After [`rehearse`](@ref) the same call opens a
@@ -57,6 +59,7 @@ function initialise(config_file::Union{Nothing, String} = nothing,
     isnothing(submission_script) &&
         (submission_script = _submissionscript(config, job))
     run_metadata = config["run_metadata"]
+    _checkrundescription(run_metadata, config_file)
     registry = RegistryEndpoint(get(run_metadata, "local_data_registry_url",
                                     DEFAULT_REGISTRY_URL),
                                 get(run_metadata, "api_version",
@@ -71,6 +74,16 @@ function initialise(config_file::Union{Nothing, String} = nothing,
     end
     _opened(handle, hold)
     return handle
+end
+
+# Refuse a working config whose run has no description, which the registry
+# requires of every code run
+function _checkrundescription(run_metadata::AbstractDict,
+                              config_file::AbstractString)
+    description = get(run_metadata, "description", nothing)
+    description isa AbstractString && !isempty(strip(description)) &&
+        return nothing
+    return throw(ConfigFileException("the working config at $config_file gives the run no description, which the registry requires of every code run: add one as `description` under `run_metadata` in the config given to `fair run`"))
 end
 
 # What holds the local registry for a run `initialise` opens: for a recorded
