@@ -211,8 +211,8 @@ function _patchcoderun(handle::DataRegistryHandle, inputs::Vector{String},
                        outputs::Vector{String})
     _requiretoken(handle.registry)
     body = JSON.json(Dict("inputs" => inputs, "outputs" => outputs))
-    r = HTTP.request("PATCH", handle.code_run_obj,
-                     headers = _headers(handle.registry), body = body)
+    r = _registryrequest(handle.registry, "PATCH", handle.code_run_obj,
+                         body = body)
     return JSON.parse(String(r.body))["url"]
 end
 

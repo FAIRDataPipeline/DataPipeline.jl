@@ -721,7 +721,7 @@ function _postentry(registry::RegistryEndpoint, table::String, query::Dict)
         query["root"] = "file://$value"
     end
     body = JSON.json(query)
-    r = HTTP.request("POST", url, headers = _headers(registry), body = body)
+    r = _registryrequest(registry, "POST", url, body = body)
     return JSON.parse(String(r.body))
 end
 
@@ -730,8 +730,8 @@ end
 function _patchentry(registry::RegistryEndpoint, url::AbstractString,
                      data::Dict)
     _requiretoken(registry)
-    r = HTTP.request("PATCH", URIs.URI(url), _headers(registry),
-                     JSON.json(data), status_exception = false)
+    r = _registryrequest(registry, "PATCH", URIs.URI(url),
+                         body = JSON.json(data), status_exception = false)
     r.status == 405 && return nothing
     r.status == 200 ||
         throw(ReadWriteException("the registry refused to change $url: HTTP status $(r.status), $(String(r.body))"))
@@ -747,8 +747,7 @@ one, and return it.
 function _createentry(registry::RegistryEndpoint, table::String, data::Dict)
     _requiretoken(registry)
     url = string(registry.url, table, "/")
-    r = HTTP.request("POST", url, headers = _headers(registry),
-                     body = JSON.json(data))
+    r = _registryrequest(registry, "POST", url, body = JSON.json(data))
     return JSON.parse(String(r.body))
 end
 
@@ -803,11 +802,43 @@ end
 Return the parsed JSON at a registry `url`.
 """
 function _getentry(registry::RegistryEndpoint, url::URIs.URI)
+    r = _registryrequest(registry, "GET", url)
+    return JSON.parse(String(r.body))
+end
+
+# How long, in seconds, a registry may leave a request with nothing to read -
+# its answer not begun, or stopped part-way - before it is taken not to answer
+const REGISTRY_TIMEOUT = 600
+
+# Whether the HTTP.jl in use is older than 2, which gave its timeouts new names
+const HTTP_BEFORE_2 = pkgversion(HTTP) < v"2"
+
+# The keyword giving HTTP.jl the time a request may have nothing to read: the
+# old name is deprecated from HTTP.jl 2
+function _idletimeout(seconds::Integer)
+    return HTTP_BEFORE_2 ? (readtimeout = seconds,) :
+           (read_idle_timeout = seconds,)
+end
+
+# Send `method` to `url` at `registry`, with `headers`, as `HTTP.request` does
+# with `keywords`, waiting at most `timeout` seconds for anything to read, and
+# return the response. A registry that cannot be reached, or does not answer
+# in time, is a `ReadWriteException` saying so
+function _registryrequest(registry::RegistryEndpoint, method::String, url;
+                          headers = _headers(registry),
+                          timeout::Integer = REGISTRY_TIMEOUT, keywords...)
     try
-        r = HTTP.request("GET", url, _headers(registry))
-        return JSON.parse(String(r.body))
-    catch e
-        (isa(e, Base.IOError) || isa(e, HTTP.ConnectError)) &&
+        return HTTP.request(method, url; headers, _idletimeout(timeout)...,
+                            keywords...)
+    catch err
+        if err isa HTTP.TimeoutError
+            # HTTP.jl 2 times connecting out too, which is not reaching it
+            connecting = hasproperty(err, :operation) &&
+                         err.operation in ("connect", "tls_handshake")
+            throw(connecting ? _unreachable(registry) :
+                  _unanswered(registry, timeout))
+        end
+        (err isa Base.IOError || err isa HTTP.ConnectError) &&
             throw(_unreachable(registry))
         rethrow()
     end
@@ -820,6 +851,13 @@ function _unreachable(registry::RegistryEndpoint)
     host in ("127.0.0.1", "localhost", "::1") ||
         return ReadWriteException("cannot reach the registry at $(registry.url)")
     return ReadWriteException("cannot reach the local registry at $(registry.url): start it with `fair registry start`, or `fair\"registry start\"` from Julia, and it runs until `fair registry stop`")
+end
+
+# The error for a registry that has sent nothing for `seconds`
+function _unanswered(registry::RegistryEndpoint, seconds::Integer)
+    waited = seconds % 60 == 0 ? "$(div(seconds, 60)) minutes" :
+             "$seconds seconds"
+    return ReadWriteException("the registry at $(registry.url) sent nothing for $waited, so is taken not to answer: it may be stuck or overloaded")
 end
 
 """

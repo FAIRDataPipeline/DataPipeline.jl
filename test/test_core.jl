@@ -4,6 +4,7 @@ module TestCore
 
 using Dates
 using DataPipeline
+using Sockets
 using Test
 
 registry = DataPipeline.RegistryEndpoint("http://localhost:8000/api/")
@@ -51,6 +52,45 @@ Test.@testset "a registry that does not answer" begin
     err = @test_throws DataPipeline.ReadWriteException DataPipeline._getentry(closed,
                                                                               DataPipeline.URIs.URI(closed.url))
     @test occursin("`fair registry start`", err.value.msg)
+end
+
+Test.@testset "a registry that sends nothing" begin
+    # One that takes the connection and sends nothing is given up on, once,
+    # after the time allowed with nothing to read, whatever the method, as not
+    # answering; the time allowed is ten minutes
+    @test DataPipeline.REGISTRY_TIMEOUT == 600
+    port, server = Sockets.listenany(Sockets.ip"127.0.0.1", 8200)
+    held = Sockets.TCPSocket[]
+    accepting = @async try
+        while true
+            push!(held, Sockets.accept(server))
+        end
+    catch
+    end
+    silent = DataPipeline.RegistryEndpoint("http://127.0.0.1:$port/api/")
+    try
+        for (method, keywords) in (("GET", (;)), ("POST", (body = "{}",)),
+            ("PATCH", (body = "{}",)))
+            before = length(held)
+            call = @async try
+                DataPipeline._registryrequest(silent, method, silent.url;
+                                              timeout = 2, keywords...)
+            catch err
+                err
+            end
+            # A request waiting for ever fails here rather than hangs
+            done = timedwait(() -> istaskdone(call), 60.0) === :ok
+            @test done
+            done || break
+            err = fetch(call)
+            @test err isa DataPipeline.ReadWriteException
+            @test occursin("sent nothing for 2 seconds", err.msg)
+            @test length(held) == before + 1
+        end
+    finally
+        close(server)
+        foreach(close, held)
+    end
 end
 
 Test.@testset "RegistryEndpoint() from the CLI's configuration" begin

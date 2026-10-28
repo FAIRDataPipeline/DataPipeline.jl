@@ -579,8 +579,9 @@ end
 function _answers(registry::RegistryEndpoint)
     response = try
         HTTP.get(registry.url,
-                 ["Accept" => "application/json; version=$(registry.api_version)"],
-                 retry = false, connect_timeout = 5, status_exception = false)
+                 ["Accept" => "application/json; version=$(registry.api_version)"];
+                 retry = false, connect_timeout = 5, status_exception = false,
+                 _idletimeout(REGISTRY_TIMEOUT)...)
     catch err
         err isa InterruptException && rethrow()
         return false

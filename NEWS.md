@@ -23,6 +23,9 @@
   - Interrupting `fair"..."`, as with Ctrl-C, or Julia's exit, ends `fair` and
     the processes it started, such as the job of a `fair run`, which went on
     running.
+  - A registry that sends nothing for ten minutes in answer to a request is
+    taken not to answer, with an error saying so, where the call waited for
+    ever.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand
