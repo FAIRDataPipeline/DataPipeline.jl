@@ -310,7 +310,10 @@ Test.@testset "a fair interrupted ends with its job" begin
             job = jobid(file)
             kill(interrupted, Base.SIGINT)
             wait(interrupted)
-            repl && @test read(output, String) == "InterruptException"
+            # Julia 1.11 exits on the signal though told not to, its exit
+            # ending the job too, so prints nothing: the gate goes with 1.11
+            repl && VERSION >= v"1.12" &&
+                @test read(output, String) == "InterruptException"
             @test timedwait(() -> !running(job), 30.0) === :ok
         end
     end
