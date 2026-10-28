@@ -160,8 +160,8 @@ whether the config is what `update_paper` would write; the files the paper
 uses from elsewhere in the repository that are registered, and so are
 likely files from the pipeline; and the files in the pipeline folder that are
 not registered, but for the environment there and any file git ignores. A
-check that needs a registry that cannot be reached is said not to have been
-made, and why.
+check that needs a registry that cannot be reached, or that answers with an
+error, is said not to have been made, and why.
 
 `remote` names a remote registry in the CLI configuration of the paper's
 project, `"origin"` being the one `fair init` writes, or is its
@@ -842,8 +842,15 @@ function _checkpaper(paper::LaTeXPaper,
             holding = isnothing(remote) ? nothing : registry
             unregistered = String[]
             for file in uses.pipeline
-                _checkpipelinefile!(actions, notes, unregistered, identifying,
-                                    holding, paper, top, file)
+                _ifanswered(unchecked,
+                            "what $file is registered as, newer versions, its issues and what lies behind it" *
+                            (isnothing(holding) ? "" :
+                             ", and whether the local registry holds it"),
+                            identifying, holding) do
+                    return _checkpipelinefile!(actions, notes, unregistered,
+                                               identifying, holding, paper,
+                                               top, file)
+                end
             end
             isempty(unregistered) ||
                 push!(actions, _unregisteredsaid(unregistered))
@@ -851,8 +858,15 @@ function _checkpaper(paper::LaTeXPaper,
                 push!(unchecked,
                       "whether the local registry holds the files from the pipeline: $localwhy")
             end
-            _checkconfig!(actions, identifying, paper, top, uses.pipeline)
-            _checkplacement!(actions, identifying, paper, top, uses)
+            _ifanswered(unchecked, "the config's read: block", identifying) do
+                return _checkconfig!(actions, identifying, paper, top,
+                                     uses.pipeline)
+            end
+            _ifanswered(unchecked,
+                        "which files in and out of the pipeline folder are registered",
+                        identifying) do
+                return _checkplacement!(actions, identifying, paper, top, uses)
+            end
         end
     end
     if !isnothing(meta) && !isempty(meta.authors)
@@ -860,10 +874,33 @@ function _checkpaper(paper::LaTeXPaper,
             push!(unchecked,
                   "how the authors differ from those of the PDF's version registered last: $why")
         else
-            _checkpreviousauthors!(notes, identifying, paper, meta)
+            _ifanswered(unchecked,
+                        "how the authors differ from those of the PDF's version registered last",
+                        identifying) do
+                return _checkpreviousauthors!(notes, identifying, paper, meta)
+            end
         end
     end
     return PaperCheck(paper, setup, uses, metadata, actions, notes, unchecked)
+end
+
+# Run `check`, which asks the registries `asked`, and where one answers with an
+# error status add to `unchecked` what it would have checked, `what`, rather
+# than throw, so that the rest of the report is made
+function _ifanswered(check::Function, unchecked::Vector{String},
+                     what::AbstractString,
+                     asked::Union{Nothing, RegistryEndpoint}...)
+    try
+        check()
+    catch err
+        err isa HTTP.StatusError || rethrow()
+        addresses = join((registry.url
+                          for registry in asked if !isnothing(registry)),
+                         " or ")
+        push!(unchecked,
+              "$what: the registry at $addresses answered with HTTP status $(err.status)")
+    end
+    return nothing
 end
 
 # Whether a `fair` can be found to run, as `fair"..."` finds one

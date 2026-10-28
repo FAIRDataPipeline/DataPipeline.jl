@@ -15,6 +15,8 @@
     recorded without the white space around it, as the registry keeps it.
   - `DataPipeline.isregistered` given a source no longer needs `primary` or a
     release date, neither of which it compares.
+  - `DataPipeline.check_paper` reports a check that a registry answers with an
+    error as not made, with the status, where it threw.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand

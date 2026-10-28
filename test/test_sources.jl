@@ -1369,6 +1369,8 @@ Test.@testset "isregistered()" begin
         @test DataPipeline.isregistered(asking, name; of(primary = nothing)...)
         @test DataPipeline.isregistered(asking, deposit, bibtex = "deposit")
         @test DataPipeline.isregistered(asking, dateless, bibtex = "dateless")
+        @test DataPipeline.isregistered(asking, dateless, bibtex = "dateless",
+                                        primary = true)
         @test !DataPipeline.isregistered(asking, dateless, bibtex = "dateless",
                                          release_version = "9.9")
         @test_throws ArgumentError DataPipeline.isregistered(asking, name;

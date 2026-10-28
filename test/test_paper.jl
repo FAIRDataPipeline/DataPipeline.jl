@@ -4,6 +4,7 @@ module TestPaper
 
 using DataPipeline
 using Dates
+using Sockets
 using Test
 
 const LibGit2 = DataPipeline.LibGit2
@@ -783,6 +784,35 @@ end
             # A registry that answers, and an address where none does
             @test DataPipeline._answers(registry)
             @test !DataPipeline._answers(DataPipeline.RegistryEndpoint("http://127.0.0.1:1/api/"))
+
+            # A remote that answers at its address and with an error to every
+            # query, as one did to every lookup by name: each check that asks
+            # it is said not to have been made, with the status, and the rest
+            # of the report is made
+            port, listener = Sockets.listenany(Sockets.ip"127.0.0.1", 8100)
+            close(listener)
+            server = DataPipeline.HTTP.serve!("127.0.0.1", port) do request
+                return DataPipeline.HTTP.Response(request.target == "/api/" ?
+                                                  200 : 500, "{}")
+            end
+            try
+                failing = DataPipeline.RegistryEndpoint("http://127.0.0.1:$port/api/")
+                check = DataPipeline.check_paper(registry, paper,
+                                                 remote = failing)
+                said = filter(contains("answered with HTTP status 500"),
+                              check.unchecked)
+                @test !isempty(check.uses.pipeline)
+                @test count(contains(" is registered as"), said) ==
+                      length(check.uses.pipeline)
+                @test any(contains("the config's read: block"), said)
+                @test any(contains("which files in and out of the pipeline folder"),
+                          said)
+                @test any(contains("how the authors differ"), said)
+                @test all(contains("127.0.0.1:$port"), said)
+                @test !isnothing(check.metadata)
+            finally
+                close(server)
+            end
             close(repo)
         end
 
