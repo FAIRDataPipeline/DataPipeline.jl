@@ -16,7 +16,9 @@ registering needs; `fair run` sets `FDP_LOCAL_TOKEN` to it.
 With no arguments, the files are those in the folder `fair run` names in
 `FDP_CONFIG_DIR` when it launches a script: a call with that unset, or with a
 file that is not a working config, throws a [`ConfigFileException`](@ref)
-saying so. The submission script is the one the working config names as
+saying so. So does a working config that gives the run no `description`, which
+the registry requires of a code run; nothing is then registered. The
+submission script is the one the working config names as
 `run_metadata.script_path` - the copy `fair run` wrote in that folder,
 `script.sh`, or `script.jl` for a user config with `shell: julia`, and so on -
 else `script.sh` (`script.bat` on Windows) in the folder. After [`rehearse`](@ref) the same call opens a
@@ -57,6 +59,7 @@ function initialise(config_file::Union{Nothing, String} = nothing,
     isnothing(submission_script) &&
         (submission_script = _submissionscript(config, job))
     run_metadata = config["run_metadata"]
+    _checkrundescription(run_metadata, config_file)
     registry = RegistryEndpoint(get(run_metadata, "local_data_registry_url",
                                     DEFAULT_REGISTRY_URL),
                                 get(run_metadata, "api_version",
@@ -71,6 +74,16 @@ function initialise(config_file::Union{Nothing, String} = nothing,
     end
     _opened(handle, hold)
     return handle
+end
+
+# Refuse a working config whose run has no description, which the registry
+# requires of every code run
+function _checkrundescription(run_metadata::AbstractDict,
+                              config_file::AbstractString)
+    description = get(run_metadata, "description", nothing)
+    description isa AbstractString && !isempty(strip(description)) &&
+        return nothing
+    return throw(ConfigFileException("the working config at $config_file gives the run no description, which the registry requires of every code run: add one as `description` under `run_metadata` in the config given to `fair run`"))
 end
 
 # What holds the local registry for a run `initialise` opens: for a recorded
@@ -190,6 +203,7 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     open(joinpath(handle.config_dir, "coderuns.txt"), "a") do io
         return println(io, handle.code_run_uuid)
     end
+    _copyregistered(handle)
     println("finished - code run locally registered as: ", url, "\n")
     _ended(handle)
     session = SESSION[]
@@ -713,10 +727,11 @@ would be given, but no file, whether registering that file would register
 nothing new: whether the version asked about records the same source -
 its identifier, title and release version, from the citation that `doi` or
 `bibtex` names and from `title` and `release_version` - the same authors, and
-the same licence, `licence` or `license`. `primary` must be given, as there,
-and is not compared; nor are `description`, `release_date` and
-`original_store`, which the registry keeps as a first registration said them;
-nor are the file's bytes. An author the registry has not got is not
+the same licence, `licence` or `license`. `primary`, `description`,
+`release_date` and `original_store` are not compared, the registry keeping the
+last three as a first registration said them, so may be left out, though what
+is given is checked as the link calls check it; nor are the file's bytes
+compared. An author the registry has not got is not
 registered, and makes the answer false, as registering would add one. A `doi`
 with no citation is looked up at `doi.org` as the link calls look it up.
 
@@ -745,7 +760,8 @@ function isregistered(handle::DataRegistryHandle,
     # was said of it is checked either way
     source = _source(handle; doi, bibtex, title, primary, description,
                      original_store, licence, license, release_date,
-                     release_version, authorurl = _heldauthorurl)
+                     release_version, authorurl = _heldauthorurl,
+                     compared = true)
     registry = handle.registry
     product = isnothing(asked.version) ? nothing :
               _versioneddataproduct(registry, asked.namespace, asked.name,

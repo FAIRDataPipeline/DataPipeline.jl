@@ -198,7 +198,8 @@ function _cratebytes(registry::RegistryEndpoint, url::String;
     isnothing(accept) ||
         (headers["Accept"] = "$accept; version=$(registry.api_version)")
     try
-        return HTTP.request("GET", URIs.URI(url), headers).body
+        return _registryrequest(registry, "GET", URIs.URI(url),
+                                headers = headers).body
     catch err
         if err isa HTTP.StatusError && err.status == 400
             detail = try

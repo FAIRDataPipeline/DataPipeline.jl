@@ -12,11 +12,15 @@ Return the [`SourceRecord`](@ref) that the source keywords of a link call
 describe, or `nothing` when they name no source. The link calls say what each
 keyword is. The source's authors are found in the registry as the call is
 made, by `authorurl(handle, name, identifier)`: by default those it has not
-got are registered, and with `_heldauthorurl` nothing is.
+got are registered, and with `_heldauthorurl` nothing is. With `compared`,
+return only what `isregistered` compares, a `_ComparedSource`, for which
+`primary` and a release date may be left out; what is given is checked
+either way.
 """
 function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
                  description, original_store, licence, license, release_date,
-                 release_version, authorurl::Function = _sourceauthorurl)
+                 release_version, authorurl::Function = _sourceauthorurl,
+                 compared::Bool = false)
     if isnothing(doi) && isnothing(bibtex)
         said = (; title, primary, description, original_store, licence,
                 license, release_date, release_version)
@@ -27,10 +31,12 @@ function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
     end
     _checksourcerows(handle.registry)
     citation = _citation(handle, doi, bibtex)
-    isnothing(primary) &&
+    isnothing(primary) && !compared &&
         throw(ArgumentError("say what the file is to its source: `primary = true` if it is the cited item or one of its files, `primary = false` if it was requested or derived from it"))
-    facts = _sourcefacts(citation; primary, title, description, release_date,
-                         release_version)
+    # A comparison reads no `primary`, so may be given none
+    facts = _sourcefacts(citation; primary = something(primary, false), title,
+                         description, release_date, release_version,
+                         dated = !compared)
     store = _originalstore(original_store)
     given = _eitherspelling(licence, license)
     terms = _licence(something(given, facts.licence, Some(nothing)))
@@ -38,6 +44,8 @@ function _source(handle::DataRegistryHandle; doi, bibtex, title, primary,
     authors = unique!(String[authorurl(handle, name,
                                        get(facts.identifiers, name, nothing))
                              for name in facts.authors])
+    compared && return _ComparedSource(facts.identifier, facts.title,
+                           facts.version, authors, terms)
     description = isnothing(facts.description) ? nothing :
                   String(facts.description)
     return SourceRecord(facts.identifier, facts.title, facts.version,
@@ -108,7 +116,7 @@ function _originalstore(url::AbstractString)
 end
 
 # What makes a source one source in the registry
-function _identity(source::SourceRecord)
+function _identity(source::Union{SourceRecord, _ComparedSource})
     return (source.identifier, source.title, source.version)
 end
 
@@ -216,7 +224,8 @@ function _recordssource(::RegistryEndpoint, ::AbstractDict, ::AbstractDict,
     return true
 end
 function _recordssource(registry::RegistryEndpoint, data_product::AbstractDict,
-                        object::AbstractDict, source::SourceRecord)
+                        object::AbstractDict,
+                        source::Union{SourceRecord, _ComparedSource})
     url = get(data_product, "external_object", nothing)
     isnothing(url) && return false
     held = _getentry(registry, URIs.URI(url))
@@ -489,7 +498,8 @@ function _externalobject(handle::DataRegistryHandle, namespace::String,
         stored = joinpath(datastore, namespace, data_product,
                           "$(file.hash).$(_extension(file.path))")
         mkpath(dirname(stored))
-        _placefile(file.path, stored)
+        _storedalready(stored, file.path, file.hash) ||
+            _placefile(file.path, stored)
     else
         stored = joinpath(datastore, held["path"])
     end

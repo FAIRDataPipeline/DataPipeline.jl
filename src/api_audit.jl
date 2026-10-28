@@ -616,7 +616,8 @@ function _registeredobjects(registry::RegistryEndpoint, hash::String)
             products = [_dataproductrecord(registry, url)
                         for url in object["data_products"]]
             push!(objects,
-                  RegisteredObject(object["description"], object["url"],
+                  RegisteredObject(something(object["description"], ""),
+                                   object["url"],
                                    root_entry["root"], root_entry["local"],
                                    location["path"], products,
                                    _objectissues(registry, object)))

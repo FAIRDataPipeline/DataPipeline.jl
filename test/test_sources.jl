@@ -1009,6 +1009,88 @@ Test.@testset "link_register!() with a file" begin
     @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
 end
 
+Test.@testset "link_register!() of a file the store holds unregistered" begin
+    # As where an earlier run's registration was lost: a file under the hash
+    # in the data store, which the registry has no location for, left there
+    # by `left(file, stored)`; whatever was there, the file's bytes are then
+    # registered there. Return the stored file's inode before and after
+    function registering(case, left)
+        name = "sources/register/unregistered/$case/$uid"
+        file = file_of("held unregistered, $case $uid\n")
+        hash = DataPipeline._getfilehash(file)
+        stored = joinpath(datastore, inputs_namespace, name, "$hash.txt")
+        mkpath(dirname(stored))
+        left(file, stored)
+        before = stat(stored).inode
+        handle = offering()
+        @test link_register!(handle, name, path = file, bibtex = "deposit",
+                             primary = true,
+                             title = "Held unregistered, $case $uid") == stored
+        @test read(stored, String) == "held unregistered, $case $uid\n"
+        DataPipeline.finalise(handle)
+        product = registered(name, "0.0.1")
+        @test entry(object_of(product)["storage_location"])["hash"] == hash
+        return (; before, after = stat(stored).inode)
+    end
+
+    # Placed as the earlier run placed it, a hard link where one can be made,
+    # or a copy: either is kept
+    for (case, left) in (("linked", DataPipeline._placefile), ("copied", cp))
+        held = registering(case, left)
+        @test held.after == held.before
+    end
+
+    # Other bytes under the hash's name are replaced, with a warning
+    @test_logs (:warn,
+                r"^replacing the file at .*, whose bytes have the SHA-1 hash") match_mode=:any registering("other",
+                                                                                                           (file,
+                                                                                                            stored) -> write(stored,
+                                                                                                                             "other $uid\n"))
+end
+
+Test.@testset "a source the registry would refuse" begin
+    # Refused at the call, before anything is registered, so that no data
+    # product is left without its source: here a blank title, of a source the
+    # registry holds nothing of, so that no other lookup refuses it first
+    registering = "sources/refused/registered/$uid"
+    writing = "sources/refused/written/$uid"
+    handle = offering(writing => "0.0.1")
+    register_citations!(handle,
+                        """
+                        @misc{refused, title = {Refused $uid}, year = 2020,
+                              url = {https://example.org/$uid/refused}}
+                        """)
+    @test_throws ArgumentError link_register!(handle, registering,
+                                              path = file_of("refused, registered $uid\n"),
+                                              bibtex = "refused",
+                                              primary = true, title = " ")
+    @test !isdir(joinpath(datastore, inputs_namespace, registering))
+    @test_throws ArgumentError link_write!(handle, writing,
+                                           path = file_of("refused, written $uid\n"),
+                                           bibtex = "refused", primary = true,
+                                           title = "")
+    @test isempty(handle.outputs)
+    DataPipeline.finalise(handle)
+    @test isempty(registered_versions(registering))
+    @test isempty(registered_versions(writing))
+end
+
+Test.@testset "a title with white space around it" begin
+    # Stored stripped, as the registry keeps it, so that the same call again
+    # finds the source registered and registers nothing new
+    padded = "sources/register/padded/$uid"
+    file = file_of("a padded title $uid\n")
+    for _ in 1:2
+        handle = offering()
+        link_register!(handle, padded, path = file, bibtex = "deposit",
+                       primary = true, title = "  A padded title $uid ")
+        DataPipeline.finalise(handle)
+    end
+    @test registered_versions(padded) == ["0.0.1"]
+    @test source_of(registered(padded, "0.0.1"))["title"] ==
+          "A padded title $uid"
+end
+
 Test.@testset "a licence held under an identifier the list has replaced" begin
     replaced = "sources/register/replaced/$uid"
     file = file_of("replaced licence $uid\n")
@@ -1181,6 +1263,7 @@ Test.@testset "isregistered()" begin
     name = "sources/isregistered/file/$uid"
     deposit = "sources/isregistered/deposit/$uid"
     looked = "sources/isregistered/looked/$uid"
+    dateless = "sources/isregistered/dateless/$uid"
     of(; keywords...) = (; bibtex = "deposit", primary = true,
                          title = "Asked about $uid", licence = "CC-BY-4.0",
                          keywords...)
@@ -1192,6 +1275,13 @@ Test.@testset "isregistered()" begin
       date = {2021-03-04},
       doi = {$doi},
       version = {2.1}
+    }
+    """
+    # A citation that gives no date, so that registering needs one
+    undated = """
+    @misc{dateless,
+      title = {A deposit with no date $uid},
+      url = {https://example.org/$uid/dateless}
     }
     """
     # A DOI's metadata, as a lookup would read it, its creator with an ORCID
@@ -1212,11 +1302,15 @@ Test.@testset "isregistered()" begin
         return DataPipeline._datacitecitation(record, md_doi)
     end
 
-    # Registered: a file and a deposit with no file from the citation, and a
-    # file from the DOI's metadata, which registers its creator's ORCID
+    # Registered: a file and a deposit with no file from the citation, a
+    # deposit from the citation with no date, and a file from the DOI's
+    # metadata, which registers its creator's ORCID
     handle = offering()
+    register_citations!(handle, undated)
     link_register!(handle, name; of(path = file_of("asked about $uid\n"))...)
     link_register!(handle, deposit, bibtex = "deposit", primary = true)
+    link_register!(handle, dateless, bibtex = "dateless", primary = true,
+                   release_date = "2020")
     handle.doi_lookups[md_doi] = metadata(known)
     link_register!(handle, looked, path = file_of("looked up $uid\n"),
                    doi = md_doi, primary = true)
@@ -1237,7 +1331,7 @@ Test.@testset "isregistered()" begin
     # Asked in a recorded run and in a rehearsal alike
     for make in (offering, rehearsing)
         asking = make()
-        register_citations!(asking, reauthored)
+        register_citations!(asking, reauthored, undated)
         before, authors = counts(), deepcopy(asking.authors)
 
         # By name: anything registered under it, or at that version, in the
@@ -1270,6 +1364,17 @@ Test.@testset "isregistered()" begin
                                          of(licence = "CC0-1.0")...)
         @test !DataPipeline.isregistered(asking, name; of(bibtex = "page")...)
         @test !DataPipeline.isregistered(asking, "$name/never"; of()...)
+        # `primary` and a release date are not compared, so may be left out,
+        # though what is given is checked as the link calls check it
+        @test DataPipeline.isregistered(asking, name; of(primary = nothing)...)
+        @test DataPipeline.isregistered(asking, deposit, bibtex = "deposit")
+        @test DataPipeline.isregistered(asking, dateless, bibtex = "dateless")
+        @test DataPipeline.isregistered(asking, dateless, bibtex = "dateless",
+                                        primary = true)
+        @test !DataPipeline.isregistered(asking, dateless, bibtex = "dateless",
+                                         release_version = "9.9")
+        @test_throws ArgumentError DataPipeline.isregistered(asking, name;
+                                                             of(release_date = "June 2021")...)
         # An author the registry has not got, by name or by an ORCID the
         # metadata gives, makes it false and is not registered; the ORCID it
         # has makes it true
@@ -1288,14 +1393,11 @@ Test.@testset "isregistered()" begin
         @test counts() == before
         @test asking.authors == authors
 
-        # Refused as the link calls refuse: a pattern, a source not named, a
-        # source with no `primary`
+        # Refused as the link calls refuse: a pattern, and a source not named
         @test_throws ArgumentError DataPipeline.isregistered(asking,
                                                              "sources/*/$uid")
         @test_throws ArgumentError DataPipeline.isregistered(asking, name,
                                                              title = "Untold $uid")
-        @test_throws ArgumentError DataPipeline.isregistered(asking, name,
-                                                             bibtex = "deposit")
         asking isa DataPipeline.DataRegistryHandle{DataPipeline.RecordedRun} ?
         DataPipeline.finalise(asking) : DataPipeline.discard(asking)
     end

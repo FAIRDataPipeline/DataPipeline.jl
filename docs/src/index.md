@@ -53,7 +53,7 @@ and the script asks for each input and output by the name the config gives it.
 - **Tracing**: what the registry knows of a file or a repository, where a
   file came from, what was made from it, and the RO-Crate that packs a
   paper's files with their provenance: [Tracing provenance](@ref).
-- **Papers**: a LaTeX paper built in a run of its own, so that its PDF has
+- **Papers**: a LaTeX paper built in a run of its own, so that its pdf has
   the provenance of every figure and table in it:
   [Building a paper](@ref).
 - **`fair` from Julia**: [`fair"..."`](@ref @fair_str) runs the

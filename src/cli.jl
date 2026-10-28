@@ -20,6 +20,8 @@ status other than 0 is a [`ReadWriteException`](@ref). The `fair` run is
 found as [`rehearse`](@ref) finds it: the one [`set_cli!`](@ref) recorded,
 else the one on the path, else the copy [`install_cli`](@ref) made. A command
 that asks questions, as `fair init` does without `--ci`, needs a terminal.
+Interrupting the call, as with Ctrl-C, ends `fair` and every process it
+started, such as the job of a `fair run`, and so does Julia's exit.
 """
 macro fair_str(text)
     command = Expr(:macrocall, GlobalRef(Base, Symbol("@cmd")), __source__,
@@ -35,7 +37,7 @@ function _fair(arguments::AbstractString...;
                dir::Union{Nothing, AbstractString} = nothing)
     command = _withenvironment(`$(_faircommand(cli)) $arguments`)
     isnothing(dir) || (command = Cmd(command; dir = String(dir)))
-    process = run(ignorestatus(command))
+    process = _runfair(ignorestatus(command))
     success(process) ||
         throw(ReadWriteException("`fair $(join(arguments, " "))` failed with exit status $(process.exitcode)"))
     return nothing
@@ -248,9 +250,75 @@ function _capturefair(command::Cmd, arguments::AbstractString...;
     line = ignorestatus(_withenvironment(`$command $arguments`))
     isnothing(dir) || (line = Cmd(line; dir = String(dir)))
     printed, errors = IOBuffer(), IOBuffer()
-    process = run(pipeline(line, stdout = printed, stderr = errors))
+    process = _runfair(line, stdout = printed, stderr = errors)
     return (status = process.exitcode, printed = String(take!(printed)),
             errors = String(take!(errors)))
+end
+
+# The `fair` processes that `_runfair` is waiting for, which Julia's exit ends
+const RUNNING_FAIR = Set{Base.Process}()
+const RUNNING_FAIR_LOCK = ReentrantLock()
+
+# Run `command`, a `fair` command line, with this process's input and its
+# output to `stdout` and `stderr`, and wait for it, so that an interrupt while
+# it is waited for, or Julia's exit, ends it and every process it started, such
+# as the job of a `fair run`; and return the process. Elsewhere than on Windows
+# it runs as the leader of a process group of its own, so that the group can be
+# ended, and a terminal's Ctrl-C reaches it only through this process
+function _runfair(command::Cmd; stdout::IO = Base.stdout,
+                  stderr::IO = Base.stderr)
+    Sys.iswindows() || (command = Cmd(command; detach = true))
+    # Without `wait`, `run` gives a process no input or output of its own
+    process = run(pipeline(command; stdin = Base.stdin, stdout, stderr),
+                  wait = false)
+    _endatexit()
+    lock(RUNNING_FAIR_LOCK) do
+        return push!(RUNNING_FAIR, process)
+    end
+    try
+        wait(process)
+    catch
+        _endfair(process)
+        rethrow()
+    finally
+        lock(RUNNING_FAIR_LOCK) do
+            return delete!(RUNNING_FAIR, process)
+        end
+    end
+    return process
+end
+
+# End a `fair` process `_runfair` started and every process it started: its
+# process group asked to end, so that the CLI can close its job log, and made
+# to where any of it is left after a few seconds; on Windows, its process tree
+function _endfair(process::Base.Process)
+    process_exited(process) && return nothing
+    if Sys.iswindows()
+        run(pipeline(ignorestatus(`taskkill /T /F /PID $(getpid(process))`),
+                     stdout = devnull, stderr = devnull))
+        return nothing
+    end
+    group = -getpid(process)
+    signal(number) = ccall(:kill, Cint, (Cint, Cint), group, number)
+    signal(Base.SIGTERM)
+    # A signal of 0 asks only whether any of the group is left
+    timedwait(() -> signal(0) != 0, 5.0) === :ok || signal(Base.SIGKILL)
+    return nothing
+end
+
+# Whether the `fair` processes still running when Julia exits are ended then,
+# arranged once
+const END_AT_EXIT = Ref(false)
+function _endatexit()
+    END_AT_EXIT[] && return nothing
+    atexit() do
+        running = lock(RUNNING_FAIR_LOCK) do
+            return collect(RUNNING_FAIR)
+        end
+        return foreach(_endfair, running)
+    end
+    END_AT_EXIT[] = true
+    return nothing
 end
 
 # The oldest `fair-cli` this package works with

@@ -1,10 +1,10 @@
 # Building a paper
 
 A LaTeX paper whose figures and tables come from pipeline runs can be built in
-a code run of its own. The PDF is then a data product like any other: its
+a code run of its own. The pdf is then a data product like any other: its
 provenance runs through the files it uses to the runs that made them and the
 data behind those; its authors, licence and keywords are those of the paper's
-`CITATION.cff`, held by the registry and written into the PDF; and an issue
+`CITATION.cff`, held by the registry and written into the pdf; and an issue
 raised on anything behind it reaches it. This page is the whole cycle: laying
 the paper out, setting it up once, and checking, updating and building it each
 time it changes.
@@ -41,12 +41,12 @@ another pipeline folder or engine.
 these that is missing, leaving any that exists as it is:
 
 - `CITATION.cff`, drafted from the paper's `\title`, `\author` and `\affil`.
-  The PDF takes its authors, licence and keywords from it, so add the authors'
+  The pdf takes its authors, licence and keywords from it, so add the authors'
   ORCIDs and a `license:` by hand. In a repository holding a package, whose
   citation the top level of the file is, the paper's is drafted as its
   `preferred-citation`.
 - `paper.template.yaml`, the template of the user config that builds the
-  paper: the PDF's `write:` entry and a Julia script. It is yours to edit; the
+  paper: the pdf's `write:` entry and a Julia script. It is yours to edit; the
   config is written from it.
 - `pipeline/Project.toml` and `Manifest.toml`, the script's environment,
   holding DataPipeline. With `project = false` none is created, and the script
@@ -147,16 +147,19 @@ on a new machine.
 ## The build
 
 `fair run paper.yaml` runs the template's script, in which
-[`build_paper!`](@ref) builds the paper with `latexmk` and registers the PDF
+[`build_paper!`](@ref) builds the paper with `latexmk` and registers the pdf
 under the template's `write:` entry. It refuses, before anything is
 registered, a paper whose files are not as the run's commit has them - unless
 the run is from uncommitted changes, `fair run --dirty` - whose title and
 authors are not those of `CITATION.cff`, or which uses a file from the
-pipeline folder that the config does not offer. The PDF is built in a folder
+pipeline folder that the config does not offer. The pdf is built in a folder
 of the package's own, kept between builds, so that an unchanged paper gives
 the same bytes and registers nothing new; its title, authors, keywords,
 licence and the authors' ORCIDs are written into its document information and,
-but for XeLaTeX, read back. [`DataPipeline.rehearse`](@ref) followed by the same calls builds
+but for XeLaTeX, read back. Once the run is registered, the pdf is copied beside
+the `.tex` file, where `latexmk` builds one, so that the file there is the
+registered one; a file git tracks there is left as it is, so ignore it in
+`.gitignore`. [`DataPipeline.rehearse`](@ref) followed by the same calls builds
 the paper without recording anything, and warns of what a recorded run would
 refuse.
 

@@ -470,7 +470,13 @@ function _placeoutput(handle::DataRegistryHandle{Rehearsal},
                                string(wmd["use_version"], ".",
                                       _extension(filepath)))
         mkpath(dirname(destination))
-        mv(filepath, destination, force = true)
+        # An earlier rehearsal into the same folder may have left this very
+        # file there, given by the same path
+        if samefile(filepath, destination)
+            rm(filepath)
+        else
+            mv(filepath, destination, force = true)
+        end
         _pruneempty(dirname(filepath), datastore)
     else
         destination = placed[1]["path"]

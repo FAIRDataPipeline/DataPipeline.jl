@@ -159,9 +159,11 @@ registered last; the files the paper is built from that are not committed;
 whether the config is what `update_paper` would write; the files the paper
 uses from elsewhere in the repository that are registered, and so are
 likely files from the pipeline; and the files in the pipeline folder that are
-not registered, but for the environment there and any file git ignores. A
-check that needs a registry that cannot be reached is said not to have been
-made, and why.
+not registered, but for the environment there and any file git ignores;
+and whether git ignores the PDF beside the `.tex` file, where a recorded build
+copies the registered PDF. A check that needs a registry that cannot be
+reached, or that answers with an error, is said not to have been made, and
+why.
 
 `remote` names a remote registry in the CLI configuration of the paper's
 project, `"origin"` being the one `fair init` writes, or is its
@@ -579,8 +581,9 @@ end
 function _answers(registry::RegistryEndpoint)
     response = try
         HTTP.get(registry.url,
-                 ["Accept" => "application/json; version=$(registry.api_version)"],
-                 retry = false, connect_timeout = 5, status_exception = false)
+                 ["Accept" => "application/json; version=$(registry.api_version)"];
+                 retry = false, connect_timeout = 5, status_exception = false,
+                 _idletimeout(REGISTRY_TIMEOUT)...)
     catch err
         err isa InterruptException && rethrow()
         return false
@@ -832,6 +835,7 @@ function _checkpaper(paper::LaTeXPaper,
         end
     end
     _checkuncommitted!(actions, paper, top, meta, uses)
+    _checkpdfbeside!(notes, paper, top)
 
     # What the registries know of them
     if !isnothing(uses)
@@ -842,8 +846,15 @@ function _checkpaper(paper::LaTeXPaper,
             holding = isnothing(remote) ? nothing : registry
             unregistered = String[]
             for file in uses.pipeline
-                _checkpipelinefile!(actions, notes, unregistered, identifying,
-                                    holding, paper, top, file)
+                _ifanswered(unchecked,
+                            "what $file is registered as, newer versions, its issues and what lies behind it" *
+                            (isnothing(holding) ? "" :
+                             ", and whether the local registry holds it"),
+                            identifying, holding) do
+                    return _checkpipelinefile!(actions, notes, unregistered,
+                                               identifying, holding, paper,
+                                               top, file)
+                end
             end
             isempty(unregistered) ||
                 push!(actions, _unregisteredsaid(unregistered))
@@ -851,8 +862,15 @@ function _checkpaper(paper::LaTeXPaper,
                 push!(unchecked,
                       "whether the local registry holds the files from the pipeline: $localwhy")
             end
-            _checkconfig!(actions, identifying, paper, top, uses.pipeline)
-            _checkplacement!(actions, identifying, paper, top, uses)
+            _ifanswered(unchecked, "the config's read: block", identifying) do
+                return _checkconfig!(actions, identifying, paper, top,
+                                     uses.pipeline)
+            end
+            _ifanswered(unchecked,
+                        "which files in and out of the pipeline folder are registered",
+                        identifying) do
+                return _checkplacement!(actions, identifying, paper, top, uses)
+            end
         end
     end
     if !isnothing(meta) && !isempty(meta.authors)
@@ -860,10 +878,48 @@ function _checkpaper(paper::LaTeXPaper,
             push!(unchecked,
                   "how the authors differ from those of the PDF's version registered last: $why")
         else
-            _checkpreviousauthors!(notes, identifying, paper, meta)
+            _ifanswered(unchecked,
+                        "how the authors differ from those of the PDF's version registered last",
+                        identifying) do
+                return _checkpreviousauthors!(notes, identifying, paper, meta)
+            end
         end
     end
     return PaperCheck(paper, setup, uses, metadata, actions, notes, unchecked)
+end
+
+# Run `check`, which asks the registries `asked`, and where one answers with an
+# error status add to `unchecked` what it would have checked, `what`, rather
+# than throw, so that the rest of the report is made
+function _ifanswered(check::Function, unchecked::Vector{String},
+                     what::AbstractString,
+                     asked::Union{Nothing, RegistryEndpoint}...)
+    try
+        check()
+    catch err
+        err isa HTTP.StatusError || rethrow()
+        addresses = join((registry.url
+                          for registry in asked if !isnothing(registry)),
+                         " or ")
+        push!(unchecked,
+              "$what: the registry at $addresses answered with HTTP status $(err.status)")
+    end
+    return nothing
+end
+
+# Add to `notes` that git does not ignore the PDF beside the paper's `.tex`
+# file, where a recorded build copies the registered PDF and a plain `latexmk`
+# builds one; and where git tracks it, that the copy is not made
+function _checkpdfbeside!(notes::Vector{String}, paper::LaTeXPaper,
+                          top::AbstractString)
+    beside = _gitpath(_pdfbeside(paper), top)
+    held = _githolding(top, beside)
+    held.ignored && return nothing
+    push!(notes,
+          held.tracked ?
+          "git tracks $beside, so a recorded build does not copy the registered pdf there: untrack and ignore it to have the copy" :
+          "git does not ignore $beside, where a recorded build copies the registered pdf and a plain `latexmk` builds one: ignore it")
+    return nothing
 end
 
 # Whether a `fair` can be found to run, as `fair"..."` finds one

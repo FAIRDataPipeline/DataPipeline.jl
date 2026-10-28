@@ -2223,6 +2223,108 @@ Test.@testset "link_write!() with a path" begin
     @test registered_versions(handle.registry, covered) == ["0.0.1"]
 end
 
+Test.@testset "an output whose file the store holds unregistered" begin
+    # As where an earlier run's registration was lost: a file under the
+    # output's hash in the data store, which the registry has no location for,
+    # left there by `left(file, stored)`
+    outside = mktempdir()
+    linkable = can_hardlink(outside, datastore)
+    function writing(case, left)
+        name = "data_product/stored_unregistered/$case/$uid"
+        file = joinpath(outside, "$case.txt")
+        write(file, "stored unregistered, $case $uid\n")
+        stored = joinpath(datastore, namespace, name,
+                          DataPipeline._getfilehash(file) * ".txt")
+        mkpath(dirname(stored))
+        left(file, stored)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, name, "description", file_type = "txt",
+                               use_version = "0.0.1")
+        handle = DataPipeline.initialise(config, config)
+        staged = link_write!(handle, name, path = file)
+        return (; name, file, stored, handle, staged)
+    end
+    function check_registered(output)
+        @test output.handle.outputs[(output.name, nothing)]["path"] ==
+              output.stored
+        @test !isfile(output.staged)
+        @test read(output.stored, String) == read(output.file, String)
+        @test registered_versions(output.handle.registry, output.name) ==
+              ["0.0.1"]
+        @test code_run_of(output.handle)["outputs"] ==
+              [output.handle.outputs[(output.name, nothing)]["component_url"]]
+    end
+
+    # Placed as the earlier run placed it, a hard link where one can be made,
+    # which makes the output the same file: it is kept
+    output = writing("linked", DataPipeline._placefile)
+    @test samefile(output.staged, output.stored) == linkable
+    @test_logs DataPipeline.finalise(output.handle)
+    check_registered(output)
+    @test samefile(output.stored, output.file) == linkable
+
+    # A copy is kept too
+    output = writing("copied", cp)
+    inode = stat(output.stored).inode
+    @test_logs DataPipeline.finalise(output.handle)
+    check_registered(output)
+    @test stat(output.stored).inode == inode
+
+    # Other bytes under the hash's name are replaced, with a warning
+    output = writing("other", (file, stored) -> write(stored, "other $uid\n"))
+    @test_logs (:warn,
+                r"^replacing the file at .*, whose bytes have the SHA-1 hash") DataPipeline.finalise(output.handle)
+    check_registered(output)
+    @test samefile(output.stored, output.file) == linkable
+end
+
+Test.@testset "a write entry with no description" begin
+    # The CLI's working config may give none, and the registry needs none
+    name = "data_product/undescribed/$uid"
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, name, nothing, file_type = "txt",
+                           use_version = "0.0.1")
+    handle = DataPipeline.initialise(config, config)
+    write(link_write!(handle, name), "undescribed $uid\n")
+    DataPipeline.finalise(handle)
+
+    # Its object is registered with none, and read back as none
+    component = DataPipeline._getentry(handle.registry,
+                                       URIs.URI(only(code_run_of(handle)["outputs"])))
+    object = DataPipeline._getentry(handle.registry,
+                                    URIs.URI(component["object"]))
+    @test isnothing(object["description"])
+    stored = handle.outputs[(name, nothing)]["path"]
+    @test only(DataPipeline.identify(handle.registry, stored).objects).description ==
+          ""
+    trace = DataPipeline.provenance(handle.registry, stored)
+    @test isnothing(only(values(trace.products)).description)
+end
+
+Test.@testset "a run with no description" begin
+    # The registry requires one of every code run, so a working config giving
+    # none, or a blank one, is refused before anything is registered: its
+    # bytes are its own, and nothing holds them
+    registry = handle.registry
+    for description in (nothing, " ")
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, "data_product/undescribed_run/$uid",
+                               "description", file_type = "txt",
+                               use_version = "0.0.1")
+        working = DataPipeline.YAML.load_file(config)
+        if isnothing(description)
+            delete!(working["run_metadata"], "description")
+        else
+            working["run_metadata"]["description"] = description
+        end
+        DataPipeline.YAML.write_file(config, working)
+        err = @test_throws DataPipeline.ConfigFileException DataPipeline.initialise(config,
+                                                                                    config)
+        @test occursin("gives the run no description", err.value.msg)
+        @test isempty(DataPipeline.identify(registry, config).objects)
+    end
+end
+
 Test.@testset "an output that is registered already" begin
     name = "data_product/unchanged/$uid"
     tabled = "data_product/unchanged/tabled/$uid"

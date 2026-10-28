@@ -1,5 +1,34 @@
 # NEWS
 
+- v0.58.2
+  - `finalise` and `link_register!` no longer fail where the data store holds a
+    file under the output's hash that the registry has no record of, as after a
+    registry is reset: a file of those bytes is kept, any other replaced with a
+    warning. Nor does a rehearsal into an outputs folder used before.
+  - A `write:` entry with no `description`, which `fair run` accepts, registers
+    its output with none, where it failed with a `KeyError`. A run with none,
+    which the registry refuses, is refused by `initialise`, naming the field,
+    before anything is registered.
+  - A source that the registry would refuse - a blank title, one longer than it
+    takes, an identifier that is not a URL with a host - is refused at the link
+    call, where its data product was registered without it. A source's title is
+    recorded without the white space around it, as the registry keeps it.
+  - `DataPipeline.isregistered` given a source no longer needs `primary` or a
+    release date, neither of which it compares.
+  - `DataPipeline.check_paper` reports a check that a registry answers with an
+    error as not made, with the status, where it threw.
+  - `build_paper!` and `DataPipeline.check_paper` build a paper afresh where a
+    file it uses has moved to another folder TeX searches, which latexmk took
+    as up to date, listing the file where it was.
+  - Interrupting `fair"..."`, as with Ctrl-C, or Julia's exit, ends `fair` and
+    the processes it started, such as the job of a `fair run`, which went on
+    running.
+  - A registry that sends nothing for ten minutes in answer to a request is
+    taken not to answer, with an error saying so, where the call waited for
+    ever.
+  - In a recorded run, the PDF `build_paper!` registers is copied beside the
+    `.tex` file as `<stem>.pdf`, where `latexmk` builds one, unless git tracks
+    that file; `DataPipeline.check_paper` notes it where git does not ignore it.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand
