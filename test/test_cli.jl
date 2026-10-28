@@ -244,4 +244,76 @@ Test.@testset "set_cli!() records the fair where the package is" begin
     end
 end
 
+Test.@testset "a fair interrupted ends with its job" begin
+    # A stand-in for a `fair run`: a Julia process waiting for a job of its
+    # own, a Julia process that writes its id where it is told and waits
+    dir = mktempdir()
+    write(joinpath(dir, "job.jl"),
+          "write(ARGS[1], string(getpid())); sleep(120)\n")
+    write(joinpath(dir, "fair.jl"),
+          "run(`\$(Base.julia_cmd()) --startup-file=no \$(joinpath(@__DIR__, \"job.jl\")) \$(ARGS[2])`)\n")
+    standin = `$(Base.julia_cmd()) --startup-file=no $(joinpath(dir, "fair.jl"))`
+    # Whether a process of this id is running
+    function running(pid)
+        Sys.iswindows() &&
+            return occursin(string(pid),
+                            read(`tasklist /FI "PID eq $pid" /NH`, String))
+        return ccall(:kill, Cint, (Cint, Cint), pid, 0) == 0
+    end
+    # The id the job writes, once it has
+    function jobid(file)
+        @test timedwait(() -> isfile(file) && !isempty(read(file, String)),
+                        120.0) === :ok
+        return parse(Int, read(file, String))
+    end
+
+    # Ended as Julia's exit ends it: the job with it, nothing left recorded,
+    # and the call an error
+    file = joinpath(dir, "ended.pid")
+    call = @async try
+        DataPipeline._fair("run", file, cli = standin)
+    catch err
+        err
+    end
+    job = jobid(file)
+    @test running(job)
+    DataPipeline._endfair(only(DataPipeline.RUNNING_FAIR))
+    @test timedwait(() -> !running(job), 30.0) === :ok
+    @test fetch(call) isa ReadWriteException
+    @test isempty(DataPipeline.RUNNING_FAIR)
+
+    if Sys.iswindows()
+        @info "an interrupt is a signal elsewhere than on Windows: not tried there"
+    else
+        # A Julia running the stand-in through fair"...", interrupted: as in
+        # the REPL, where an interrupt is an exception, which is rethrown, and
+        # as a script, which exits; the job ends either way. What it prints
+        # goes to a file, since a pipe would be held open by the job it hands
+        # its output to, and waiting for the Julia would wait for the job
+        stacked = dirname(Base.active_project())
+        for (repl, name) in ((true, "repl"), (false, "script"))
+            file = joinpath(dir, "$name.pid")
+            code = """
+                   using DataPipeline
+                   Base.exit_on_sigint($(!repl))
+                   try
+                       DataPipeline._fair("run", $(repr(file)), cli = $(repr(standin)))
+                   catch err
+                       print(typeof(err))
+                   end
+                   """
+            output = joinpath(dir, "$name.out")
+            interrupted = run(pipeline(addenv(`$(Base.julia_cmd()) --startup-file=no -e $code`,
+                                              "JULIA_LOAD_PATH" => "@:$stacked:@stdlib"),
+                                       stdout = output, stderr = devnull),
+                              wait = false)
+            job = jobid(file)
+            kill(interrupted, Base.SIGINT)
+            wait(interrupted)
+            repl && @test read(output, String) == "InterruptException"
+            @test timedwait(() -> !running(job), 30.0) === :ok
+        end
+    end
+end
+
 end

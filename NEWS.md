@@ -20,6 +20,9 @@
   - `build_paper!` and `DataPipeline.check_paper` build a paper afresh where a
     file it uses has moved to another folder TeX searches, which latexmk took
     as up to date, listing the file where it was.
+  - Interrupting `fair"..."`, as with Ctrl-C, or Julia's exit, ends `fair` and
+    the processes it started, such as the job of a `fair run`, which went on
+    running.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand
