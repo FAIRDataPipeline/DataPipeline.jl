@@ -9,6 +9,10 @@
     its output with none, where it failed with a `KeyError`. A run with none,
     which the registry refuses, is refused by `initialise`, naming the field,
     before anything is registered.
+  - A source that the registry would refuse - a blank title, one longer than it
+    takes, an identifier that is not a URL with a host - is refused at the link
+    call, where its data product was registered without it. A source's title is
+    recorded without the white space around it, as the registry keeps it.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand
