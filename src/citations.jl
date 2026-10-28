@@ -10,6 +10,11 @@ const DOI_RESOLVER = "https://doi.org/"
 const DOI_NAME = r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)?(10\.\d{4,9}/\S+)$"i
 # The version the registry gives a source that has none
 const DEFAULT_RELEASE_VERSION = "1.0.0"
+# The most characters the registry takes in a source's title
+const SOURCE_TITLE_LENGTH = 1024
+# A URL as the registry takes one to identify a source: an http, https, ftp or
+# ftps address with a host, and no white space
+const SOURCE_URL = r"^(?:https?|ftps?)://[^\s/?#]+\S*$"i
 # English month names, which a BibTeX month may be written as or abbreviated to
 const MONTH_NAMES = lowercase.(monthname.(1:12))
 
@@ -564,7 +569,10 @@ a file of a deposit has a title of its own; `description`; `release_date`, a
 the registry's default when neither gives one; one that is not a version, or
 that has a leading zero, as `061`, is an error, since writing it in full
 would alter it. A source with no identifier, title or release date from
-either is an error.
+either is an error, as are those the registry refuses: an identifier that is
+not a URL with a host, and a title that is blank or longer than
+$SOURCE_TITLE_LENGTH characters. The title is stripped of the white space around
+it, as the registry stores it.
 """
 function _sourcefacts(citation::SourceCitation; primary::Bool,
                       title::Union{Nothing, AbstractString} = nothing,
@@ -577,8 +585,15 @@ function _sourcefacts(citation::SourceCitation; primary::Bool,
           keyword) = ArgumentError("the citation '$(citation.key)' gives no $what: give `$keyword`")
     isnothing(citation.identifier) &&
         throw(ArgumentError("the citation '$(citation.key)' gives neither a doi nor a url to identify its source by"))
+    occursin(SOURCE_URL, citation.identifier) ||
+        throw(ArgumentError("the citation '$(citation.key)' identifies its source as '$(citation.identifier)', which the registry refuses: give its url in full, as `https://` and a host"))
     title = something(title, citation.title, Some(nothing))
     isnothing(title) && throw(lacks("title", "title"))
+    title = strip(title)
+    isempty(title) &&
+        throw(ArgumentError("the source's title is blank, which the registry refuses: give `title`"))
+    length(title) <= SOURCE_TITLE_LENGTH ||
+        throw(ArgumentError("the source's title has $(length(title)) characters, more than the $SOURCE_TITLE_LENGTH the registry takes: give a shorter `title`"))
     release_date = something(release_date, citation.release_date,
                              Some(nothing))
     isnothing(release_date) && throw(lacks("date", "release_date"))

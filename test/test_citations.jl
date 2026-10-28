@@ -632,6 +632,47 @@ Test.@testset "the facts of a source" begin
                                          primary = true)
     end
     @test occursin("example_unaddressed", msg) && occursin("doi", msg)
+
+    # What the registry would refuse, refused before anything is registered: a
+    # blank title, one too long, and an identifier that is no URL with a host
+    for blank in ("", " ")
+        msg = message_of() do
+            return DataPipeline._sourcefacts(dataset, primary = true,
+                                             title = blank)
+        end
+        @test occursin("blank", msg) && occursin("`title`", msg)
+    end
+    # ... a title stripped of the white space around it, as the registry
+    # stores it, before its length is counted
+    @test DataPipeline._sourcefacts(dataset, primary = true,
+                                    title = "  One file of it\n").title ==
+          "One file of it"
+    longest = "t"^DataPipeline.SOURCE_TITLE_LENGTH
+    @test DataPipeline._sourcefacts(dataset, primary = true,
+                                    title = " $longest ").title == longest
+    @test DataPipeline._sourcefacts(dataset, primary = true,
+                                    title = longest).title == longest
+    msg = message_of() do
+        return DataPipeline._sourcefacts(dataset, primary = true,
+                                         title = longest * "t")
+    end
+    @test occursin("characters", msg) && occursin("`title`", msg)
+    register_citations!(handle,
+                        """
+                        @misc{hostless, title = {H}, year = 2020, url = {example.org/h}}
+                        @misc{spaced, title = {S}, year = 2020, url = {https://example.org/a b}}
+                        @misc{ftp, title = {F}, year = 2020, url = {ftp://example.org/f}}
+                        """)
+    for key in ("hostless", "spaced")
+        msg = message_of() do
+            return DataPipeline._sourcefacts(handle.citations[key],
+                                             primary = true)
+        end
+        @test occursin(key, msg) && occursin("refuses", msg)
+    end
+    @test DataPipeline._sourcefacts(handle.citations["ftp"],
+                                    primary = true).identifier ==
+          "ftp://example.org/f"
 end
 
 end

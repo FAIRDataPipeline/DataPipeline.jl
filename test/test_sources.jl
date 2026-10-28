@@ -1048,6 +1048,49 @@ Test.@testset "link_register!() of a file the store holds unregistered" begin
                                                                                                                              "other $uid\n"))
 end
 
+Test.@testset "a source the registry would refuse" begin
+    # Refused at the call, before anything is registered, so that no data
+    # product is left without its source: here a blank title, of a source the
+    # registry holds nothing of, so that no other lookup refuses it first
+    registering = "sources/refused/registered/$uid"
+    writing = "sources/refused/written/$uid"
+    handle = offering(writing => "0.0.1")
+    register_citations!(handle,
+                        """
+                        @misc{refused, title = {Refused $uid}, year = 2020,
+                              url = {https://example.org/$uid/refused}}
+                        """)
+    @test_throws ArgumentError link_register!(handle, registering,
+                                              path = file_of("refused, registered $uid\n"),
+                                              bibtex = "refused",
+                                              primary = true, title = " ")
+    @test !isdir(joinpath(datastore, inputs_namespace, registering))
+    @test_throws ArgumentError link_write!(handle, writing,
+                                           path = file_of("refused, written $uid\n"),
+                                           bibtex = "refused", primary = true,
+                                           title = "")
+    @test isempty(handle.outputs)
+    DataPipeline.finalise(handle)
+    @test isempty(registered_versions(registering))
+    @test isempty(registered_versions(writing))
+end
+
+Test.@testset "a title with white space around it" begin
+    # Stored stripped, as the registry keeps it, so that the same call again
+    # finds the source registered and registers nothing new
+    padded = "sources/register/padded/$uid"
+    file = file_of("a padded title $uid\n")
+    for _ in 1:2
+        handle = offering()
+        link_register!(handle, padded, path = file, bibtex = "deposit",
+                       primary = true, title = "  A padded title $uid ")
+        DataPipeline.finalise(handle)
+    end
+    @test registered_versions(padded) == ["0.0.1"]
+    @test source_of(registered(padded, "0.0.1"))["title"] ==
+          "A padded title $uid"
+end
+
 Test.@testset "a licence held under an identifier the list has replaced" begin
     replaced = "sources/register/replaced/$uid"
     file = file_of("replaced licence $uid\n")
