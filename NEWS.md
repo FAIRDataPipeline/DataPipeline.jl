@@ -1,5 +1,10 @@
 # NEWS
 
+- v0.58.2
+  - `finalise` and `link_register!` no longer fail where the data store holds a
+    file under the output's hash that the registry has no record of, as after a
+    registry is reset: a file of those bytes is kept, any other replaced with a
+    warning. Nor does a rehearsal into an outputs folder used before.
 - v0.58.1
   - A licence may be given by its name in the SPDX licence list, as doi.org's
     BibTeX often gives one, and in an identifier or a name any dash may stand

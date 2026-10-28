@@ -1009,6 +1009,45 @@ Test.@testset "link_register!() with a file" begin
     @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
 end
 
+Test.@testset "link_register!() of a file the store holds unregistered" begin
+    # As where an earlier run's registration was lost: a file under the hash
+    # in the data store, which the registry has no location for, left there
+    # by `left(file, stored)`; whatever was there, the file's bytes are then
+    # registered there. Return the stored file's inode before and after
+    function registering(case, left)
+        name = "sources/register/unregistered/$case/$uid"
+        file = file_of("held unregistered, $case $uid\n")
+        hash = DataPipeline._getfilehash(file)
+        stored = joinpath(datastore, inputs_namespace, name, "$hash.txt")
+        mkpath(dirname(stored))
+        left(file, stored)
+        before = stat(stored).inode
+        handle = offering()
+        @test link_register!(handle, name, path = file, bibtex = "deposit",
+                             primary = true,
+                             title = "Held unregistered, $case $uid") == stored
+        @test read(stored, String) == "held unregistered, $case $uid\n"
+        DataPipeline.finalise(handle)
+        product = registered(name, "0.0.1")
+        @test entry(object_of(product)["storage_location"])["hash"] == hash
+        return (; before, after = stat(stored).inode)
+    end
+
+    # Placed as the earlier run placed it, a hard link where one can be made,
+    # or a copy: either is kept
+    for (case, left) in (("linked", DataPipeline._placefile), ("copied", cp))
+        held = registering(case, left)
+        @test held.after == held.before
+    end
+
+    # Other bytes under the hash's name are replaced, with a warning
+    @test_logs (:warn,
+                r"^replacing the file at .*, whose bytes have the SHA-1 hash") match_mode=:any registering("other",
+                                                                                                           (file,
+                                                                                                            stored) -> write(stored,
+                                                                                                                             "other $uid\n"))
+end
+
 Test.@testset "a licence held under an identifier the list has replaced" begin
     replaced = "sources/register/replaced/$uid"
     file = file_of("replaced licence $uid\n")

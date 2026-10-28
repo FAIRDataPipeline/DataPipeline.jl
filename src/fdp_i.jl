@@ -592,6 +592,22 @@ function _placefile(source::AbstractString, destination::AbstractString)
     return destination
 end
 
+# Whether `destination`, the data store's name for the bytes of `file` by their
+# hash `hash`, holds those bytes already - the same file or a copy - though the
+# registry has no location for them, as where a run's registration was lost. A
+# file there with other bytes is deleted, with a warning: its name says what it
+# must hold.
+function _storedalready(destination::String, file::AbstractString,
+                        hash::AbstractString)
+    isfile(destination) || return false
+    samefile(destination, file) && return true
+    found = _getfilehash(destination)
+    found == hash && return true
+    @warn "replacing the file at $destination, whose bytes have the SHA-1 hash $found where its name gives $hash"
+    rm(destination)
+    return false
+end
+
 # Make the file at `source` available at `destination` in a folder of links: a
 # symbolic link where one can be made, else as `_placefile` places it, since
 # Windows may refuse one. `link` makes the symbolic link; the tests replace it
@@ -709,11 +725,16 @@ function _registerfile(handle::DataRegistryHandle, wmd::AbstractDict,
                               "storage_root" =>
                                   _extractid(handle.datastore_obj_url)))
     if isnothing(existing)
-        # Name the file by its hash
+        # Name the file by its hash, unless the file under that name holds its
+        # bytes already
         path = joinpath(datastore, wmd["use_namespace"], wmd["use_dp"],
                         "$hash.$(_extension(filepath))")
         mkpath(dirname(path))
-        mv(filepath, path, force = true)
+        if _storedalready(path, filepath, hash)
+            rm(filepath)
+        else
+            mv(filepath, path)
+        end
     else
         # The same bytes are already in the store: point at them and drop
         # the duplicate

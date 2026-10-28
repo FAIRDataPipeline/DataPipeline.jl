@@ -329,6 +329,28 @@ Test.@testset "initialise() once per rehearsal" begin
           "again $uid\n"
 end
 
+Test.@testset "a file given by path, rehearsed twice into one folder" begin
+    # Each rehearsal hard-links the file into the data store where it can, and
+    # moves that to the outputs folder, so that the second's output is the
+    # very file the first left there
+    job = job_folder("twice")
+    working = joinpath(job, "config.yaml")
+    whole = "rehearse/twice/$uid"
+    DataPipeline._addwrite(working, whole, "a file rehearsed twice",
+                           file_type = "txt", use_version = "0.0.1")
+    file = file_of("rehearsed twice $uid\n")
+    outputs = mktempdir()
+    rehearsed = joinpath(outputs, namespace, whole, "0.0.1.txt")
+    for _ in 1:2
+        DataPipeline._replrehearse(job, outputs = outputs)
+        handle = DataPipeline.initialise()
+        staged = link_write!(handle, whole, path = file)
+        @test DataPipeline.finalise(handle) == outputs
+        @test !isfile(staged)
+        @test read(rehearsed, String) == "rehearsed twice $uid\n"
+    end
+end
+
 Test.@testset "what rehearse() accepts" begin
     # A refused call leaves the session's run, ended by the test before, as
     # it is

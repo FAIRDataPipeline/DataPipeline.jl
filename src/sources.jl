@@ -489,7 +489,8 @@ function _externalobject(handle::DataRegistryHandle, namespace::String,
         stored = joinpath(datastore, namespace, data_product,
                           "$(file.hash).$(_extension(file.path))")
         mkpath(dirname(stored))
-        _placefile(file.path, stored)
+        _storedalready(stored, file.path, file.hash) ||
+            _placefile(file.path, stored)
     else
         stored = joinpath(datastore, held["path"])
     end
