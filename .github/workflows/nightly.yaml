@@ -1,6 +1,6 @@
 name: JuliaNightly
-# The pipeline tests on Julia nightly, weekly and on every push to main, so
-# that a coming Julia breakage is seen before it is released
+# The pipeline tests on Julia nightly, weekly, on every push to main and on
+# request, so that a coming Julia breakage is seen before it is released
 
 on:
   push:
@@ -10,6 +10,7 @@ on:
       - 'v*'
   schedule:
     - cron: '0 2 * * 0'  # Weekly at 2 AM UTC Sunday
+  workflow_dispatch:
 
 permissions:
   contents: read

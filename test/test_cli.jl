@@ -286,7 +286,7 @@ Test.@testset "a fair interrupted ends with its job" begin
         @info "an interrupt is a signal elsewhere than on Windows: not tried there"
     else
         # A Julia running the stand-in through fair"...", interrupted: as in
-        # the REPL, where an interrupt is an exception, which is rethrown, and
+        # the REPL, where an interrupt is an exception, rethrown as one, and
         # as a script, which exits; the job ends either way. What it prints
         # goes to a file, since a pipe would be held open by the job it hands
         # its output to, and waiting for the Julia would wait for the job
@@ -299,7 +299,7 @@ Test.@testset "a fair interrupted ends with its job" begin
                    try
                        DataPipeline._fair("run", $(repr(file)), cli = $(repr(standin)))
                    catch err
-                       print(typeof(err))
+                       print(DataPipeline._interrupted(err))
                    end
                    """
             output = joinpath(dir, "$name.out")
@@ -313,7 +313,7 @@ Test.@testset "a fair interrupted ends with its job" begin
             # Julia 1.11 exits on the signal though told not to, its exit
             # ending the job too, so prints nothing: the gate goes with 1.11
             repl && VERSION >= v"1.12" &&
-                @test read(output, String) == "InterruptException"
+                @test read(output, String) == "true"
             @test timedwait(() -> !running(job), 30.0) === :ok
         end
     end

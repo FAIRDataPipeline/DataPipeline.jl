@@ -284,7 +284,7 @@ function _rehearsedjob(command::Cmd, root::AbstractString,
     reply = try
         JSON.parse(prepared.printed)
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         nothing
     end
     job = reply isa AbstractDict ? get(reply, "job_dir", nothing) : nothing

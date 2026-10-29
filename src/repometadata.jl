@@ -86,7 +86,7 @@ function _repositorymetadata(text::Function, place::AbstractString;
             content = text(name)
             isnothing(content) ? nothing : reader(content)
         catch err
-            err isa InterruptException && rethrow()
+            _interrupted(err) && rethrow()
             reason = err isa ReadWriteException ? err.msg :
                      sprint(showerror, err)
             isnothing(trusted) &&
@@ -421,7 +421,7 @@ function _papermetadata(folder::AbstractString;
         meta = try
             _cffmapping(read(citation, String))
         catch err
-            err isa InterruptException && rethrow()
+            _interrupted(err) && rethrow()
             throw(ReadWriteException("cannot read CITATION.cff in the working tree at $folder, the most trusted of the paper's metadata files: $(sprint(showerror, err))"))
         end
         if get(meta, "preferred-citation", nothing) isa AbstractDict

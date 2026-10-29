@@ -355,7 +355,7 @@ function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
     reply = try
         JSON.parse(opened.printed)
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         nothing
     end
     (reply isa AbstractDict &&

@@ -381,7 +381,7 @@ function _checkupdate(before::AbstractString, after::AbstractString,
     new = try
         _cffmapping(after)
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         throw(ReadWriteException("updating CITATION.cff would leave it unreadable, so it is left as it was: $(sprint(showerror, err))"))
     end
     said = _citationcffsays(_papercitation(new))

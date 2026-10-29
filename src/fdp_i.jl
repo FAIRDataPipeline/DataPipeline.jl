@@ -27,6 +27,17 @@ end
 
 # == Functions ==
 
+# Whether what a `catch` caught is an interrupt, as a Ctrl-C makes, to rethrow
+# rather than handle: an `InterruptException`, or a `Base.CancellationRequest`,
+# which a SIGINT reaching a waiting task is from Julia 1.14. Anything may be
+# thrown, so `err` is any value
+@static if isdefined(Base, :CancellationRequest)
+    _interrupted(err) = err isa InterruptException ||
+                        err isa Base.CancellationRequest
+else
+    _interrupted(err) = err isa InterruptException
+end
+
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 

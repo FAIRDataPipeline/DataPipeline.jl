@@ -529,7 +529,7 @@ function _templatetext(paper::LaTeXPaper)
     parsed = try
         YAML.load(text)
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         throw(ConfigFileException("cannot read the template at $(paper.template): $(sprint(showerror, err))"))
     end
     parsed isa AbstractDict ||
@@ -585,7 +585,7 @@ function _answers(registry::RegistryEndpoint)
                  retry = false, connect_timeout = 5, status_exception = false,
                  _idletimeout(REGISTRY_TIMEOUT)...)
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         return false
     end
     return response.status == 200
@@ -977,7 +977,7 @@ function _checksetup!(actions::Vector{String}, paper::LaTeXPaper,
         try
             _haspreferred(read(citation, String))
         catch err
-            err isa InterruptException && rethrow()
+            _interrupted(err) && rethrow()
             true
         end
     if !isempty(lacking)
@@ -1001,7 +1001,7 @@ function _metadataplace(top::AbstractString, source::AbstractString)
     preferred = try
         _haspreferred(read(joinpath(top, source), String))
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         false
     end
     return preferred ? "the preferred-citation of CITATION.cff" :
@@ -1027,7 +1027,7 @@ function _nolicence(top::AbstractString, source::AbstractString,
         said = try
             reader(read(path, String))
         catch err
-            err isa InterruptException && rethrow()
+            _interrupted(err) && rethrow()
             continue
         end
         isnothing(said) || isnothing(said.licence) ||
@@ -1235,7 +1235,7 @@ function _templatepdf(paper::LaTeXPaper)
     parsed = try
         YAML.load_file(paper.template)
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         return nothing
     end
     parsed isa AbstractDict || return nothing
