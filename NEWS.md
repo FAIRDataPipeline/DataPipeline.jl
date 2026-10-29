@@ -4,6 +4,8 @@
   - An interrupt, which Julia 1.14 delivers to a waiting task as a
     `Base.CancellationRequest`, is not taken for an ordinary failure where the
     package handles failures itself, as when it asks whether a registry answers.
+    On Julia 1.14 too, an interrupted `fair"..."` makes a job that ignores the
+    request to end stop after a few seconds.
 - v0.58.2
   - `finalise` and `link_register!` no longer fail where the data store holds a
     file under the output's hash that the registry has no record of, as after a

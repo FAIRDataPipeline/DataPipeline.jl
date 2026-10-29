@@ -288,21 +288,36 @@ function _runfair(command::Cmd; stdout::IO = Base.stdout,
     return process
 end
 
+# A pause, and a command run, that a task whose scope is cancelled still makes:
+# from Julia 1.14 an interrupt cancels the scope, and every blocking call in it
+# throws until the scope is left, so cleanup after one opts out
+@static if isdefined(Base, :CancellationRequest)
+    _cleanupsleep(seconds::Real) = sleep(seconds; cancel = nothing)
+    _cleanuprun(command::Base.AbstractCmd) = run(command; cancel = nothing)
+else
+    _cleanupsleep(seconds::Real) = sleep(seconds)
+    _cleanuprun(command::Base.AbstractCmd) = run(command)
+end
+
 # End a `fair` process `_runfair` started and every process it started: its
 # process group asked to end, so that the CLI can close its job log, and made
 # to where any of it is left after a few seconds; on Windows, its process tree
 function _endfair(process::Base.Process)
     process_exited(process) && return nothing
     if Sys.iswindows()
-        run(pipeline(ignorestatus(`taskkill /T /F /PID $(getpid(process))`),
-                     stdout = devnull, stderr = devnull))
+        _cleanuprun(pipeline(ignorestatus(`taskkill /T /F /PID $(getpid(process))`),
+                             stdout = devnull, stderr = devnull))
         return nothing
     end
     group = -getpid(process)
     signal(number) = ccall(:kill, Cint, (Cint, Cint), group, number)
     signal(Base.SIGTERM)
     # A signal of 0 asks only whether any of the group is left
-    timedwait(() -> signal(0) != 0, 5.0) === :ok || signal(Base.SIGKILL)
+    for _ in 1:50
+        signal(0) == 0 || return nothing
+        _cleanupsleep(0.1)
+    end
+    signal(Base.SIGKILL)
     return nothing
 end
 

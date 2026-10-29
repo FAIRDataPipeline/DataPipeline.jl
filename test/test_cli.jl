@@ -285,19 +285,38 @@ Test.@testset "a fair interrupted ends with its job" begin
     if Sys.iswindows()
         @info "an interrupt is a signal elsewhere than on Windows: not tried there"
     else
-        # A Julia running the stand-in through fair"...", interrupted: as in
-        # the REPL, where an interrupt is an exception, rethrown as one, and
-        # as a script, which exits; the job ends either way. What it prints
-        # goes to a file, since a pipe would be held open by the job it hands
-        # its output to, and waiting for the Julia would wait for the job
+        # A stand-in whose job ignores SIGTERM is made to end after a few
+        # seconds
+        write(joinpath(dir, "stubborn.sh"),
+              "trap '' TERM\nprintf %s \$\$ > \"\$2\"\nsleep 120\n")
+        stubborn = `sh $(joinpath(dir, "stubborn.sh"))`
+        file = joinpath(dir, "stubborn-ended.pid")
+        call = @async try
+            DataPipeline._fair("run", file, cli = stubborn)
+        catch err
+            err
+        end
+        job = jobid(file)
+        DataPipeline._endfair(only(DataPipeline.RUNNING_FAIR))
+        @test timedwait(() -> !running(job), 30.0) === :ok
+        @test fetch(call) isa ReadWriteException
+
+        # A Julia running a stand-in through fair"...", interrupted: as in the
+        # REPL, where an interrupt is an exception, rethrown as one, and as a
+        # script, which exits; the job ends either way, the stubborn one too,
+        # though from Julia 1.14 the cleanup after an interrupt is in a
+        # cancelled scope. What it prints goes to a file, since a pipe would be
+        # held open by the job it hands its output to, and waiting for the
+        # Julia would wait for the job
         stacked = dirname(Base.active_project())
-        for (repl, name) in ((true, "repl"), (false, "script"))
+        for (repl, name, cli) in ((true, "repl", standin),
+            (false, "script", standin), (true, "stubborn", stubborn))
             file = joinpath(dir, "$name.pid")
             code = """
                    using DataPipeline
                    Base.exit_on_sigint($(!repl))
                    try
-                       DataPipeline._fair("run", $(repr(file)), cli = $(repr(standin)))
+                       DataPipeline._fair("run", $(repr(file)), cli = $(repr(cli)))
                    catch err
                        print(DataPipeline._interrupted(err))
                    end
