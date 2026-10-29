@@ -1026,12 +1026,14 @@ end
 Test.@testset "a run from uncommitted changes" begin
     registry = handle.registry
     # What `fair run --dirty` records for a working tree with uncommitted
-    # changes: a warning, and an issue raised at once against the repository
+    # changes: a warning, and an issue raised at once against the repository.
+    # The commit is made up, so the checkout is not at it, which is said first
     config = DataPipeline._createconfig(cpath,
                                         latest_commit = DataPipeline._randomhash() *
                                                         "-dirty")
-    dirty = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(config,
-                                                                               config)
+    elsewhere = (:warn, r"checkout is not what the run records")
+    dirty = @test_logs elsewhere (:warn, r"uncommitted changes") DataPipeline.initialise(config,
+                                                                                         config)
     @test isempty(dirty.issues)          # not queued with the script's own
     component = DataPipeline._wholeobjectcomponent(registry, dirty.repo_obj)
     issue_urls() = DataPipeline._getentry(registry,
@@ -1043,8 +1045,8 @@ Test.@testset "a run from uncommitted changes" begin
 
     # Another run from the same state shares the one issue
     DataPipeline._resetsession!()
-    again = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(config,
-                                                                               config)
+    again = @test_logs elsewhere (:warn, r"uncommitted changes") DataPipeline.initialise(config,
+                                                                                         config)
     @test again.repo_obj == dirty.repo_obj
     @test length(issue_urls()) == 1
     DataPipeline.finalise(again)
@@ -1054,8 +1056,8 @@ Test.@testset "a run from uncommitted changes" begin
     other_config = DataPipeline._createconfig(cpath,
                                               latest_commit = DataPipeline._randomhash() *
                                                               "-dirty")
-    other = @test_logs (:warn, r"uncommitted changes") DataPipeline.initialise(other_config,
-                                                                               other_config)
+    other = @test_logs elsewhere (:warn, r"uncommitted changes") DataPipeline.initialise(other_config,
+                                                                                         other_config)
     other_issues = DataPipeline._getentry(registry,
                                           URIs.URI(DataPipeline._wholeobjectcomponent(registry,
                                                                                       other.repo_obj)))["issues"]
@@ -1088,6 +1090,131 @@ Test.@testset "a run from uncommitted changes" begin
                                          URIs.URI(DataPipeline._wholeobjectcomponent(registry,
                                                                                      clean.repo_obj)))["issues"])
     DataPipeline.finalise(clean)
+end
+
+# Not seen, by what is compared: a file changed and changed back between the
+# two looks, and an untracked file the run reads. Not tested: a clone gone by
+# `finalise`
+Test.@testset "a checkout that moves during a run" begin
+    registry = handle.registry
+    # A clone of its own, its files naming the run: seven tracked text files
+    # and an ignored one
+    dir = mktempdir()
+    repo = LibGit2.init(dir)
+    signature = LibGit2.Signature("Test", "test@example.com")
+    tracked = ["f$i.txt" for i in 1:7]
+    file(name) = joinpath(dir, name)
+    function commit!(text)
+        for name in tracked
+            write(file(name), "$text $name $uid\n")
+        end
+        write(file(".gitignore"), "ignored.txt\n")
+        LibGit2.add!(repo, tracked..., ".gitignore")
+        return string(LibGit2.commit(repo, text, author = signature,
+                                     committer = signature))
+    end
+    restore!() = foreach(name -> write(file(name), "first $name $uid\n"),
+                         tracked)
+    first_sha = commit!("first")
+    head() = string(LibGit2.head_oid(repo))
+    # A run of the clone from `commit`, writing an output unless `output` is
+    # false, with `before` done before it opens and `during` while it is open
+    function moving(case; commit = head(), before = () -> nothing,
+                    during = () -> nothing, output = true)
+        before()
+        config = DataPipeline._createconfig(cpath, latest_commit = commit,
+                                            local_repo = dir,
+                                            remote_repo = "https://github.com/FAIRDataPipeline/checkout-fixture-$uid.git")
+        written = "data_product/checkout/$case/$uid"
+        output && DataPipeline._addwrite(config, written, "checkout",
+                               file_type = "txt",
+                               use_version = "0.0.1")
+        run = DataPipeline.initialise(config, config)
+        output && write(link_write!(run, written), "checkout $case $uid\n")
+        during()
+        return run
+    end
+    # The descriptions of the issues on a run's outputs
+    function raised_on(run)
+        outputs = DataPipeline._getentry(registry,
+                                         URIs.URI(run.code_run_obj))["outputs"]
+        return [DataPipeline._getentry(registry, URIs.URI(url))["description"]
+                for component in outputs
+                for url in issues_of(registry, component)]
+    end
+    changed(names) = DataPipeline._movedcheckoutissue(["tracked files changed between the run opening and ending: $names"])
+
+    # Left alone, or given untracked and ignored files: nothing said or raised
+    run = @test_logs moving("still",
+                            during = () -> begin
+                                write(file("untracked.txt"), "u $uid\n")
+                                write(file("ignored.txt"), "i $uid\n")
+                            end)
+    @test_logs DataPipeline.finalise(run)
+    @test isempty(raised_on(run))
+
+    # A tracked file changed during the run: a warning and one issue on the
+    # outputs; more than five are named by the first five and a count
+    run = moving("edited", during = () -> write(file("f1.txt"), "edited\n"))
+    @test_logs (:warn,
+                r"tracked files changed between the run opening and ending: f1\.txt\): raising an issue on the run's outputs") DataPipeline.finalise(run)
+    @test raised_on(run) == [changed("f1.txt")]
+    run = moving("many",
+                 during = () -> foreach(name -> write(file(name), "many\n"),
+                                        tracked))
+    DataPipeline.finalise(run)
+    @test raised_on(run) ==
+          [changed("f1.txt, f2.txt, f3.txt, f4.txt, f5.txt and 2 more")]
+    restore!()
+
+    # Changed before the run opens, as a script may, and left alone: the
+    # commit is the run's and nothing has changed while it ran
+    run = @test_logs moving("before",
+                            before = () -> write(file("f2.txt"), "before\n"))
+    @test_logs DataPipeline.finalise(run)
+    @test isempty(raised_on(run))
+    # ... but changed again during it, it has
+    run = moving("before-during",
+                 during = () -> write(file("f2.txt"), "during\n"))
+    DataPipeline.finalise(run)
+    @test raised_on(run) == [changed("f2.txt")]
+    restore!()
+
+    # A commit made during the run: named, with the one before it
+    second_sha = Ref("")
+    run = moving("committed", during = () -> (second_sha[] = commit!("second")))
+    @test_logs (:warn,
+                r"checked out as the run opened and [0-9a-f]{40} as it ended") DataPipeline.finalise(run)
+    @test raised_on(run) ==
+          [DataPipeline._movedcheckoutissue(["it had $first_sha checked out as the run opened and $(second_sha[]) as it ended"])]
+
+    # A run from a commit other than the one checked out: said as it opens,
+    # and raised as it ends - or only said, with no output to raise it on
+    elsewhere = "it had $(second_sha[]) checked out as the run opened, not the run's commit, $first_sha"
+    run = @test_logs (:warn,
+                      "the code repository's checkout is not what the run records ($elsewhere): an issue will be raised on the run's outputs") moving("elsewhere",
+                                                                                                                                                      commit = first_sha)
+    DataPipeline.finalise(run)
+    @test raised_on(run) == [DataPipeline._movedcheckoutissue([elsewhere])]
+    run = moving("elsewhere-nothing", commit = first_sha, output = false)
+    @test_logs (:warn, r"and the run registered no output to raise an issue on") DataPipeline.finalise(run)
+
+    # A run from uncommitted changes that change during it has both issues:
+    # the one on the repository, and this one on its outputs
+    run = @test_logs (:warn, r"uncommitted changes") moving("dirty",
+                                                            commit = head() *
+                                                                     "-dirty",
+                                                            before = () -> write(file("f3.txt"),
+                                                                                 "dirty\n"),
+                                                            during = () -> write(file("f3.txt"),
+                                                                                 "dirtier\n"))
+    DataPipeline.finalise(run)
+    @test raised_on(run) == [changed("f3.txt")]
+    repository = DataPipeline._wholeobjectcomponent(registry, run.repo_obj)
+    @test [DataPipeline._getentry(registry, URIs.URI(url))["description"]
+           for url in issues_of(registry, repository)] ==
+          [DataPipeline.DIRTY_REPOSITORY_ISSUE]
+    close(repo)
 end
 
 Test.@testset "initialise() registers the code repository at its commit" begin
@@ -1222,12 +1349,15 @@ Test.@testset "initialise() registers the code repository at its commit" begin
           Set([(runner["name"], runner["identifier"])])
 
     # A clone without the commit, or no clone, is warned of, and the runner
-    # is the author
+    # is the author; a clone without it is at another commit, so its checkout
+    # is warned of too, as the run opens and as it ends
     elsewhere = fixture("codemeta.json" => codemeta)
     absent = (dir = with_metadata.dir,
               sha = bytes2hex(DataPipeline.SHA.sha1("test_api.jl absent commit $uid")),
               remote = elsewhere.remote)
-    @test authors(@test_logs((:warn, r"does not have the run's commit"),
+    @test authors(@test_logs((:warn, r"checkout is not what the run records"),
+                             (:warn, r"does not have the run's commit"),
+                             (:warn, r"no output to raise an issue on"),
                              opened(run_from(absent)))) ==
           Set([(runner["name"], runner["identifier"])])
     nowhere = (dir = joinpath(mktempdir(), "absent"), sha = elsewhere.sha,
@@ -2360,6 +2490,8 @@ Test.@testset "a run with no description" begin
     end
 end
 
+# Not tested: the same bytes under another storage root, or at a location
+# registered with the other `public`
 Test.@testset "an output identical to a version registered already" begin
     name = "data_product/identical/$uid"
     tabled = "data_product/identical/tabled/$uid"
@@ -2429,9 +2561,10 @@ Test.@testset "an output identical to a version registered already" begin
     @test !isfile(stored)
 
     # A version registered after the call - here by changing the version the
-    # output is written as - is refused at finalise, naming it, before any
-    # output is registered: a new name included, which finalise would
-    # otherwise register first, in name order
+    # output is written as, not by another run registering it meanwhile - is
+    # refused at finalise, naming it, before any output is registered: a new
+    # name included, which finalise would otherwise register first, in name
+    # order
     first_written = "data_product/identical-first/$uid"
     @test string((first_written, nothing)) < string((name, nothing))
     config = DataPipeline._createconfig(cpath)

@@ -477,6 +477,8 @@ run's [`AbstractRunMode`](@ref), which decides what the run registers.
 - `doi_lookups`: the citations looked up from a DOI so far, by the DOI's URL
 - `authors`: the identifiers that [`register_authors!`](@ref) has been given
   for each author's name
+- `checkout`: the run's clone of its code repository as `initialise` found it,
+  to compare with it at `finalise`, or `nothing` where there is none to look at
 """
 struct DataRegistryHandle{M <: AbstractRunMode}
     mode::M
@@ -496,6 +498,7 @@ struct DataRegistryHandle{M <: AbstractRunMode}
     citations::Dict{String, SourceCitation}
     doi_lookups::Dict{String, SourceCitation}
     authors::Dict{String, Vector{String}}
+    checkout::Union{Nothing, NamedTuple}
 end
 
 function Base.show(io::IO, handle::DataRegistryHandle)

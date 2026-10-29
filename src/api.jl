@@ -44,6 +44,13 @@ say more or otherwise is told; that file being unreadable is an error.
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
 that ran cannot be recovered from its commit.
+
+The clone `run_metadata.local_repo` is looked at as the run opens, and again as
+[`finalise`](@ref) ends it. A commit other than the run's checked out as it
+opens, another checked out as it ends, or a tracked file whose state or bytes
+differ between the two - untracked and ignored files apart, and changes the
+script made before the run opened allowed - gets a warning, and `finalise`
+raises one issue on the run's outputs saying so.
 """
 function initialise(config_file::Union{Nothing, String} = nothing,
                     submission_script::Union{Nothing, String} = nothing;
@@ -93,13 +100,15 @@ end
 _runhold(::RecordedRun) = _holdregistry()
 _runhold(::Rehearsal) = nothing
 
-# Open a recorded code run: register the data store, the config, the script
-# and the repository, raise the issue on a repository with uncommitted
-# changes, and post the code run
+# Open a recorded code run: look at the checkout, register the data store,
+# the config, the script and the repository, raise the issue on a repository
+# with uncommitted changes, and post the code run
 function _openrun(mode::RecordedRun, config::Dict, config_file::String,
                   submission_script::String, registry::RegistryEndpoint)
     run_metadata = config["run_metadata"]
     datastore = run_metadata["write_data_store"]
+    checkout = _watchcheckout(run_metadata)
+    _saycheckout(mode, checkout)
 
     datastore_url = _postentry(registry, "storage_root",
                                Dict("root" => datastore,
@@ -120,7 +129,15 @@ function _openrun(mode::RecordedRun, config::Dict, config_file::String,
     return _newhandle(mode, config, config_file, registry,
                       (config = config_url, script = script_url,
                        repository = repo_url, datastore = datastore_url,
-                       code_run = code_run["url"]), code_run["uuid"])
+                       code_run = code_run["url"]), code_run["uuid"], checkout)
+end
+
+# Warn as a run opens that its checkout is not at the run's commit
+_saycheckout(::AbstractRunMode, ::Nothing) = nothing
+function _saycheckout(::RecordedRun, checkout::NamedTuple)
+    isempty(checkout.found) && return nothing
+    @warn "the code repository's checkout is not what the run records ($(only(checkout.found))): an issue will be raised on the run's outputs"
+    return nothing
 end
 
 # Register a new code run started at `run_date`, in UTC, and return its entry:
@@ -142,10 +159,11 @@ end
 # A handle at the start of a run: the mode, the config and where it was read
 # from, the registry, the URLs of what `initialise` registered - `config`,
 # `script`, `repository`, `datastore` and `code_run`, each `nothing` where it
-# registered nothing - and the run's uuid, with nothing read or written yet
+# registered nothing - the run's uuid and its checkout as it opened, with
+# nothing read or written yet
 function _newhandle(mode::AbstractRunMode, config::Dict, config_file::String,
                     registry::RegistryEndpoint, registered::NamedTuple,
-                    uuid::String)
+                    uuid::String, checkout::Union{Nothing, NamedTuple})
     return DataRegistryHandle(mode, config, dirname(abspath(config_file)),
                               registry, registered.config, registered.script,
                               registered.repository, registered.datastore,
@@ -153,7 +171,7 @@ function _newhandle(mode::AbstractRunMode, config::Dict, config_file::String,
                               Dict(), Dict(), Dict(), PendingIssue[],
                               Dict{String, SourceCitation}(),
                               Dict{String, SourceCitation}(),
-                              Dict{String, Vector{String}}())
+                              Dict{String, Vector{String}}(), checkout)
 end
 
 """
@@ -173,9 +191,12 @@ output whose file is that of a version registered before - its bytes, and
 where a link call named its source, the same source, authors and licence - is
 said to be identical to it and recorded in the handle's `identical`, its bytes
 stored once; where every output is, the run is said to need no adding and
-pushing.
+pushing. Where the run's checkout of its code repository was not what the run
+records, as [`initialise`](@ref) describes, one issue saying so is raised on
+the outputs.
 """
 function finalise(handle::DataRegistryHandle{RecordedRun})
+    moves = _checkoutmoves(handle.checkout)
     _checksources(handle)
     _checkversions(handle)
     previous = _previousversions(handle)
@@ -192,6 +213,7 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     inputs = String[handle.inputs[key]["component_url"]
                     for key in sort(collect(keys(handle.inputs)), by = string)]
     _registerissues(handle)
+    _flagmovedcheckout(handle, moves, outputs)
     url = _patchcoderun(handle, inputs, outputs)
 
     open(joinpath(handle.config_dir, "coderuns.txt"), "a") do io

@@ -105,6 +105,10 @@ fair"pull config.yaml"
 fair"run config.yaml"
 ```
 
+The run records the repository's commit, so leave the checkout alone while it
+runs: a commit made, or a tracked file changed, before the run ends is warned
+of, and raised as an issue on what the run wrote.
+
 From a shell the same commands are `fair registry install`, `fair init`,
 `fair pull config.yaml` and `fair run config.yaml`. Either way, `fair run` runs
 the config's script in a shell, so a `julia` that the script calls must be on

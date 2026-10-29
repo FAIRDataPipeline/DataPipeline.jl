@@ -236,6 +236,42 @@ Test.@testset "a rehearsal writing a version that exists, or identical files" be
     @test counts() == before
 end
 
+Test.@testset "a rehearsal whose checkout moves" begin
+    # A clone of its own, its file naming the run, from which a rehearsal
+    # writes one output while the file is changed
+    dir = mktempdir()
+    git = DataPipeline.LibGit2
+    repo = git.init(dir)
+    write(joinpath(dir, "tracked.txt"), "tracked $uid\n")
+    git.add!(repo, "tracked.txt")
+    signature = git.Signature("Test", "test@example.com")
+    sha = string(git.commit(repo, "tracked", author = signature,
+                            committer = signature))
+    close(repo)
+    working = DataPipeline._createconfig(joinpath("coderun", datetime,
+                                                  "rehearse-checkout",
+                                                  "config.yaml"),
+                                         latest_commit = sha, local_repo = dir,
+                                         remote_repo = "https://github.com/FAIRDataPipeline/rehearse-checkout-$uid.git")
+    whole = "rehearse/checkout/$uid"
+    DataPipeline._addwrite(working, whole, "a file written as it moves",
+                           file_type = "txt", use_version = "0.0.1")
+    before = counts()
+    DataPipeline._replrehearse(dirname(working), outputs = mktempdir())
+    handle = DataPipeline.initialise()
+    write(link_write!(handle, whole), "a checkout moving $uid\n")
+    write(joinpath(dir, "tracked.txt"), "changed $uid\n")
+
+    # Warned of and printed as what a recorded run would raise, and nothing
+    # registered
+    said = @test_logs (:warn,
+                       r"tracked files changed between the run opening and ending: tracked\.txt\): a recorded run would raise an issue on its outputs") match_mode=:any printed_by(() -> DataPipeline.finalise(handle))
+    @test occursin("on its outputs: " *
+                   DataPipeline._movedcheckoutissue(["tracked files changed between the run opening and ending: tracked.txt"]),
+                   said)
+    @test counts() == before
+end
+
 Test.@testset "a rehearsal repeated into the same folder replaces its files" begin
     job = job_folder("again")
     working = joinpath(job, "config.yaml")

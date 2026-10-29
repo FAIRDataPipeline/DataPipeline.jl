@@ -309,10 +309,12 @@ end
 # `${{RUN_ID}}` resolves, and a commit with uncommitted changes warned of
 function _openrun(mode::Rehearsal, config::Dict, config_file::String,
                   ::String, registry::RegistryEndpoint)
+    checkout = _watchcheckout(config["run_metadata"])
     if !_inblock()
         commit = config["run_metadata"]["latest_commit"]
         endswith(commit, "-dirty") &&
             @warn "the code repository has uncommitted changes ($commit): a recorded run would raise an issue against it"
+        _saycheckout(mode, checkout)
         println("rehearsal: nothing is registered, and the outputs go to ",
                 mode.outputs)
         _rehearserepository(registry, config["run_metadata"])
@@ -320,7 +322,14 @@ function _openrun(mode::Rehearsal, config::Dict, config_file::String,
     return _newhandle(mode, config, config_file, registry,
                       (config = nothing, script = nothing,
                        repository = nothing, datastore = nothing,
-                       code_run = nothing), string(uuid4()))
+                       code_run = nothing), string(uuid4()), checkout)
+end
+
+# Warn as a rehearsal opens that its checkout is not at the run's commit
+function _saycheckout(::Rehearsal, checkout::NamedTuple)
+    isempty(checkout.found) && return nothing
+    @warn "the code repository's checkout is not what the run records ($(only(checkout.found))): a recorded run would raise an issue on its outputs"
+    return nothing
 end
 
 # What a recorded run would register of the code repository at its commit,
@@ -406,8 +415,8 @@ _unregisteredauthor(name::AbstractString) = "unregistered author: " * name
 End a rehearsal, registering nothing. The outputs are checked as a recorded
 run checks them: that each source is one file, that none is written as a
 version registered already, and whether each is identical to a version
-registered before, which is reported, as is every one being so. They are then
-moved to the outputs folder as
+registered before, which is reported, as is every one being so, and whether the
+checkout moved. They are then moved to the outputs folder as
 `<namespace>/<data product>/<version>.<extension>`, replacing what is there,
 with the working config and the script copied beside them. The issues raised
 are printed, the data store's empty directories pruned, the job folder deleted
@@ -418,6 +427,7 @@ ended cannot be finalised again.
 function finalise(handle::DataRegistryHandle{Rehearsal})
     _sessionsopen(handle) ||
         throw(ReadWriteException("this handle's rehearsal has ended: rehearse again for another"))
+    moves = _checkoutmoves(handle.checkout)
     _checksources(handle)
     _checkversions(handle)
     previous = _previousversions(handle)
@@ -427,7 +437,7 @@ function finalise(handle::DataRegistryHandle{Rehearsal})
     end
     _supersedeoutputs!(handle, previous)
     _copyjobfiles(handle)
-    _printrehearsal(handle)
+    _printrehearsal(handle, moves)
     _closerehearsal(handle)
     return handle.mode.outputs
 end
@@ -504,8 +514,10 @@ end
 
 # Print what the rehearsal did: its inputs, its outputs, where they are and
 # which are identical to a version registered before, the issues a recorded run
-# would have raised
-function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
+# would have raised, that on its outputs where its checkout moved, `moves`,
+# with a warning
+function _printrehearsal(handle::DataRegistryHandle{Rehearsal},
+                         moves::Vector{String})
     println("rehearsal finished - nothing registered")
     for (label, table) in (("inputs", handle.inputs),
         ("outputs", handle.outputs))
@@ -522,12 +534,18 @@ function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
                     ", identical to v$(handle.identical[key])" : "")
         end
     end
-    isempty(handle.issues) || println("  issues a recorded run would raise:")
+    isempty(moves) ||
+        @warn "the code repository's checkout was not what the run records ($(join(moves, "; "))): a recorded run would raise an issue on its outputs"
+    (isempty(handle.issues) && isempty(moves)) ||
+        println("  issues a recorded run would raise:")
     for issue in handle.issues
         println("    severity ", issue.severity, " on ",
                 join((sprint(show, target) for target in issue.targets),
                      ", "), ": ", issue.description)
     end
+    isempty(moves) ||
+        println("    severity ", DEFAULT_ISSUE_SEVERITY, " on its outputs: ",
+                _movedcheckoutissue(moves))
     println("  outputs folder: ", handle.mode.outputs)
     _allidentical(handle) &&
         @info "every output of this rehearsal is identical to a version registered before it, so a recorded run of it would need no `fair add` and `fair push`"

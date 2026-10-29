@@ -1,30 +1,38 @@
 # NEWS
 
 - v0.59.0
-  - Every output of a run is registered as a new version, its bytes stored once,
-    where one with the highest version's file was not. `finalise` and a rehearsal
-    say which outputs are identical to a version registered before, and where all
-    are, that the run need not be added and pushed.
-  - A `write:` entry naming a version that is registered already is an error at
-    the call that writes it, where a file with that version's bytes was taken as
-    a reproduction.
-  - `DataRegistryHandle`'s field `unchanged` is replaced by `identical`: each
-    output identical to a version registered before, with that version, the
-    output staying among `outputs`.
-  - `supersede = true` raises nothing on an output identical to the version it
-    would supersede.
-  - A file given to `link_write!` or `link_register!` as a `path`, or put at one
-    by `link_read!`, is copied - on macOS cloned, sharing disk space until either
-    file is written - where it was hard-linked, so that writing to it in place
-    changed the registered file. A link to a stored file found there is replaced.
-  - `check_store` reports a registered file that has another name, a hard link,
-    as `shared`: a new field of `StoreCheck`.
-  - An interrupt, which Julia 1.14 delivers to a waiting task as a
-    `Base.CancellationRequest`, is not taken for an ordinary failure where the
-    package handles failures itself, as when it asks whether a registry answers.
-    On Julia 1.14 too, an interrupted `fair"..."` makes a job that ignores the
-    request to end stop after a few seconds.
-  - An interrupt as `fair"..."` starts ends its job, which it could leave running.
+  - Breaking changes:
+    - Every output of a run is registered as a new version, its bytes stored
+      once, where one with the highest version's file was not. `finalise` and a
+      rehearsal say which outputs are identical to a version registered before,
+      and where all are, that the run need not be added and pushed.
+    - A `write:` entry naming a version that is registered already is an error
+      at the call that writes it, where a file with that version's bytes was
+      taken as a reproduction.
+    - `DataRegistryHandle`'s field `unchanged` is replaced by `identical`: each
+      output identical to a version registered before, with that version, the
+      output staying among `outputs`.
+  - Writing and the data store:
+    - `supersede = true` raises nothing on an output identical to the version it
+      would supersede.
+    - A file given to `link_write!` or `link_register!` as a `path`, or put at
+      one by `link_read!`, is copied - on macOS cloned, sharing disk space until
+      either file is written - where it was hard-linked, so that writing to it
+      in place changed the registered file. A link to a stored file found there
+      is replaced.
+    - `check_store` reports a registered file that has another name, a hard
+      link, as `shared`: a new field of `StoreCheck`.
+  - Running:
+    - An interrupt, which Julia 1.14 delivers to a waiting task as a
+      `Base.CancellationRequest`, is not taken for an ordinary failure where the
+      package handles failures itself, as when it asks whether a registry
+      answers. On Julia 1.14 too, an interrupted `fair"..."` makes a job that
+      ignores the request to end stop after a few seconds.
+    - An interrupt as `fair"..."` starts ends its job, which it could leave
+      running.
+    - A run whose checkout of its code repository is at another commit as it
+      opens, or whose commit or tracked files change before `finalise`, gets a
+      warning and an issue on its outputs saying so.
 - v0.58.2
   - `finalise` and `link_register!` no longer fail where the data store holds a
     file under the output's hash that the registry has no record of, as after a

@@ -1230,6 +1230,114 @@ function _flagdirtyrepository(registry::RegistryEndpoint, repo_url::String,
     return nothing
 end
 
+# The issue raised on a run's outputs where its checkout of the code
+# repository was not what the run records, followed by what was found
+const MOVED_CHECKOUT_ISSUE = "The code repository's checkout was not what this code run records, so what the run read from it cannot be recovered from that record"
+
+# How many changed files the issue on a moved checkout names
+const MOVED_CHECKOUT_FILES = 5
+
+# What a checkout of a code repository holds, as `(head, changes)`: the commit
+# checked out, and each tracked file that is not as that commit has it -
+# staged, changed or deleted, untracked and ignored files apart - by its path
+# from the top level, with git's status and the SHA-1 of its bytes, `nothing`
+# for one that is gone. `nothing` for a repository with no commit
+function _checkoutstate(top::AbstractString)
+    return LibGit2.with(LibGit2.GitRepo(top)) do repo
+        LibGit2.isorphan(repo) && return nothing
+        changes = Dict{String, Tuple{UInt32, Union{Nothing, String}}}()
+        options = LibGit2.StatusOptions(flags = Cuint(0))
+        LibGit2.with(LibGit2.GitStatus(repo, status_opts = options)) do status
+            GC.@preserve status begin
+                for i in 1:length(status)
+                    entry = status[i]
+                    delta = unsafe_load(entry.index_to_workdir == C_NULL ?
+                                        entry.head_to_index :
+                                        entry.index_to_workdir)
+                    path = unsafe_string(delta.new_file.path)
+                    file = joinpath(top, path)
+                    changes[path] = (entry.status,
+                                     isfile(file) ? _getfilehash(file) :
+                                     nothing)
+                end
+            end
+        end
+        return (head = string(LibGit2.head_oid(repo)), changes = changes)
+    end
+end
+
+# The run's checkout of its code repository as the run opens, to compare with
+# it as the run ends, as `(top, state, found)`, `found` saying what is wrong
+# with it already: a commit other than the run's checked out. Uncommitted
+# changes are not wrong, since the script may make them before the run opens.
+# `nothing` where the run names no clone to look at
+function _watchcheckout(run_metadata::AbstractDict)
+    folder = get(run_metadata, "local_repo", nothing)
+    top = isnothing(folder) || !isdir(folder) ? nothing : _gittoplevel(folder)
+    isnothing(top) && return nothing
+    state = _checkoutstate(top)
+    isnothing(state) && return nothing
+    commit = replace(run_metadata["latest_commit"], r"-dirty$" => "")
+    found = state.head == commit ? String[] :
+            ["it had $(state.head) checked out as the run opened, not the run's commit, $commit"]
+    return (top = top, state = state, found = found)
+end
+
+# What was wrong with the run's checkout of its code repository as it opened,
+# and what has changed in it since: its checked-out commit, else a tracked
+# file's state or bytes, which are relative to that commit. Empty where nothing
+# was, or there is no checkout
+_checkoutmoves(::Nothing) = String[]
+function _checkoutmoves(watched::NamedTuple)
+    found = copy(watched.found)
+    now = isdir(watched.top) ? _checkoutstate(watched.top) : nothing
+    if isnothing(now)
+        push!(found, "it was gone as the run ended")
+        return found
+    end
+    if now.head != watched.state.head
+        push!(found,
+              "it had $(watched.state.head) checked out as the run opened and $(now.head) as it ended")
+        return found
+    end
+    before = watched.state.changes
+    changed = sort([path
+                    for path in union(keys(before), keys(now.changes))
+                    if get(before, path, nothing) !=
+                       get(now.changes, path, nothing)])
+    if !isempty(changed)
+        named = join(first(changed, MOVED_CHECKOUT_FILES), ", ")
+        more = length(changed) - MOVED_CHECKOUT_FILES
+        more > 0 && (named *= " and $more more")
+        push!(found,
+              "tracked files changed between the run opening and ending: $named")
+    end
+    return found
+end
+
+# Raise the issue on a run's outputs that its checkout was not what it records,
+# with a warning, which is all there is where the run registered no output
+function _flagmovedcheckout(handle::DataRegistryHandle{RecordedRun},
+                            moves::Vector{String}, outputs::Vector{String})
+    isempty(moves) && return nothing
+    said = join(moves, "; ")
+    if isempty(outputs)
+        @warn "the code repository's checkout was not what the run records ($said), and the run registered no output to raise an issue on"
+        return nothing
+    end
+    @warn "the code repository's checkout was not what the run records ($said): raising an issue on the run's outputs"
+    entry = _postissue(handle.registry, DEFAULT_ISSUE_SEVERITY,
+                       _movedcheckoutissue(moves), outputs)
+    println("issue registered as ", entry["url"])
+    return nothing
+end
+
+# The description of the issue on a run whose checkout moved
+function _movedcheckoutissue(moves::Vector{String})
+    return string(MOVED_CHECKOUT_ISSUE, ": ",
+                  join(moves, "; "), ".")
+end
+
 # Get or create the issue with this severity and description on exactly these
 # components, and return it
 function _postissue(registry::RegistryEndpoint, severity::Integer,
