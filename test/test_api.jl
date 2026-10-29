@@ -2048,28 +2048,57 @@ Test.@testset "several versions of one data product in one config" begin
           "newest version $uid\n"
 end
 
-# Whether a file in one directory can be hard-linked into another: not across
-# file systems, nor on one without hard links
-function can_hardlink(from, to)
-    source = joinpath(from, "probe-$(DataPipeline._randomhash())")
-    link = joinpath(to, basename(source))
-    write(source, "")
-    try
-        hardlink(source, link)
-        return true
-    catch e
-        e isa Base.IOError || rethrow()
-        return false
-    finally
-        rm(source, force = true)
-        rm(link, force = true)
+# A function that puts a link to a file, made by `link`, at a path, or a copy
+# where no link can be made: across file systems, or a symbolic link on
+# Windows without the privilege
+function linking(link)
+    return function (file, destination)
+        try
+            link(file, destination)
+        catch e
+            e isa Base.IOError || rethrow()
+            cp(file, destination)
+        end
     end
 end
 
+Test.@testset "a file placed is a file of its own" begin
+    # Never a link, so that writing to either file in place leaves the other
+    # as it was: on macOS a clone, which APFS, the runners' file system, makes
+    # within a volume; else, or where no clone is made, a copy
+    folder = mktempdir()
+    source = joinpath(folder, "source-$uid.txt")
+    write(source, "placed $uid\n")
+    cloned = joinpath(folder, "cloned.txt")
+    @test DataPipeline._clonefile(source, cloned) == Sys.isapple()
+    @test isfile(cloned) == Sys.isapple()
+    placed = DataPipeline._placefile(source, joinpath(folder, "placed.txt"))
+    noclone(from, to) = false
+    copied = DataPipeline._placefile(source, joinpath(folder, "copied.txt"),
+                                     clone = noclone)
+    for file in (placed, copied)
+        @test read(file, String) == "placed $uid\n"
+        @test !samefile(file, source)
+    end
+    write(source, "written in place $uid\n")
+    @test read(placed, String) == read(copied, String) == "placed $uid\n"
+    Sys.isapple() && @test read(cloned, String) == "placed $uid\n"
+    write(placed, "placed, written in place $uid\n")
+    @test read(source, String) == "written in place $uid\n"
+    # A file there is never replaced, and no copy is left beside it
+    @test_throws ArgumentError DataPipeline._placefile(source, copied,
+                                                       clone = noclone)
+    @test !DataPipeline._clonefile(source, copied)
+    @test read(copied, String) == "placed $uid\n"
+    @test sort(readdir(folder)) ==
+          sort(["source-$uid.txt", "placed.txt", "copied.txt",
+                   (Sys.isapple() ? ["cloned.txt"] : [])...])
+end
+
 Test.@testset "a folder of links where no symbolic link can be made" begin
-    # As on Windows without the privilege: a hard link where one can be made,
-    # else a copy. A folder of a pattern read is placed this way, which the
-    # pattern test checks only where symbolic links can be made
+    # As on Windows without the privilege: a file of its own, placed as
+    # `_placefile` places one. A folder of a pattern read is placed this way,
+    # which the pattern test checks only where symbolic links can be made
     source = joinpath(mktempdir(), "source-$uid.txt")
     write(source, "a folder of links $uid\n")
     folder = mktempdir()
@@ -2078,7 +2107,7 @@ Test.@testset "a folder of links where no symbolic link can be made" begin
     @test DataPipeline._placelink(source, placed, link = refused) == placed
     @test !islink(placed)
     @test read(placed, String) == "a folder of links $uid\n"
-    @test samefile(placed, source) == can_hardlink(dirname(source), folder)
+    @test !samefile(placed, source)
     # Where one can be made, it is a symbolic link
     linked = DataPipeline._placelink(source, joinpath(folder, "linked.txt"))
     @test islink(linked) && normpath(readlink(linked)) == normpath(source)
@@ -2095,7 +2124,6 @@ Test.@testset "link_write!() with a path" begin
     outside = mktempdir()
     file = joinpath(outside, "fetched.txt")
     write(file, "fetched $uid\n")
-    linkable = can_hardlink(outside, datastore)
     # A config with one write entry for the name, at the version offered
     function offering(use_version)
         config = DataPipeline._createconfig(cpath)
@@ -2104,14 +2132,14 @@ Test.@testset "link_write!() with a path" begin
         return DataPipeline.initialise(config, config)
     end
 
-    # The file is put in the data store under a temporary name, as a hard
-    # link where one can be made, and stays where it was
+    # A copy of the file is put in the data store under a temporary name,
+    # and the file stays where it was
     handle = offering("0.0.1")
     stored = link_write!(handle, name, path = file)
     @test dirname(stored) == joinpath(datastore, namespace, name)
     @test startswith(basename(stored), "dat-") && endswith(stored, ".txt")
     @test read(stored, String) == "fetched $uid\n"
-    @test samefile(stored, file) == linkable
+    @test !samefile(stored, file)
     @test length(handle.outputs) == 1
     # The same file again is the same output; another file is refused
     @test link_write!(handle, name, path = file) == stored
@@ -2127,7 +2155,11 @@ Test.@testset "link_write!() with a path" begin
     @test basename(registered) == DataPipeline._getfilehash(file) * ".txt"
     @test isfile(registered) && !isfile(stored)
     @test read(file, String) == "fetched $uid\n"
-    @test samefile(registered, file) == linkable
+    @test !samefile(registered, file)
+    # Writing to the file in place leaves the registered one as it was
+    write(file, "fetched, written in place $uid\n")
+    @test read(registered, String) == "fetched $uid\n"
+    write(file, "fetched $uid\n")
     @test registered_versions(handle.registry, name) == ["0.0.1"]
     @test code_run_of(handle)["outputs"] ==
           [handle.outputs[(name, nothing)]["component_url"]]
@@ -2203,9 +2235,7 @@ Test.@testset "link_write!() with a path" begin
     @test isempty(handle.outputs)
 
     # A name a wildcard entry covers, from a symbolic link: it is the file
-    # that arrives in the store, not the link. On macOS a hard link to a
-    # symbolic link is one to its target anyway, so there this check tells
-    # only when the file had to be copied
+    # that arrives in the store, not the link
     pattern = "$name/*"
     covered = "$name/covered"
     config = DataPipeline._createconfig(cpath)
@@ -2228,7 +2258,6 @@ Test.@testset "an output whose file the store holds unregistered" begin
     # output's hash in the data store, which the registry has no location for,
     # left there by `left(file, stored)`
     outside = mktempdir()
-    linkable = can_hardlink(outside, datastore)
     function writing(case, left)
         name = "data_product/stored_unregistered/$case/$uid"
         file = joinpath(outside, "$case.txt")
@@ -2255,15 +2284,17 @@ Test.@testset "an output whose file the store holds unregistered" begin
               [output.handle.outputs[(output.name, nothing)]["component_url"]]
     end
 
-    # Placed as the earlier run placed it, a hard link where one can be made,
-    # which makes the output the same file: it is kept
-    output = writing("linked", DataPipeline._placefile)
-    @test samefile(output.staged, output.stored) == linkable
-    @test_logs DataPipeline.finalise(output.handle)
-    check_registered(output)
-    @test samefile(output.stored, output.file) == linkable
+    # A link to the output's file, through which writing to that file would
+    # change the registered one, is replaced by a file of its own; a copy
+    # where no link can be made
+    for (case, link) in (("linked", hardlink), ("symlinked", symlink))
+        output = writing(case, linking(link))
+        @test_logs DataPipeline.finalise(output.handle)
+        check_registered(output)
+        @test !islink(output.stored) && !samefile(output.stored, output.file)
+    end
 
-    # A copy is kept too
+    # A copy is kept
     output = writing("copied", cp)
     inode = stat(output.stored).inode
     @test_logs DataPipeline.finalise(output.handle)
@@ -2275,7 +2306,7 @@ Test.@testset "an output whose file the store holds unregistered" begin
     @test_logs (:warn,
                 r"^replacing the file at .*, whose bytes have the SHA-1 hash") DataPipeline.finalise(output.handle)
     check_registered(output)
-    @test samefile(output.stored, output.file) == linkable
+    @test !samefile(output.stored, output.file)
 end
 
 Test.@testset "a write entry with no description" begin
@@ -2484,26 +2515,38 @@ end
 Test.@testset "link_read!() with a path" begin
     name = "data_product/path_write/$uid"
     outside = mktempdir()
-    linkable = can_hardlink(datastore, outside)
 
     config = DataPipeline._createconfig(cpath)
     DataPipeline._addread(config, name, use_version = "0.0.1")
     handle = DataPipeline.initialise(config, config)
 
-    # Nothing there: the file arrives, with the directories it needs, as a
-    # hard link where one can be made, and the input is recorded
+    # Nothing there: a file of its own arrives, with the directories it needs,
+    # and the input is recorded
     wanted = joinpath(outside, "inputs", "deep", "fetched.txt")
     @test link_read!(handle, name, path = wanted) == wanted
     stored = link_read!(handle, name)
     @test handle.inputs[(name, nothing)]["path"] == stored
     @test length(handle.inputs) == 1
     @test read(wanted, String) == "fetched $uid\n"
-    @test samefile(wanted, stored) == linkable
+    @test !samefile(wanted, stored)
 
-    # The same contents there already are left as they are: the file itself,
-    # and a separate copy, which stays a copy
+    # The same contents there already are left as they are, the file as well
+    # as the bytes
+    placed = stat(wanted).inode
     @test link_read!(handle, name, path = wanted) == wanted
-    @test samefile(wanted, stored) == linkable
+    @test stat(wanted).inode == placed
+    # ... but for the data store's file under another name or a link to it,
+    # which is replaced by a file of its own, and the data store's own path
+    for (case, link) in (("linked", hardlink), ("symlinked", symlink))
+        other = joinpath(outside, "$case.txt")
+        linking(link)(stored, other)
+        @test link_read!(handle, name, path = other) == other
+        @test !islink(other) && !samefile(other, stored)
+        @test read(other, String) == "fetched $uid\n"
+    end
+    @test stat(stored).nlink == 1
+    @test link_read!(handle, name, path = stored) == stored
+    @test isfile(stored)
     copy = joinpath(outside, "copy.txt")
     cp(stored, copy)
     @test link_read!(handle, name, path = copy) == copy
@@ -2525,7 +2568,7 @@ Test.@testset "link_read!() with a path" begin
     # ... unless forced, when the registered file replaces them
     @test link_read!(handle, name, path = different, force = true) == different
     @test read(different, String) == "fetched $uid\n"
-    @test samefile(different, stored) == linkable
+    @test !samefile(different, stored)
 
     # A directory is never replaced, and a pattern takes no path
     @test_throws DataPipeline.ReadWriteException link_read!(handle, name,
@@ -2536,7 +2579,10 @@ Test.@testset "link_read!() with a path" begin
                                           path = joinpath(outside, "all"))
     @test !ispath(joinpath(outside, "all"))
 
-    # The data store's file is as it was, and the run has the one input
+    # The data store's file is as it was, the files put elsewhere written in
+    # place notwithstanding, and the run has the one input
+    write(wanted, "written in place $uid\n")
+    write(different, "written in place $uid\n")
     @test DataPipeline._getfilehash(stored) ==
           handle.inputs[(name, nothing)]["hash"]
     DataPipeline.finalise(handle)

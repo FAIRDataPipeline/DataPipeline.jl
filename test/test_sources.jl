@@ -958,8 +958,8 @@ Test.@testset "link_register!() with a file" begin
                 title = "Registered file $uid", keywords...)
     end
 
-    # The file is put in the data store by its hash, its path there returned,
-    # and it is the run's input, with its source
+    # A copy of the file is put in the data store by its hash, its path there
+    # returned, and it is the run's input, with its source
     handle = offering()
     stored = link_register!(handle, fetched;
                             of(path = file,
@@ -968,6 +968,10 @@ Test.@testset "link_register!() with a file" begin
           joinpath(datastore, inputs_namespace, fetched,
                    DataPipeline._getfilehash(file) * ".txt")
     @test read(stored, String) == "registered file $uid\n"
+    @test !samefile(stored, file)
+    write(file, "registered file, written in place $uid\n")
+    @test read(stored, String) == "registered file $uid\n"
+    write(file, "registered file $uid\n")
     @test handle.inputs[(fetched, nothing)]["path"] == stored
     DataPipeline.finalise(handle)
     product = registered(fetched, "0.0.1")
@@ -1013,7 +1017,8 @@ Test.@testset "link_register!() of a file the store holds unregistered" begin
     # As where an earlier run's registration was lost: a file under the hash
     # in the data store, which the registry has no location for, left there
     # by `left(file, stored)`; whatever was there, the file's bytes are then
-    # registered there. Return the stored file's inode before and after
+    # registered there. Return the two files, and the stored file's inode
+    # before and after
     function registering(case, left)
         name = "sources/register/unregistered/$case/$uid"
         file = file_of("held unregistered, $case $uid\n")
@@ -1030,14 +1035,26 @@ Test.@testset "link_register!() of a file the store holds unregistered" begin
         DataPipeline.finalise(handle)
         product = registered(name, "0.0.1")
         @test entry(object_of(product)["storage_location"])["hash"] == hash
-        return (; before, after = stat(stored).inode)
+        return (; file, stored, before, after = stat(stored).inode)
     end
 
-    # Placed as the earlier run placed it, a hard link where one can be made,
-    # or a copy: either is kept
-    for (case, left) in (("linked", DataPipeline._placefile), ("copied", cp))
-        held = registering(case, left)
-        @test held.after == held.before
+    # A copy is kept
+    held = registering("copied", cp)
+    @test held.after == held.before
+    # A link to the file, through which writing to the file would change the
+    # registered one, is replaced by a file of its own; a copy where no link
+    # can be made
+    for (case, link) in (("linked", hardlink), ("symlinked", symlink))
+        function linked(file, stored)
+            try
+                link(file, stored)
+            catch e
+                e isa Base.IOError || rethrow()
+                cp(file, stored)
+            end
+        end
+        held = registering(case, linked)
+        @test !islink(held.stored) && !samefile(held.stored, held.file)
     end
 
     # Other bytes under the hash's name are replaced, with a warning

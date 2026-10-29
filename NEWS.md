@@ -1,6 +1,12 @@
 # NEWS
 
 - v0.58.3
+  - A file given to `link_write!` or `link_register!` as a `path`, or put at one
+    by `link_read!`, is copied - on macOS cloned, sharing disk space until either
+    file is written - where it was hard-linked, so that writing to it in place
+    changed the registered file. A link to a stored file found there is replaced.
+  - `check_store` reports a registered file that has another name, a hard link,
+    as `shared`: a new field of `StoreCheck`.
   - An interrupt, which Julia 1.14 delivers to a waiting task as a
     `Base.CancellationRequest`, is not taken for an ordinary failure where the
     package handles failures itself, as when it asks whether a registry answers.

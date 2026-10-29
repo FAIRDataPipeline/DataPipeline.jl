@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 # The data stores on this machine checked against the local registry: the
-# registered files that are gone or altered, and the files there that are not
-# registered.
+# registered files that are gone, altered or have another name, and the files
+# there that are not registered.
 
 # A registered file as a check reports it: where it should be, its storage
 # location's URL and the SHA-1 the registry holds
@@ -25,6 +25,9 @@ a report.
   as `(path, location, hash, found, links)`: also its SHA-1 now and how many
   names it has, more than one where it is hard-linked; empty when the check
   was made with `hashes = false`
+- `shared`: each registered file that has more than one name - a hard link,
+  through which writing to a file elsewhere changes it - and is not in
+  `changed`, as `(path, location, hash, links)`: also how many names it has
 - `unknown`: each file in a data store that the registry has no storage
   location for, other than those in `unfinished` and `cli_files`
 - `unused`: each storage location that nothing uses - no object, and no
@@ -46,6 +49,8 @@ struct StoreCheck
     missing::Vector{_StoredFile}
     changed::Vector{@NamedTuple{path::String, location::String, hash::String,
                                 found::String, links::Int}}
+    shared::Vector{@NamedTuple{path::String, location::String, hash::String,
+                               links::Int}}
     unknown::Vector{String}
     unused::Vector{_StoredFile}
     unfinished::Vector{@NamedTuple{path::String, modified::DateTime}}
@@ -98,6 +103,10 @@ function Base.show(io::IO, ::MIME"text/plain", check::StoreCheck)
                     (line *= "; it has $(file.links) hard links, so may have been written to through another")
                 push!(lines, line)
             end
+        end
+        for (path, files) in _bypath(instore(check.shared, folder))
+            push!(lines,
+                  "    shared: $(relpath(path, folder)) - it has $(first(files).links) hard links, so writing to it through another would change it")
         end
         for path in instore(check.unknown, folder)
             push!(lines, "    unknown: $(relpath(path, folder))")
@@ -154,8 +163,8 @@ function _storesummary(check::StoreCheck)
     isempty(check.roots) && return "no data store is registered"
     counts = String[]
     for (found, word) in ((check.missing, "missing"), (check.changed, "changed"),
-        (check.unknown, "unknown"), (check.unused, "unused"),
-        (check.unfinished, "unfinished"))
+        (check.shared, "shared"), (check.unknown, "unknown"),
+        (check.unused, "unused"), (check.unfinished, "unfinished"))
         isempty(found) || push!(counts, "$(length(found)) $word")
     end
     summary = isempty(counts) ? "all as registered" : join(counts, ", ")
@@ -179,16 +188,17 @@ Check the data stores on this machine against the local registry, and return
 a [`StoreCheck`](@ref), shown as a report. A data store is a storage root
 that is a folder on this machine - a `file://` root marked local, as `fair`
 and the APIs register each project's - and every one is checked. Found are
-the registered files that are missing, or whose contents are not those
-registered; the files in a store that the registry does not know; the
-storage locations that nothing uses; and the outputs that a run left under
-their temporary names, `dat-...`, as one that fails before `finalise` does.
-The check changes nothing: it deletes, moves, fetches and registers nothing.
+the registered files that are missing, whose contents are not those
+registered, or that have another name - a hard link, through which writing
+to a file elsewhere changes the registered one; the files in a store that
+the registry does not know; the storage locations that nothing uses; and the
+outputs that a run left under their temporary names, `dat-...`, as one that
+fails before `finalise` does. The check changes nothing: it deletes, moves,
+fetches and registers nothing.
 
-A file put in a data store by [`link_write!`](@ref), [`link_register!`](@ref)
-or [`link_read!`](@ref) with a `path` is a hard link where one could be made,
-so writing to the file at that path changes the registered one; the report
-says how many names a changed file has.
+The calls that put a file in a data store, such as [`link_write!`](@ref) with
+a `path`, never link it. A copy of a shared file moved over it gives it a name
+of its own.
 
 # Arguments
 - `registry`: the registry whose data stores are checked, a
@@ -229,6 +239,8 @@ function check_store(registry::RegistryEndpoint; hashes::Bool = true,
     gone = _StoredFile[]
     changed = @NamedTuple{path::String, location::String, hash::String,
                           found::String, links::Int}[]
+    shared = @NamedTuple{path::String, location::String, hash::String,
+                         links::Int}[]
     unused = _StoredFile[]
     # The paths registered in each store's folder, as a walk of it gives them,
     # and the folders in it that are repositories rather than files
@@ -260,11 +272,14 @@ function check_store(registry::RegistryEndpoint; hashes::Bool = true,
                 push!(unused, file)
             elseif !isfile(path)
                 push!(gone, file)
-            elseif hashes
-                found = _getfilehash(path)
-                found == file.hash ||
-                    push!(changed,
-                          (; file..., found, links = Int(stat(path).nlink)))
+            else
+                links = Int(stat(path).nlink)
+                found = hashes ? _getfilehash(path) : file.hash
+                if found != file.hash
+                    push!(changed, (; file..., found, links))
+                elseif links > 1
+                    push!(shared, (; file..., links))
+                end
             end
         end
     end
@@ -295,9 +310,9 @@ function check_store(registry::RegistryEndpoint; hashes::Bool = true,
         end
     end
     bypath(found) = sort!(found, by = file -> file.path)
-    return StoreCheck(stores, bypath(gone), bypath(changed), sort!(unknown),
-                      bypath(unused), bypath(unfinished), sort!(cli_files),
-                      hashes, quiet)
+    return StoreCheck(stores, bypath(gone), bypath(changed), bypath(shared),
+                      sort!(unknown), bypath(unused), bypath(unfinished),
+                      sort!(cli_files), hashes, quiet)
 end
 function check_store(handle::DataRegistryHandle; hashes::Bool = true,
                      quiet::Bool = true)

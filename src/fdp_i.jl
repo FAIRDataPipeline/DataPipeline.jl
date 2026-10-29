@@ -589,29 +589,54 @@ function _checkversions(handle::DataRegistryHandle)
     return nothing
 end
 
-# Make the file at `source` available at `destination`, which must not exist:
-# a hard link where one can be made, so that no bytes are copied, else a copy.
-# A symbolic link is resolved first, so that it is the file that arrives.
-function _placefile(source::AbstractString, destination::AbstractString)
+# Put a file of its own at `destination`, which must not exist, holding the
+# bytes of the file at `source`. Never a link: the data store's file must not
+# change when a file outside it is written in place. A clone where one can be
+# made, else a copy, made under a temporary name and moved there, so that an
+# interrupted copy leaves nothing at `destination`. A symbolic link is
+# resolved first, so that it is the file that arrives. `clone` makes the clone;
+# the tests replace it with one that fails.
+function _placefile(source::AbstractString, destination::AbstractString;
+                    clone::Function = _clonefile)
     source = realpath(source)
+    clone(source, destination) && return destination
+    partial = tempname(dirname(destination))
     try
-        hardlink(source, destination)
-    catch e
-        isa(e, Base.IOError) || rethrow()
-        cp(source, destination)
+        cp(source, partial)
+        mv(partial, destination)
+    finally
+        rm(partial, force = true)
     end
     return destination
 end
 
-# Whether `destination`, the data store's name for the bytes of `file` by their
-# hash `hash`, holds those bytes already - the same file or a copy - though the
+# Clone the file at `source` to `destination`, which must not exist, and return
+# whether it was cloned: a file of its own, sharing the disk space of `source`
+# until either is written. Only macOS's `clonefile`, on APFS; Julia's `cp`
+# makes no clone there
+@static if Sys.isapple()
+    function _clonefile(source::AbstractString, destination::AbstractString)
+        return ccall(:clonefile, Cint, (Cstring, Cstring, UInt32), source,
+                     destination, 0) == 0
+    end
+else
+    _clonefile(::AbstractString, ::AbstractString) = false
+end
+
+# Whether `destination`, the data store's name for the bytes whose SHA-1 hash
+# is `hash`, holds those bytes already in a file of its own, though the
 # registry has no location for them, as where a run's registration was lost. A
-# file there with other bytes is deleted, with a warning: its name says what it
-# must hold.
-function _storedalready(destination::String, file::AbstractString,
-                        hash::AbstractString)
+# link there - a symbolic link, or a file with other names, through which it
+# could be written - is deleted, and so is a file with other bytes, with a
+# warning: its name says what it must hold.
+function _storedalready(destination::String, hash::AbstractString)
+    linked = islink(destination) ||
+             (isfile(destination) && stat(destination).nlink > 1)
+    if linked
+        rm(destination)
+        return false
+    end
     isfile(destination) || return false
-    samefile(destination, file) && return true
     found = _getfilehash(destination)
     found == hash && return true
     @warn "replacing the file at $destination, whose bytes have the SHA-1 hash $found where its name gives $hash"
@@ -741,7 +766,7 @@ function _registerfile(handle::DataRegistryHandle, wmd::AbstractDict,
         path = joinpath(datastore, wmd["use_namespace"], wmd["use_dp"],
                         "$hash.$(_extension(filepath))")
         mkpath(dirname(path))
-        if _storedalready(path, filepath, hash)
+        if _storedalready(path, hash)
             rm(filepath)
         else
             mv(filepath, path)

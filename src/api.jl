@@ -221,19 +221,21 @@ file, such as a deposit, which a `register:` entry with `no_file: true` or
 [`link_register!`](@ref) with no `path` registers, is recorded as an input in
 the same way, and `nothing` is returned.
 
-The file is in the data store, named by its hash. For code that needs its
-input under a name or in a place of its own, `path` asks for the file there,
-and is what is then returned:
-- with nothing at `path`, the file is put there, any missing directories
-  being made: as a hard link to the data store's file where one can be made,
-  so that no bytes are copied, else as a copy;
-- a file already there with the same contents is left exactly as it is,
-  whether it is the data store's file under a second name or a copy of it;
+The file is the data store's own, named by its hash, so it must not be
+written to; reading it copies nothing. For code that needs its input under a
+name or in a place of its own, `path` asks for a file of its own there, and
+is what is then returned:
+- with nothing at `path`, a copy is put there, any missing directories being
+  made - on macOS a clone where the file system makes one, which shares the
+  data store's disk space until either file is written;
+- a file already there with the same contents is left as it is, but for the
+  data store's file under another name or a link to it, which is replaced by
+  a copy;
 - a file there with other contents is an error, and nothing is overwritten,
   unless `force` is `true`, when it is replaced by the registered file. A
   directory there is always an error.
-A file that is a hard link is the data store's own, so it must not be written
-to. `force` does nothing without `path`. A data product with no file takes no
+The file at `path` may then be written to without changing the data store's.
+`force` does nothing without `path`. A data product with no file takes no
 `path`.
 
 Given a pattern instead - a name with one or more `*`, each matching one
@@ -242,8 +244,8 @@ segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
 every `read:` data product that matches, each recorded as an input (the
 directory itself is not), a data product with no file being recorded and
 given none. Each is a symbolic link to the data store's file where one can be
-made, else a hard link, else a copy, as on a Windows machine that allows no
-symbolic links. Where the working config keeps the pattern's own entry, as a
+made, so it must not be written to, else a copy, as on a Windows machine that
+allows no symbolic links. Where the working config keeps the pattern's own entry, as a
 CLI may, a pattern that matches nothing gives an empty directory; where it
 does not, that is an error. Each is named after its data product with `/`
 replaced by `_`, plus the file's extension; the directory is named by the
@@ -290,10 +292,14 @@ function _linkread!(handle::DataRegistryHandle, data_product::String,
         throw(ReadWriteException("the file of '$data_product' is not in the data store: $stored"))
     if isdir(path)
         throw(ReadWriteException("cannot put '$data_product' at $path, which is a directory"))
+    elseif isfile(path) && samefile(path, stored)
+        # The data store's file itself, else that file under another name or
+        # a link to it, replaced by a file of its own, so that nothing
+        # written at `path` reaches the store
+        !islink(path) && realpath(path) == realpath(stored) && return path
+        rm(path)
     elseif ispath(path) || islink(path)
-        isfile(path) &&
-            (samefile(path, stored) || _getfilehash(path) == input["hash"]) &&
-            return path
+        isfile(path) && _getfilehash(path) == input["hash"] && return path
         if !force
             msg = string(path, " exists and is not ", input["use_dp"],
                          " (namespace ", input["use_namespace"], ", version ",
@@ -434,14 +440,14 @@ end
 Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
 hash and registers it, replacing `\${{RUN_ID}}` in the registered name with
-the code run's uuid.
+the code run's uuid. A file written there is never copied.
 
 `path` names a file that exists already, to be registered as the data product
-in place of one the caller writes. It is put in the data store - as a hard
-link where one can be made, so that no bytes are copied, else as a copy - and
-its path there is returned; the file at `path` is left as it was. Its
-extension must be the entry's file type. A hard link is the same file under a
-second name, so the file must not be written to afterwards.
+in place of one the caller writes. A copy of it is put in the data store - on
+macOS a clone where the file system makes one, which shares the file's disk
+space until either is written - and its path there is returned; the file at
+`path` is left as it was, and may be written to afterwards without changing
+the registered file. Its extension must be the entry's file type.
 
 A file whose bytes are those of the highest version of the data product
 already registered is not registered again: no version is made and it is not
@@ -648,8 +654,9 @@ With no `path` it is a data product with no file - the deposit that a
 source's files belong to, which a run that fetches them reads, so that each
 file it registers as an output is derived from it - and nothing is returned.
 With a `path` it is that file, put in the data store as [`link_write!`](@ref)
-puts one, as a hard link where one can be made and else a copy, and its path
-there is returned.
+puts one, a copy - on macOS a clone where the file system makes one - and its
+path there is returned; the file at `path` may be written to afterwards
+without changing the registered file.
 
 The namespace is by default the run's default input namespace. The version
 is the data product's in the pipeline - the source's own is

@@ -90,8 +90,9 @@ DataPipeline.check_store(quiet = false)     # every missing file, and the CLI's 
 
 A store whose folder has gone is reported in one line, and missing files
 beyond a few are counted rather than listed. A changed file with more than one
-name was most likely written to through another: a file given to `link_write!`
-or `link_register!` as a `path` is hard-linked into the store where it can be.
+name was most likely written to through another. One with more than one name
+and the correct contents is reported as shared, since a write through any
+of its names would change it: a copy moved over it gives it a name of its own.
 
 ```@docs
 DataPipeline.check_store

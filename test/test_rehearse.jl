@@ -344,9 +344,8 @@ Test.@testset "a rehearsal of a run with no description" begin
 end
 
 Test.@testset "a file given by path, rehearsed twice into one folder" begin
-    # Each rehearsal hard-links the file into the data store where it can, and
-    # moves that to the outputs folder, so that the second's output is the
-    # very file the first left there
+    # Each rehearsal copies the file into the data store and moves the copy to
+    # the outputs folder, the second's replacing the first's
     job = job_folder("twice")
     working = joinpath(job, "config.yaml")
     whole = "rehearse/twice/$uid"
@@ -362,6 +361,7 @@ Test.@testset "a file given by path, rehearsed twice into one folder" begin
         @test DataPipeline.finalise(handle) == outputs
         @test !isfile(staged)
         @test read(rehearsed, String) == "rehearsed twice $uid\n"
+        @test !samefile(rehearsed, file)
     end
 end
 
