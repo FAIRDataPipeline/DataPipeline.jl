@@ -167,14 +167,13 @@ root, the folder under which the output files now sit, by namespace and data
 product. In a [`Rehearsal`](@ref) nothing is registered and the outputs are
 collected in its folder instead, which is returned.
 
-A file whose bytes are those of the highest version of its data product
-already registered is not registered again: no version is made, the file
-written is removed, and it is not an output of the code run. Where a link
-call named its source, the source, authors and licence registered with that
-version must be the same as well. A file written as a version that is
-registered already must be that version's in the same way - a reproduction,
-likewise not registered again - or nothing is registered, and the call is an
-error naming the version.
+Every output is registered as a new version: one written as a version that
+is registered already is an error, raised before anything is registered. An
+output whose file is that of a version registered before - its bytes, and
+where a link call named its source, the same source, authors and licence - is
+said to be identical to it and recorded in the handle's `identical`, its bytes
+stored once; where every output is, the run is said to need no adding and
+pushing.
 """
 function finalise(handle::DataRegistryHandle{RecordedRun})
     _checksources(handle)
@@ -185,11 +184,6 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     for (data_product, component) in sort(collect(keys(handle.outputs)),
                                           by = string)
         _registerdataproduct(handle, data_product, component)
-    end
-    # What was registered already is no output of this code run
-    for (key, metadata) in collect(handle.outputs)
-        metadata["unchanged"] || continue
-        handle.unchanged[key] = pop!(handle.outputs, key)
     end
     _supersedeoutputs!(handle, previous)
     outputs = String[handle.outputs[key]["component_url"]
@@ -205,6 +199,8 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     end
     _copyregistered(handle)
     println("finished - code run locally registered as: ", url, "\n")
+    _allidentical(handle) &&
+        @info "every output of this code run is identical to a version registered before it, so the run need not be added and pushed (`fair add`, `fair push`)"
     _ended(handle)
     session = SESSION[]
     !isnothing(session) && session.handle === handle && _releasehold!()
@@ -449,15 +445,11 @@ space until either is written - and its path there is returned; the file at
 `path` is left as it was, and may be written to afterwards without changing
 the registered file. Its extension must be the entry's file type.
 
-A file whose bytes are those of the highest version of the data product
-already registered is not registered again: no version is made and it is not
-an output of the code run. Where the call names a source, the source, authors
-and licence registered with that version must be the same as well. The
-version the `write:` entry names may be one registered already, when the file
-must be that version's in the same way - a reproduction, likewise not
-registered again - or it is an error. With a `path` this is found as the call
-is made, and the path returned is that of the registered file; a file that is
-written afterwards is found so by `finalise`, before it registers anything.
+Each run registers its output as a new version, so the version the `write:`
+entry names must not be registered already, or the call is an error. A file
+whose bytes are those of a version registered before - and where the call
+names a source, with the same source, authors and licence - is registered as
+the new version all the same, and `finalise` says that it is identical.
 
 A file that comes from somewhere else is registered with its source. The
 source is named by its `doi`, or by `bibtex`, the key of a citation that
@@ -510,9 +502,9 @@ everything made from that: once the new version is registered at
 [`finalise`](@ref), an issue reading `Superseded by namespace:name@vX.Y.Z` is
 raised on the highest version before it, at severity 0, the lowest, so that
 [`identify`](@ref) of anything made from the old version reports it. Where
-there is nothing to supersede - the file is registered already, unchanged,
-the name has no version before, or the version written is not above the
-highest - nothing is raised, and an info message says so.
+there is nothing to supersede - the file is identical to that version, the
+name has no version before, or the version written is not above the highest -
+nothing is raised, and an info message says so.
 
 See also: [`canwrite`](@ref)
 """
@@ -564,7 +556,7 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
                      supersede::Bool)
     path = String(path)
     isfile(path) || throw(ReadWriteException("no file to register at $path"))
-    wmd, name = _writemetadata(handle, data_product)
+    wmd = _writemetadata(handle, data_product).entry
     if _extension(path) != wmd["file_type"]
         msg = string("'", data_product, "' is written as a ", wmd["file_type"],
                      " file in 'write', which ", path,
@@ -592,22 +584,6 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
     end
 
     _checkonefile(handle, source, hash, data_product)
-    namespace = _writenamespace(handle, wmd)
-    version = String(get(wmd, "use", Dict())["version"])
-    unchanged = _heldfile(handle.registry, namespace, name, version, hash,
-                          source)
-    if !isnothing(unchanged)
-        println("data product unchanged: ", name, " (", unchanged.version, ")")
-        supersede &&
-            @info "nothing to supersede: the file written as $(_dataproductname(namespace, name, version)) is registered already, unchanged"
-        whole = _wholeobjectcomponent(handle.registry, unchanged.object)
-        found = Dict("path" => unchanged.path,
-                     "object_url" => unchanged.object,
-                     "component_url" => whole)
-        handle.unchanged[(data_product, nothing)] = found
-        return unchanged.path
-    end
-
     metadata = _resolvewrite(handle, data_product, nothing, wmd["file_type"],
                              nothing)
     _placefile(path, metadata["path"])
@@ -723,22 +699,20 @@ or `link_read!`, resolved as the run resolves it: the `write:` entry naming it,
 or the one pattern covering it, under the name its `use:` block gives and in
 its namespace, else the run's default output namespace; else the `read:`
 entry naming it, or the kept entry whose pattern covers it. Its version is the
-entry's where that version is registered, else the highest, as `link_write!`
-compares an output at [`finalise`](@ref). A label no entry covers, or several
-patterns cover, is a [`ConfigFileException`](@ref), and a component of one an
-`ArgumentError`.
+entry's where that version is registered, else the highest. A label no entry
+covers, or several patterns cover, is a [`ConfigFileException`](@ref), and a
+component of one an `ArgumentError`.
 
 With no source keyword, whether anything is registered under the name, or at
 the version a name asks for. With the keywords `link_register!` or `link_write!`
-would be given, but no file, whether registering that file would register
-nothing new: whether the version asked about records the same source -
-its identifier, title and release version, from the citation that `doi` or
-`bibtex` names and from `title` and `release_version` - the same authors, and
-the same licence, `licence` or `license`. `primary`, `description`,
-`release_date` and `original_store` are not compared, the registry keeping the
-last three as a first registration said them, so may be left out, though what
-is given is checked as the link calls check it; nor are the file's bytes
-compared. An author the registry has not got is not
+would be given, but no file, whether the version asked about records the
+same source - its identifier, title and release version, from the citation
+that `doi` or `bibtex` names and from `title` and `release_version` - the
+same authors, and the same licence, `licence` or `license`. `primary`,
+`description`, `release_date` and `original_store` are not compared, the
+registry keeping the last three as a first registration said them, so may be
+left out, though what is given is checked as the link calls check it; nor are
+the file's bytes compared. An author the registry has not got is not
 registered, and makes the answer false, as registering would add one. A `doi`
 with no citation is looked up at `doi.org` as the link calls look it up.
 
@@ -784,7 +758,7 @@ end
 
 # The registry name `isregistered` asks about, as `(namespace, name, version,
 # fallback)`: a version a name asks for must be registered, where one a config
-# entry gives falls back to the highest, as `link_write!` compares an output
+# entry gives falls back to the highest
 function _askedname(handle::DataRegistryHandle, data_product::String)
     occursin('*', data_product) &&
         throw(ArgumentError("'$data_product' is a pattern: a data product is looked up by a name of its own"))
@@ -822,7 +796,7 @@ end
 Write `data` as `component` of an HDF5 `write:` data product of the working
 config, recording it as an output, and return `(data_product, component)`.
 The file records no times, so that the same arrays give the same bytes and
-are found to be registered already. `supersede` is as for
+are found identical to a version registered before. `supersede` is as for
 [`link_write!`](@ref): the data product's new version supersedes the one
 before it.
 

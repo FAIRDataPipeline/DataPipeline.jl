@@ -1,6 +1,18 @@
 # NEWS
 
-- v0.58.3
+- v0.59.0
+  - Every output of a run is registered as a new version, its bytes stored once,
+    where one with the highest version's file was not. `finalise` and a rehearsal
+    say which outputs are identical to a version registered before, and where all
+    are, that the run need not be added and pushed.
+  - A `write:` entry naming a version that is registered already is an error at
+    the call that writes it, where a file with that version's bytes was taken as
+    a reproduction.
+  - `DataRegistryHandle`'s field `unchanged` is replaced by `identical`: each
+    output identical to a version registered before, with that version, the
+    output staying among `outputs`.
+  - `supersede = true` raises nothing on an output identical to the version it
+    would supersede.
   - A file given to `link_write!` or `link_register!` as a `path`, or put at one
     by `link_read!`, is copied - on macOS cloned, sharing disk space until either
     file is written - where it was hard-linked, so that writing to it in place

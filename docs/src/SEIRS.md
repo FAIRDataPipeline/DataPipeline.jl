@@ -98,7 +98,7 @@ include("examples/fdp/seirs_sim.jl")
 opens a rehearsal in its `DataPipeline.initialise` and ends by collecting its
 two outputs in a folder, whose path `DataPipeline.finalise` prints and
 returns. Run after the recorded run above, it finds the results table
-registered already with the same bytes, and says so. The block below does
+identical to the version registered, and says so. The block below does
 this under the same condition as the two above.
 
 ```@example seirs

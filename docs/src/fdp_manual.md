@@ -43,7 +43,7 @@ rehearsal rather than a code run: it reads what the registry holds, writes to
 the data store, holds no registry token, and registers nothing, saying
 instead what `link_register!` and `register_authors!` would have registered.
 Its `finalise` checks the outputs as a recorded run would, saying which are
-registered already, unchanged, moves them to the outputs folder as
+identical to a version registered before, moves them to the outputs folder as
 `<namespace>/<data product>/<version>.<extension>` with the working config
 beside them, prints the issues a recorded run would have raised, deletes the
 job folder `fair` prepared for it, and returns the folder. `discard` ends a
@@ -160,10 +160,13 @@ older = link_read!(handle, "temperature/older")
 newer = link_read!(handle, "temperature/newer")
 ```
 
-A `write:` entry may name a version that exists, to reproduce it: the file
-written must then be that version's - its bytes, with the same source,
-authors and licence - and nothing is registered for it. Any other file is an
-error at `finalise`, before anything is registered.
+Each run registers each of its outputs as a new version, so a `write:` entry
+must name a version that is not registered: one that is is an error, at the
+call that writes it. An output whose file is that of a version registered
+before - its bytes, with the same source, authors and licence - is registered
+all the same, its bytes stored once, and `finalise` says that it is identical
+to that version. Where every output of a run is identical, it says that the
+run need not be added and pushed.
 
 ## Data that comes from elsewhere
 
@@ -196,13 +199,14 @@ what it has of the title, description, licence, release date and version, and
 the identifiers of its authors; the keywords fill in what it lacks, and take
 the place of what it says. A citation given as BibTeX by
 [`register_citations!`](@ref) is named by `bibtex =` instead, and serves a run
-with no network. Run again, a fetch run registers nothing new for a file that
-has not changed.
+with no network. Run again, a fetch run registers nothing new for the deposit,
+and a file that has not changed as a new version identical to the one before,
+its bytes stored once.
 
 A fetch run can ask before it fetches. `DataPipeline.isregistered(handle, name)`
 says whether anything is registered under a name, and given the source keywords
-the link call would be given, but no file, whether registering the file would
-register nothing new - the same source, authors and licence. In a rehearsal in
+the link call would be given, but no file, whether it is registered with the
+same source, authors and licence. In a rehearsal in
 a block (see [Rehearsing a run](@ref)), a fetch run with nothing to fetch can
 then stop before a code run is registered:
 

@@ -397,17 +397,17 @@ end
 
 # What stands for an author the registry lacks in a rehearsal's source, where
 # a recorded run would have the URL of the author it created: never a URL, so
-# a registered file with that author is never found unchanged by it
+# a registered file with that author is never found identical to it
 _unregisteredauthor(name::AbstractString) = "unregistered author: " * name
 
 """
     finalise(handle::DataRegistryHandle{Rehearsal})
 
 End a rehearsal, registering nothing. The outputs are checked as a recorded
-run checks them: that each source is one file, that each written as a version
-registered already reproduces it, and whether each file is the one
-registered as the highest version of its data product, which is reported.
-They are then moved to the outputs folder as
+run checks them: that each source is one file, that none is written as a
+version registered already, and whether each is identical to a version
+registered before, which is reported, as is every one being so. They are then
+moved to the outputs folder as
 `<namespace>/<data product>/<version>.<extension>`, replacing what is there,
 with the working config and the script copied beside them. The issues raised
 are printed, the data store's empty directories pruned, the job folder deleted
@@ -425,11 +425,6 @@ function finalise(handle::DataRegistryHandle{Rehearsal})
                                           by = string)
         _placeoutput(handle, data_product, component)
     end
-    # What is registered already would be no output of a recorded run
-    for (key, metadata) in collect(handle.outputs)
-        metadata["unchanged"] || continue
-        handle.unchanged[key] = pop!(handle.outputs, key)
-    end
     _supersedeoutputs!(handle, previous)
     _copyjobfiles(handle)
     _printrehearsal(handle)
@@ -438,7 +433,7 @@ function finalise(handle::DataRegistryHandle{Rehearsal})
 end
 
 # Move one output's file from the data store to the outputs folder, named by
-# its data product and version, after comparing it with the highest version
+# its data product and version, after comparing it with the versions
 # registered; a data product's components share its file, so the first of
 # them moves it and the rest take its place
 function _placeoutput(handle::DataRegistryHandle{Rehearsal},
@@ -448,9 +443,9 @@ function _placeoutput(handle::DataRegistryHandle{Rehearsal},
     use_data_product = replace(wmd["use_dp"],
                                RUN_ID_PLACEHOLDER => handle.code_run_uuid)
     wmd["use_dp"] = use_data_product
-    placed = [value
+    placed = [(key, value)
               for (key, value) in handle.outputs
-              if key[1] == data_product && haskey(value, "unchanged")]
+              if key[1] == data_product && haskey(value, "component_url")]
     if isempty(placed)
         filepath = wmd["path"]
         isfile(filepath) ||
@@ -458,13 +453,13 @@ function _placeoutput(handle::DataRegistryHandle{Rehearsal},
         hash = get(wmd, "hash") do
             return _getfilehash(filepath)
         end
-        held = _heldfile(handle.registry, wmd["use_namespace"],
-                         use_data_product, String(wmd["use_version"]), hash,
-                         _outputsource(handle, data_product))
-        unchanged = !isnothing(held)
-        unchanged && println("data product unchanged: ", use_data_product,
-                " (", held.version,
-                "): a recorded run would not register it again")
+        identical = _identicalversion(handle.registry, wmd["use_namespace"],
+                                      use_data_product, hash,
+                                      _outputsource(handle, data_product))
+        isnothing(identical) ||
+            println("data product identical to v", identical, ": ",
+                    _dataproductname(wmd["use_namespace"], use_data_product,
+                                     wmd["use_version"]))
         destination = joinpath(handle.mode.outputs, wmd["use_namespace"],
                                use_data_product,
                                string(wmd["use_version"], ".",
@@ -473,11 +468,13 @@ function _placeoutput(handle::DataRegistryHandle{Rehearsal},
         mv(filepath, destination, force = true)
         _pruneempty(dirname(filepath), datastore)
     else
-        destination = placed[1]["path"]
-        unchanged = placed[1]["unchanged"]
+        key, value = placed[1]
+        destination = value["path"]
+        identical = get(handle.identical, key, nothing)
     end
     wmd["path"] = destination
-    wmd["unchanged"] = unchanged
+    isnothing(identical) ||
+        (handle.identical[(data_product, component)] = identical)
     wmd["component_url"] = nothing
     return nothing
 end
@@ -505,13 +502,13 @@ function _raiseoutsiderun(::Rehearsal, ::RegistryEndpoint, issue::PendingIssue,
     return nothing
 end
 
-# Print what the rehearsal did: its inputs, its outputs and where they are,
-# the issues a recorded run would have raised
+# Print what the rehearsal did: its inputs, its outputs, where they are and
+# which are identical to a version registered before, the issues a recorded run
+# would have raised
 function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
     println("rehearsal finished - nothing registered")
     for (label, table) in (("inputs", handle.inputs),
-        ("outputs", handle.outputs),
-        ("unchanged, registered already", handle.unchanged))
+        ("outputs", handle.outputs))
         isempty(table) && continue
         println("  ", label, ":")
         for key in sort(collect(keys(table)), by = string)
@@ -520,7 +517,9 @@ function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
                     metadata["use_dp"],
                     isnothing(key[2]) ? "" : " / " * key[2], " (",
                     metadata["use_version"], ") ",
-                    something(metadata["path"], "no file"))
+                    something(metadata["path"], "no file"),
+                    haskey(handle.identical, key) ?
+                    ", identical to v$(handle.identical[key])" : "")
         end
     end
     isempty(handle.issues) || println("  issues a recorded run would raise:")
@@ -530,6 +529,8 @@ function _printrehearsal(handle::DataRegistryHandle{Rehearsal})
                      ", "), ": ", issue.description)
     end
     println("  outputs folder: ", handle.mode.outputs)
+    _allidentical(handle) &&
+        @info "every output of this rehearsal is identical to a version registered before it, so a recorded run of it would need no `fair add` and `fair push`"
     return nothing
 end
 

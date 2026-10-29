@@ -345,9 +345,8 @@ Test.@testset "read_distribution!()" begin
     @test handle.inputs[(data_product, component2)]["use_dp"] == data_product
 end
 
-# A version that exists may be written again only as the file it is, so a
-# component added to one is refused - not at the write, whose file is not
-# finished, but at finalise, before anything is registered
+# A version that exists is never written again, so a component added to one
+# is refused at the write, before anything is registered
 Test.@testset "new components aren't added to existing data products" begin
     registry = handle.registry
     writers = ("write_array" =>
@@ -374,11 +373,12 @@ Test.@testset "new components aren't added to existing data products" begin
         DataPipeline._addwrite(config, data_product, "description",
                                use_version = version)
         handle = DataPipeline.initialise(config, config)
-        writing(handle, data_product)
-        @test length(handle.outputs) == 1
-        err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(handle)
+        err = @test_throws DataPipeline.ReadWriteException writing(handle,
+                                                                   data_product)
         @test startswith(err.value.msg,
                          "$namespace:$data_product@v$version is registered already")
+        @test isempty(handle.outputs)
+        DataPipeline.finalise(handle)
 
         # The version is as it was, and the code run has no outputs
         entries = DataPipeline._getentries(registry, "data_product",
@@ -479,27 +479,26 @@ Test.@testset "supersede = true" begin
     @test any(issue.severity == 0 && issue.description == superseding("0.0.2")
               for issue in found.issues)
 
-    # The same bytes again make no version: nothing to supersede, said at
-    # finalise, and at the call where a path is given
+    # The same bytes again are a version identical to the one before, which
+    # they do not supersede, said at finalise, a path given or not
     third = writing(name, "0.0.3")
     write(link_write!(third, name, supersede = true),
           "supersede second $uid\n")
-    @test_logs (:info, r"registered already, unchanged") match_mode=:any DataPipeline.finalise(third)
+    @test_logs (:info, r"@v0.0.3 is identical to v0.0.2") match_mode=:any DataPipeline.finalise(third)
     @test isempty(third.issues)
+    @test third.identical == Dict((name, nothing) => "0.0.2")
     same = joinpath(mktempdir(), "same.txt")
     write(same, "supersede second $uid\n")
-    by_path = writing(name, "0.0.3")
-    @test_logs (:info, r"registered already, unchanged") match_mode=:any link_write!(by_path,
-                                                                                     name,
-                                                                                     path = same,
-                                                                                     supersede = true)
-    DataPipeline._resetsession!()
+    by_path = writing(name, "0.0.4")
+    link_write!(by_path, name, path = same, supersede = true)
+    @test_logs (:info, r"@v0.0.4 is identical to v0.0.3") match_mode=:any DataPipeline.finalise(by_path)
+    @test isempty(by_path.issues)
     # A version above the highest supersedes it; one below does not
     above = writing(name, "0.1.0")
     write(link_write!(above, name, supersede = true), "supersede above $uid\n")
     DataPipeline.finalise(above)
     @test only(above.issues).targets ==
-          [DataPipeline.ExistingDataProduct("$namespace:$name@v0.0.2")]
+          [DataPipeline.ExistingDataProduct("$namespace:$name@v0.0.4")]
     below = writing(name, "0.0.5")
     write(link_write!(below, name, supersede = true), "supersede below $uid\n")
     @test_logs (:info, r"not above the highest version, 0.1.0") match_mode=:any DataPipeline.finalise(below)
@@ -509,6 +508,14 @@ Test.@testset "supersede = true" begin
     write(link_write!(plain, name), "supersede plain $uid\n")
     @test_logs DataPipeline.finalise(plain)
     @test isempty(plain.issues)
+    # Bytes of an older version, not the highest's, supersede the highest
+    older = writing(name, "0.3.0")
+    write(link_write!(older, name, supersede = true),
+          "supersede second $uid\n")
+    DataPipeline.finalise(older)
+    @test older.identical == Dict((name, nothing) => "0.0.4")
+    @test only(older.issues).targets ==
+          [DataPipeline.ExistingDataProduct("$namespace:$name@v0.2.0")]
 
     # A component writer supersedes the same way, once for the data product
     estimating = writing(estimates, "0.0.1")
@@ -590,10 +597,11 @@ Test.@testset "raise_issue!() on bytes other versions share" begin
     @test DataPipeline._getentry(registry, "issue",
                                  Dict("description" => "same bytes $uid"))["component_issues"] ==
           [whole(second_x)]
-    # Asked for, the issue reaches every version with those bytes
+    # Asked for, the issue reaches every version with those bytes, with no
+    # warning; the one output being identical is said
     second_y = writing("same bytes y $uid\n", "0.0.4")
     raise_issue!(second_y, name, "all versions $uid", all_versions = true)
-    @test_logs DataPipeline.finalise(second_y)
+    @test_logs (:info, r"every output of this code run is identical") DataPipeline.finalise(second_y)
     @test Set(DataPipeline._getentry(registry, "issue",
                                      Dict("description" => "all versions $uid"))["component_issues"]) ==
           Set([whole(second_y), whole(first_y)])
@@ -1845,25 +1853,19 @@ Test.@testset "link_write!() with a wildcard entry" begin
     @test occursin("data_product/two/$uid/*", err.msg) &&
           occursin("data_product/*/$uid/both", err.msg)
 
-    # Under the pattern alone, at the version its names now have, the same
-    # bytes are a reproduction of each, and other bytes are refused at
-    # finalise
-    function rewriting(text)
-        config = DataPipeline._createconfig(cpath)
-        DataPipeline._addwrite(config, pattern, "wildcard description",
-                               file_type = "txt", use_version = version,
-                               use_data_product = pattern)
-        handle = DataPipeline.initialise(config, config)
-        write(link_write!(handle, covered), text)
-        return handle
-    end
-    again = rewriting("covered $uid\n")
-    DataPipeline.finalise(again)
-    @test isempty(again.outputs) && haskey(again.unchanged, (covered, nothing))
-    changed = rewriting("covered again $uid\n")
-    err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(changed)
+    # Under the pattern alone, at the version its names now have, a name is
+    # refused at the call, whatever it would have been written with
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, pattern, "wildcard description",
+                           file_type = "txt", use_version = version,
+                           use_data_product = pattern)
+    again = DataPipeline.initialise(config, config)
+    err = @test_throws DataPipeline.ReadWriteException link_write!(again,
+                                                                   covered)
     @test startswith(err.value.msg,
                      "$namespace:$covered@v$version is registered already")
+    @test isempty(again.outputs)
+    DataPipeline.finalise(again)
 end
 
 Test.@testset "\${{RUN_ID}} in a wildcard-covered name" begin
@@ -2164,53 +2166,55 @@ Test.@testset "link_write!() with a path" begin
     @test code_run_of(handle)["outputs"] ==
           [handle.outputs[(name, nothing)]["component_url"]]
 
-    # The same bytes are not registered again, whether the config offers
-    # the next version or the one that exists: the registered file is
-    # returned and the run has no output
+    # The same bytes again are a new version, identical to the first and
+    # sharing its file: the copy put in the store is dropped at finalise
     again = joinpath(outside, "again.txt")
     cp(file, again)
-    for offered in ("0.0.2", "0.0.1")
+    handle = offering("0.0.2")
+    staged = link_write!(handle, name, path = again)
+    @test startswith(basename(staged), "dat-")
+    @test_logs (:info, r"every output of this code run is identical") match_mode=:any DataPipeline.finalise(handle)
+    @test handle.identical == Dict((name, nothing) => "0.0.1")
+    @test handle.outputs[(name, nothing)]["path"] == registered
+    @test !isfile(staged)
+    @test code_run_of(handle)["outputs"] ==
+          [handle.outputs[(name, nothing)]["component_url"]]
+    @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
+
+    # A version that exists is refused at the call, whatever the bytes
+    for (offered, path) in (("0.0.1", again), ("0.0.2", other))
         handle = offering(offered)
-        @test link_write!(handle, name, path = again) == registered
+        err = @test_throws DataPipeline.ReadWriteException link_write!(handle,
+                                                                       name,
+                                                                       path = path)
+        @test startswith(err.value.msg,
+                         "$namespace:$name@v$offered is registered already")
         @test isempty(handle.outputs)
         DataPipeline.finalise(handle)
-        @test isempty(code_run_of(handle)["outputs"])
     end
-    @test registered_versions(handle.registry, name) == ["0.0.1"]
+    @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
 
     # Other bytes are a new version, at the version the config offers
     changed = joinpath(outside, "changed.txt")
     write(changed, "fetched again $uid\n")
-    handle = offering("0.0.2")
+    handle = offering("0.0.3")
     link_write!(handle, name, path = changed)
     DataPipeline.finalise(handle)
-    @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
+    @test isempty(handle.identical)
+    @test registered_versions(handle.registry, name) ==
+          ["0.0.1", "0.0.2", "0.0.3"]
     @test read(registered, String) == "fetched $uid\n"
 
-    # A version that exists may be written as its own file, though it is not
-    # the highest - a reproduction, and the registered file is returned - and
-    # other bytes as it are refused at the call
-    handle = offering("0.0.1")
-    @test link_write!(handle, name, path = again) == registered
-    @test isempty(handle.outputs)
-    DataPipeline.finalise(handle)
-    handle = offering("0.0.2")
-    err = @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
-                                                                   path = other)
-    @test startswith(err.value.msg,
-                     "$namespace:$name@v0.0.2 is registered already")
-    @test isempty(handle.outputs)
-    @test registered_versions(handle.registry, name) == ["0.0.1", "0.0.2"]
-
-    # A new version is compared with the highest only, so the first
-    # version's bytes are now a third version. They are in the store already,
-    # so the link made for them is removed, which leaves the original alone
-    handle = offering("0.0.3")
+    # The first version's bytes again are identical to the highest version
+    # holding them, though not the highest. They are in the store already,
+    # so the copy made for them is removed, which leaves the original alone
+    handle = offering("0.0.4")
     link_write!(handle, name, path = file)
     @test length(handle.outputs) == 1
     DataPipeline.finalise(handle)
+    @test handle.identical == Dict((name, nothing) => "0.0.2")
     @test registered_versions(handle.registry, name) ==
-          ["0.0.1", "0.0.2", "0.0.3"]
+          ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
     @test handle.outputs[(name, nothing)]["path"] == registered
     @test read(file, String) == "fetched $uid\n"
     @test readdir(dirname(registered)) ==
@@ -2219,7 +2223,7 @@ Test.@testset "link_write!() with a path" begin
 
     # What cannot be registered: no file, a directory, a name no entry
     # covers, and a file that is not of the entry's file type
-    handle = offering("0.0.4")
+    handle = offering("0.0.5")
     wrong_type = joinpath(outside, "fetched.csv")
     write(wrong_type, "a,b\n")
     @test_throws DataPipeline.ReadWriteException link_write!(handle, name,
@@ -2356,9 +2360,9 @@ Test.@testset "a run with no description" begin
     end
 end
 
-Test.@testset "an output that is registered already" begin
-    name = "data_product/unchanged/$uid"
-    tabled = "data_product/unchanged/tabled/$uid"
+Test.@testset "an output identical to a version registered already" begin
+    name = "data_product/identical/$uid"
+    tabled = "data_product/identical/tabled/$uid"
     # A config that offers both names at a version, one as text, one as TOML
     function offering(use_version)
         config = DataPipeline._createconfig(cpath)
@@ -2381,83 +2385,74 @@ Test.@testset "an output that is registered already" begin
     DataPipeline.finalise(handle)
     registered = handle.outputs[(name, nothing)]["path"]
     component = handle.outputs[(name, nothing)]["component_url"]
-    @test isempty(handle.unchanged)
+    @test isempty(handle.identical)
 
-    # The same bytes written again are not registered again: the file that
-    # was written is removed, no version is made, and it is no output of the
-    # code run. An issue raised with it is one with what is registered
+    # The same bytes written again are a new version, identical to the first:
+    # the file written is removed, its bytes stored already, and the version
+    # is an output of the code run. An issue raised with it is on it alone,
+    # the first version being warned of
     handle = offering("0.0.2")
     written = link_write!(handle, name)
     write(written, "written $uid\n")
     raise_issue!(handle, name, "written twice $uid")
-    DataPipeline.finalise(handle)
+    @test_logs (:warn, r"@v0.0.1 has the same bytes") match_mode=:any DataPipeline.finalise(handle)
     @test !isfile(written)
     @test readdir(dirname(registered)) == [basename(registered)]
-    @test registered_versions(registry, name) == ["0.0.1"]
-    @test isempty(handle.outputs)
-    @test handle.unchanged[(name, nothing)]["path"] == registered
-    @test handle.unchanged[(name, nothing)]["component_url"] == component
-    @test isempty(code_run_of(handle)["outputs"])
-    @test raised(component) == ["written twice $uid"]
-    @test occursin("unchanged: 1", sprint(show, MIME("text/plain"), handle))
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test handle.identical == Dict((name, nothing) => "0.0.1")
+    @test handle.outputs[(name, nothing)]["path"] == registered
+    second = handle.outputs[(name, nothing)]["component_url"]
+    @test second != component
+    @test code_run_of(handle)["outputs"] == [second]
+    @test raised(second) == ["written twice $uid"]
+    @test isempty(raised(component))
+    shown = sprint(show, MIME("text/plain"), handle)
+    @test occursin("$name (identical to v0.0.1)", shown)
+    @test occursin("every output is identical", shown)
 
-    # Other bytes are the next version
-    handle = offering("0.0.2")
+    # Other bytes are identical to nothing
+    handle = offering("0.0.3")
     write(link_write!(handle, name), "written again $uid\n")
     DataPipeline.finalise(handle)
-    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
-    @test isempty(handle.unchanged) && length(handle.outputs) == 1
-    newer = handle.outputs[(name, nothing)]["component_url"]
+    @test registered_versions(registry, name) == ["0.0.1", "0.0.2", "0.0.3"]
+    @test isempty(handle.identical) && length(handle.outputs) == 1
+    @test !occursin("(identical to", sprint(show, MIME("text/plain"), handle))
 
-    # A file given by its path is found unchanged as the call is made, and an
-    # issue may be raised with it too
-    handle = offering("0.0.3")
+    # A file given by its path is found identical by finalise too
+    handle = offering("0.0.4")
     given = joinpath(mktempdir(), "given.txt")
     write(given, "written again $uid\n")
     stored = link_write!(handle, name, path = given)
-    @test isempty(handle.outputs)
-    @test handle.unchanged[(name, nothing)]["path"] == stored
-    raise_issue!(handle, name, "given again $uid")
+    @test startswith(basename(stored), "dat-")
     DataPipeline.finalise(handle)
-    @test raised(newer) == ["given again $uid"]
-    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test handle.identical == Dict((name, nothing) => "0.0.3")
+    @test !isfile(stored)
 
-    # A version that exists may be written as its own file, though it is not
-    # the highest: a reproduction, registered as nothing, an issue raised with
-    # it being one with that version
-    handle = offering("0.0.1")
-    write(link_write!(handle, name), "written $uid\n")
-    raise_issue!(handle, name, "reproduced $uid")
-    DataPipeline.finalise(handle)
-    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
-    @test isempty(handle.outputs)
-    @test handle.unchanged[(name, nothing)]["path"] == registered
-    @test isempty(code_run_of(handle)["outputs"])
-    @test sort(raised(component)) ==
-          sort(["written twice $uid", "reproduced $uid"])
-
-    # Other bytes as a version that exists are refused at finalise, naming
-    # it, before any output is registered - a new name included, which
-    # finalise would otherwise register first, in name order
-    first_written = "data_product/unchanged-first/$uid"
+    # A version registered after the call - here by changing the version the
+    # output is written as - is refused at finalise, naming it, before any
+    # output is registered: a new name included, which finalise would
+    # otherwise register first, in name order
+    first_written = "data_product/identical-first/$uid"
     @test string((first_written, nothing)) < string((name, nothing))
     config = DataPipeline._createconfig(cpath)
     for written in (first_written, name)
         DataPipeline._addwrite(config, written, "description",
-                               file_type = "txt", use_version = "0.0.1")
+                               file_type = "txt", use_version = "0.0.5")
     end
     handle = DataPipeline.initialise(config, config)
     write(link_write!(handle, first_written), "written first $uid\n")
     write(link_write!(handle, name), "not the first version $uid\n")
+    handle.outputs[(name, nothing)]["use_version"] = "0.0.1"
     err = @test_throws DataPipeline.ReadWriteException DataPipeline.finalise(handle)
     @test startswith(err.value.msg,
                      "$namespace:$name@v0.0.1 is registered already")
-    @test registered_versions(registry, name) == ["0.0.1", "0.0.2"]
+    @test registered_versions(registry, name) ==
+          ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
     @test isempty(registered_versions(registry, first_written))
     @test isempty(code_run_of(handle)["outputs"])
 
     # A data product written by its components is one file, and all of them
-    # are found unchanged with it
+    # are found identical with it
     estimates = ("a/b" => 1.5, "c/d" => 2.5)
     handle = offering("0.0.1")
     for (part, value) in estimates
@@ -2472,26 +2467,30 @@ Test.@testset "an output that is registered already" begin
         write_estimate!(handle, value, tabled, part, "an estimate")
     end
     DataPipeline.finalise(handle)
-    @test registered_versions(registry, tabled) == ["0.0.1"]
-    @test isempty(handle.outputs)
-    @test Dict(key => metadata["component_url"]
-               for (key, metadata) in handle.unchanged) == parts
-    @test isempty(code_run_of(handle)["outputs"])
-    # ... and with one of them changed it is the next version
-    handle = offering("0.0.2")
+    @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2"]
+    @test handle.identical == Dict(key => "0.0.1" for key in keys(parts))
+    @test length(code_run_of(handle)["outputs"]) == 2
+    @test all(handle.outputs[key]["component_url"] != url
+              for (key, url) in parts)
+    # ... and with one of them changed it is not; nor, with another output
+    # identical, is every output of the run
+    handle = offering("0.0.5")
     write_estimate!(handle, 1.5, tabled, "a/b", "an estimate")
     write_estimate!(handle, 3.5, tabled, "c/d", "an estimate")
+    write(link_write!(handle, name), "written again $uid\n")
     DataPipeline.finalise(handle)
-    @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2"]
-    @test length(code_run_of(handle)["outputs"]) == 2
+    @test registered_versions(registry, tabled) == ["0.0.1", "0.0.2", "0.0.5"]
+    @test handle.identical == Dict((name, nothing) => "0.0.4")
+    @test length(code_run_of(handle)["outputs"]) == 3
+    @test !occursin("every output", sprint(show, MIME("text/plain"), handle))
 
-    # Arrays are found unchanged too: an HDF5 file records no times, which
+    # Arrays are found identical too: an HDF5 file records no times, which
     # would make the same arrays other bytes a second later. Two components,
     # one in a group within a group, the second added to the file once made
-    arrayed = "data_product/unchanged/arrayed/$uid"
+    arrayed = "data_product/identical/arrayed/$uid"
     arrays = ("first/array" => [1.0 2.0; 3.0 4.0],
               "second/deeper/array" => collect(1:6))
-    for (offered, versions) in (("0.0.1", ["0.0.1"]), ("0.0.2", ["0.0.1"]))
+    for offered in ("0.0.1", "0.0.2")
         config = DataPipeline._createconfig(cpath)
         DataPipeline._addwrite(config, arrayed, "description",
                                file_type = "h5", use_version = offered)
@@ -2502,11 +2501,12 @@ Test.@testset "an output that is registered already" begin
             write_array!(handle, array, arrayed, part, "an array")
         end
         DataPipeline.finalise(handle)
-        @test registered_versions(registry, arrayed) == versions
     end
-    @test isempty(handle.outputs) && length(handle.unchanged) == 2
+    @test registered_versions(registry, arrayed) == ["0.0.1", "0.0.2"]
+    @test handle.identical ==
+          Dict((arrayed, part) => "0.0.1" for (part, _) in arrays)
     stored = only(unique(metadata["path"]
-                         for metadata in values(handle.unchanged)))
+                         for metadata in values(handle.outputs)))
     @test all(HDF5.h5open(stored) do file
                   return [read(file, part) == array for (part, array) in arrays]
               end)

@@ -594,135 +594,123 @@ Test.@testset "a source is one file" begin
           locations[2]["url"]
 end
 
-Test.@testset "the version of a file with a source" begin
+Test.@testset "a file with a source identical to a version" begin
     name = "sources/versions/$uid"
     file, changed = file_of("first $uid\n"), file_of("second $uid\n")
     function of(; keywords...)
         return (; bibtex = "deposit", primary = true,
                 title = "Versions $uid", keywords...)
     end
+    # Write `path` as `version` of `product`, with `authors` registered and
+    # what `said` of it, and return the version it is identical to, or
+    # `nothing`
+    function identical_to(path, version, product = name; authors = nothing,
+                          said...)
+        handle = offering(product => version)
+        isnothing(authors) || register_authors!(handle, authors)
+        link_write!(handle, product; path, said...)
+        DataPipeline.finalise(handle)
+        return get(handle.identical, (product, nothing), nothing)
+    end
+    # The path of the file a version holds
+    function registered_path(product, version)
+        return DataPipeline._getstoragelocation(registry,
+                                                registered(product,
+                                                           version)["object"]).path
+    end
 
-    handle = offering(name => "0.0.1")
-    link_write!(handle, name; path = file, of()...)
-    DataPipeline.finalise(handle)
-    stored = handle.outputs[(name, nothing)]["path"]
+    @test isnothing(identical_to(file, "0.0.1"; of()...))
+    stored = registered_path(name, "0.0.1")
     first_source = source_of(registered(name, "0.0.1"))["url"]
 
-    # The same bytes of the same source, with the same authors and licence,
-    # are not registered again, whatever version the config offers
-    for offered in ("0.0.2", "0.0.1")
-        handle = offering(name => offered)
-        @test link_write!(handle, name; path = file_of("first $uid\n"),
-                          of()...) == stored
-        @test isempty(handle.outputs)
-        DataPipeline.finalise(handle)
+    # A version that exists is refused at the call, whatever is written
+    handle = offering(name => "0.0.1")
+    msg = message_of(ReadWriteException) do
+        return link_write!(handle, name; path = file_of("first $uid\n"),
+                           of()...)
     end
-    @test registered_versions(name) == ["0.0.1"]
-    # ... nor with no source, a file with none being compared by its bytes
-    handle = offering(name => "0.0.2")
-    @test link_write!(handle, name, path = file) == stored
-    @test isempty(handle.outputs)
+    @test startswith(msg, "$namespace:$name@v0.0.1 is registered already")
+    DataPipeline.finalise(handle)
+
+    # The same bytes of the same source, with the same authors and licence,
+    # are a version identical to the first, of the same source and file
+    @test identical_to(file_of("first $uid\n"), "0.0.2"; of()...) == "0.0.1"
+    @test source_of(registered(name, "0.0.2"))["url"] == first_source
+    @test registered_path(name, "0.0.2") == stored
+    # ... as with no source, a file with none being compared by its bytes
+    @test identical_to(file, "0.0.3") == "0.0.2"
 
     # Other bytes of the same source are an error: a source is one file
+    handle = offering(name => "0.0.4")
     @test_throws ReadWriteException link_write!(handle, name; path = changed,
                                                 of()...)
     @test isempty(handle.outputs)
-    # ... and of another release of it, the next version
+    # ... and of another release of it, identical to nothing
     link_write!(handle, name; path = changed, of(release_version = "2.2")...)
     DataPipeline.finalise(handle)
-    @test registered_versions(name) == ["0.0.1", "0.0.2"]
-    second_source = source_of(registered(name, "0.0.2"))
+    @test isempty(handle.identical)
+    second_source = source_of(registered(name, "0.0.4"))
     @test second_source["url"] != first_source
     @test second_source["version"] == "2.2.0"
 
-    # The same bytes and source under another licence are the next version,
-    # of the same source
-    handle = offering(name => "0.0.3")
-    link_write!(handle, name; path = changed,
-                of(release_version = "2.2", licence = "CC0-1.0")...)
-    DataPipeline.finalise(handle)
-    @test registered_versions(name) == ["0.0.1", "0.0.2", "0.0.3"]
-    @test source_of(registered(name, "0.0.3"))["url"] == second_source["url"]
-    @test licences_of(object_of(registered(name, "0.0.3"))) ==
+    # The same bytes and source under another licence are identical to
+    # nothing, of the same source
+    licensed = of(release_version = "2.2", licence = "CC0-1.0")
+    @test isnothing(identical_to(changed, "0.0.5"; licensed...))
+    @test source_of(registered(name, "0.0.5"))["url"] == second_source["url"]
+    @test licences_of(object_of(registered(name, "0.0.5"))) ==
           [("CC0-1.0", spdx * "CC0-1.0")]
-    # ... but written as the version that holds them under no licence they
-    # are refused, since a version that exists may only be reproduced
-    handle = offering(name => "0.0.2")
-    msg = message_of(ReadWriteException) do
-        return link_write!(handle, name; path = changed,
-                           of(release_version = "2.2", licence = "CC0-1.0")...)
-    end
-    @test startswith(msg, "$namespace:$name@v0.0.2 is registered already")
-    @test isempty(handle.outputs)
     # ... and so are they with other authors, the organisation now having an
     # identifier
-    handle = offering(name => "0.0.4")
-    register_authors!(handle, organisation => ror)
-    link_write!(handle, name; path = changed,
-                of(release_version = "2.2", licence = "CC0-1.0")...)
-    DataPipeline.finalise(handle)
-    @test registered_versions(name) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
-    @test sort(object_of(registered(name, "0.0.4"))["authors"]) ==
+    @test isnothing(identical_to(changed, "0.0.6"; licensed...,
+                                 authors = organisation => ror))
+    @test sort(object_of(registered(name, "0.0.6"))["authors"]) ==
           sort([author(orcid), author(ror)])
-    # ... while what else is said of the source makes no version: the
+    # ... while what else is said of the source makes no difference: the
     # registry keeps what it was first told
-    handle = offering(name => "0.0.5")
-    register_authors!(handle, organisation => ror)
-    link_write!(handle, name; path = changed,
-                of(release_version = "2.2", licence = "CC0-1.0",
-                   primary = false,
-                   description = "said later",
-                   release_date = "2023")...)
-    @test isempty(handle.outputs)
-    # The same bytes of another release of the source are the next version
-    link_write!(handle, name; path = changed,
-                of(release_version = "2.3", licence = "CC0-1.0")...)
-    DataPipeline.finalise(handle)
-    @test last(registered_versions(name)) == "0.0.5"
-    @test source_of(registered(name, "0.0.5"))["version"] == "2.3.0"
+    @test identical_to(changed, "0.0.7"; licensed...,
+                       authors = organisation => ror, primary = false,
+                       description = "said later",
+                       release_date = "2023") == "0.0.6"
+    # The same bytes of another release of the source are identical to nothing
+    @test isnothing(identical_to(changed, "0.0.8";
+                                 of(release_version = "2.3",
+                                    licence = "CC0-1.0")...))
+    @test source_of(registered(name, "0.0.8"))["version"] == "2.3.0"
 
     # An author that a citation names twice is the file's author once, so
-    # that the file is found unchanged
+    # that the file is found identical
     twice = "sources/versions/twice/$uid"
-    handle = offering(twice => "0.0.1")
-    link_write!(handle, twice, path = file_of("twice $uid\n"),
-                bibtex = "twice", primary = true)
-    DataPipeline.finalise(handle)
+    @test isnothing(identical_to(file_of("twice $uid\n"), "0.0.1", twice;
+                                 bibtex = "twice", primary = true))
     @test object_of(registered(twice, "0.0.1"))["authors"] ==
           [author_named(organisation)]
-    handle = offering(twice => "0.0.2")
-    link_write!(handle, twice, path = file_of("twice $uid\n"),
-                bibtex = "twice", primary = true)
-    @test isempty(handle.outputs)
+    @test identical_to(file_of("twice $uid\n"), "0.0.2", twice;
+                       bibtex = "twice", primary = true) == "0.0.1"
 
-    # A source for bytes that were registered with none is the next version
+    # A source for bytes that were registered with none is identical to
+    # nothing
     bare = "sources/versions/bare/$uid"
-    handle = offering(bare => "0.0.1")
-    link_write!(handle, bare, path = file_of("bare $uid\n"))
-    DataPipeline.finalise(handle)
-    handle = offering(bare => "0.0.2")
-    link_write!(handle, bare; path = file_of("bare $uid\n"),
-                of(title = "Bare $uid")...)
-    DataPipeline.finalise(handle)
-    @test registered_versions(bare) == ["0.0.1", "0.0.2"]
+    @test isnothing(identical_to(file_of("bare $uid\n"), "0.0.1", bare))
+    @test isnothing(identical_to(file_of("bare $uid\n"), "0.0.2", bare;
+                                 of(title = "Bare $uid")...))
     @test isnothing(registered(bare, "0.0.1")["external_object"])
     @test source_of(registered(bare, "0.0.2"))["title"] == "Bare $uid"
 
-    # A file that is written after the call is found unchanged by `finalise`
+    # A file that is written after the call is found identical by `finalise`
     # in the same way: by its bytes and by what is said of its source
     later = "sources/versions/later/$uid"
-    for (offered, licence, versions) in (("0.0.1", nothing, ["0.0.1"]),
-        ("0.0.2", nothing, ["0.0.1"]),
-        ("0.0.2", "CC0-1.0", ["0.0.1", "0.0.2"]))
+    for (offered, licence, identical) in (("0.0.1", nothing, nothing),
+        ("0.0.2", nothing, "0.0.1"),
+        ("0.0.3", "CC0-1.0", nothing))
         handle = offering(later => offered)
         written = link_write!(handle, later;
                               of(title = "Later $uid", licence = licence)...)
         write(written, "later $uid\n")
         DataPipeline.finalise(handle)
-        @test registered_versions(later) == versions
-        @test isempty(handle.unchanged) == (offered == "0.0.1" ||
-               !isnothing(licence))
+        @test get(handle.identical, (later, nothing), nothing) == identical
     end
+    @test registered_versions(later) == ["0.0.1", "0.0.2", "0.0.3"]
 end
 
 Test.@testset "one source for a data product in a code run" begin

@@ -7,7 +7,7 @@ import TOML
 
 # Write `data` as the dataset at `path` in an HDF5 file, making the groups
 # that hold it, none of them recording times: what is written is then the
-# same bytes whenever it is written, as a file must be to be found unchanged.
+# same bytes whenever it is written, as a file must be to be found identical.
 # A new file's root group must be made with `obj_track_times = false` too.
 function _writeuntimed(file::HDF5.File, path::AbstractString, data::Array)
     parts = split(path, '/', keepempty = false)
