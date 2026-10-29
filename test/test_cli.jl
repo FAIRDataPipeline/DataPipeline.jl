@@ -301,26 +301,12 @@ Test.@testset "a fair interrupted ends with its job" begin
         @test timedwait(() -> !running(job), 30.0) === :ok
         @test fetch(call) isa ReadWriteException
 
-        # A Julia running a stand-in through fair"...", interrupted: as in the
-        # REPL, where an interrupt is an exception, rethrown as one, and as a
-        # script, which exits; the job ends either way, the stubborn one too,
-        # though from Julia 1.14 the cleanup after an interrupt is in a
-        # cancelled scope. What it prints goes to a file, since a pipe would be
-        # held open by the job it hands its output to, and waiting for the
-        # Julia would wait for the job
+        # A Julia running `code`, interrupted once the job it starts has
+        # written its id to `file`: what it printed, and the job's id. What it
+        # prints goes to a file, since a pipe would be held open by the job it
+        # hands its output to, and waiting for the Julia would wait for the job
         stacked = dirname(Base.active_project())
-        for (repl, name, cli) in ((true, "repl", standin),
-            (false, "script", standin), (true, "stubborn", stubborn))
-            file = joinpath(dir, "$name.pid")
-            code = """
-                   using DataPipeline
-                   Base.exit_on_sigint($(!repl))
-                   try
-                       DataPipeline._fair("run", $(repr(file)), cli = $(repr(cli)))
-                   catch err
-                       print(DataPipeline._interrupted(err))
-                   end
-                   """
+        function interrupting(code, file, name)
             output = joinpath(dir, "$name.out")
             interrupted = run(pipeline(addenv(`$(Base.julia_cmd()) --startup-file=no -e $code`,
                                               "JULIA_LOAD_PATH" => "@:$stacked:@stdlib"),
@@ -329,11 +315,55 @@ Test.@testset "a fair interrupted ends with its job" begin
             job = jobid(file)
             kill(interrupted, Base.SIGINT)
             wait(interrupted)
-            # Julia 1.11 exits on the signal though told not to, its exit
-            # ending the job too, so prints nothing: the gate goes with 1.11
-            repl && VERSION >= v"1.12" &&
-                @test read(output, String) == "true"
-            @test timedwait(() -> !running(job), 30.0) === :ok
+            return (printed = read(output, String), job)
+        end
+
+        # Interrupted in the REPL as `fair` starts, before it is recorded -
+        # here `started` pauses there - the interrupt is held until it is, so
+        # that the job ends. Removing the hold alone is not caught: beyond
+        # this it covers the gap inside `run`, which no pause reaches
+        write(joinpath(dir, "prompt.sh"),
+              "printf %s \$\$ > \"\$2\"\nsleep 120\n")
+        file = joinpath(dir, "starting.pid")
+        starting = `sh $(joinpath(dir, "prompt.sh")) run $file`
+        code = """
+               using DataPipeline
+               Base.exit_on_sigint(false)
+               try
+                   DataPipeline._runfair($(repr(starting)),
+                                         started = () -> Libc.systemsleep(5))
+               catch err
+                   print(DataPipeline._interrupted(err))
+               end
+               """
+        found = interrupting(code, file, "starting")
+        @test found.printed == "true"
+        @test timedwait(() -> !running(found.job), 30.0) === :ok
+
+        # A Julia running a stand-in through fair"...", interrupted while it
+        # waits: as in the REPL, where an interrupt is an exception, rethrown
+        # as one, and as a script, which exits; the job ends either way, the
+        # stubborn one too, though from Julia 1.14 the cleanup after an
+        # interrupt is in a cancelled scope
+        if VERSION < v"1.12"
+            @info "Julia 1.11 delivers no interrupt to a task waiting for a process: an interrupted fair\"...\" is not tried there"
+        else
+            for (repl, name, cli) in ((true, "repl", standin),
+                (false, "script", standin), (true, "stubborn", stubborn))
+                file = joinpath(dir, "$name.pid")
+                code = """
+                       using DataPipeline
+                       Base.exit_on_sigint($(!repl))
+                       try
+                           DataPipeline._fair("run", $(repr(file)), cli = $(repr(cli)))
+                       catch err
+                           print(DataPipeline._interrupted(err))
+                       end
+                       """
+                found = interrupting(code, file, name)
+                repl && @test found.printed == "true"
+                @test timedwait(() -> !running(found.job), 30.0) === :ok
+            end
         end
     end
 end

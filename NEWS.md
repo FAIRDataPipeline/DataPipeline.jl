@@ -12,6 +12,7 @@
     package handles failures itself, as when it asks whether a registry answers.
     On Julia 1.14 too, an interrupted `fair"..."` makes a job that ignores the
     request to end stop after a few seconds.
+  - An interrupt as `fair"..."` starts ends its job, which it could leave running.
 - v0.58.2
   - `finalise` and `link_register!` no longer fail where the data store holds a
     file under the output's hash that the registry has no record of, as after a
