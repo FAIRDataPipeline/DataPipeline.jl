@@ -1,5 +1,10 @@
 # NEWS
 
+- v0.59.1
+  - `DataPipeline.check_paper`, `update_paper` and `setup_paper` identify the
+    paper's files in the local registry and the remote together: the newest
+    version and every issue either holds, what one holds alone said so, and a
+    version the remote lacks given the `fair add` and `fair push` that send it.
 - v0.59.0
   - Breaking changes:
     - Every output of a run is registered as a new version, its bytes stored

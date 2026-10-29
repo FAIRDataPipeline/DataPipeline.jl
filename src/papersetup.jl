@@ -114,9 +114,10 @@ project file naming a package - the top level of `CITATION.cff` describes the
 package, so the paper's citation is drafted as its `preferred-citation`, and
 added to an existing file that has none. With `project = false` no Julia file
 is created, and the script installs the newest DataPipeline into a temporary
-environment each time it runs. `remote` names the remote registry the files
-are identified in, and `registry` is the local registry; both are as for
-[`check_paper`](@ref). The paper is built with `latexmk`, in a folder of its
+environment each time it runs. The files are identified as
+[`update_paper`](@ref) identifies them, in the local registry and the remote
+together; `remote` names the remote, and `registry` is the local registry,
+both as for [`check_paper`](@ref). The paper is built with `latexmk`, in a folder of its
 own, to find the files it uses.
 """
 function setup_paper(paper::LaTeXPaper; project::Bool = true,
@@ -147,11 +148,13 @@ Check the LaTeX paper `paper`, a [`LaTeXPaper`](@ref) or the path of its
 What building it lacks comes first: `fair`, the repository initialised by
 `fair init`, the remote's configuration and its token, and a local registry
 that answers. Then the files a build uses, found by building the paper with
-`latexmk` in a folder of its own, and of each file from the pipeline folder:
-whether it is registered in the remote, and as which version of what; whether
-a newer version exists; the issues raised on it and on what lies behind it,
-and the inputs behind it superseded since; and whether the local registry
-holds it. Then whether the paper's title and authors, in order, are those of
+`latexmk` in a folder of its own, and of each file from the pipeline folder
+what the local registry and the remote know of it together: which version of
+what it is; whether a newer version exists; the issues raised on it and on
+what lies behind it, and the inputs behind it superseded since, each that one
+registry holds alone said to be; and a version one lacks, with how to bring it
+there - `fair pull`, or for the remote the `fair add` and `fair push` of the run
+that made it. Then whether the paper's title and authors, in order, are those of
 its metadata, and what [`update_paper`](@ref) would do where they are not;
 which file the metadata comes from; whether it gives a licence and the
 authors' ORCIDs; how the authors differ from those of the PDF's version
@@ -168,7 +171,9 @@ why.
 `remote` names a remote registry in the CLI configuration of the paper's
 project, `"origin"` being the one `fair init` writes, or is its
 [`RegistryEndpoint`](@ref); with `nothing`, the files are checked in the
-local registry alone. `registry` is the local registry's endpoint, as
+local registry alone. Where one registry answers a lookup of a file with an
+error, the other's knowledge of the file is taken; a check that needs both is
+said not to have been made. `registry` is the local registry's endpoint, as
 [`registry_session`](@ref) gives it; without it, a session holds the local
 registry for the call.
 """
@@ -216,14 +221,15 @@ with no ORCID, for an author added, and one is dropped for an author
 removed. Authors both removed and added may be a renaming, so they are left
 to be changed by hand.
 
-Each file from the pipeline is identified in the remote by its bytes, and the
-config pins the version it is. With `newest = true` the config pins the
-newest version of each instead, `fair pull` is run with it, and each newer
-file is copied from the local data store over the old one under the same
-name, so that the repository holds what the config offers. Refused, with the
-config left as it was: a file that is not registered, bytes registered as
-several data products, and with `newest` a newer version of another file
-type.
+Each file from the pipeline is identified by its bytes in the local registry
+and the remote together, and the config pins the version it is. With `newest
+= true` the config pins the newest version of each instead, `fair pull` is run
+with it, and each newer file is copied from the local data store over the old
+one under the same name, so that the repository holds what the config offers.
+Refused, with the config left as it was: a file that is not registered, bytes
+registered as several data products, with `newest` a newer version of another
+file type, and a version the config would pin that the remote does not hold,
+with how to push it, unless `remote` is `nothing`.
 
 The paper must have been set up by [`setup_paper`](@ref): the template and
 `CITATION.cff` are never created here. `remote` and `registry` are as for
@@ -547,23 +553,22 @@ function _paperuses(paper::LaTeXPaper, top::AbstractString)
 end
 
 # The files a paper uses from its pipeline folder, `files`, identified as
-# `_pipelineentries` does: in the remote `remote` names, read from the CLI
-# configuration of the project at or above `top`, or with `nothing` in the
-# local registry, which `withlocal(f)` gives `f`; the registry must answer
+# `_pipelineentries` does, in the local registry, which `withlocal(f)` gives
+# `f`, and, unless `remote` is `nothing`, in the remote it names, read from the
+# CLI configuration of the project at or above `top`; each registry must answer
 function _identifypipeline(top::AbstractString, files::AbstractVector{String},
                            withlocal::Function, remote::PaperRemote;
                            newest::Bool = false)
     endpoint = _paperremote(remote, top)
-    if isnothing(endpoint)
-        return withlocal() do registry
-            _answers(registry) ||
-                throw(ReadWriteException("the local registry at $(registry.url) does not answer - start it with `fair\"registry start\"`"))
-            return _pipelineentries(registry, top, files; newest)
-        end
-    end
-    _answers(endpoint) ||
+    isnothing(endpoint) || _answers(endpoint) ||
         throw(ReadWriteException("the remote registry at $(endpoint.url) does not answer"))
-    return _pipelineentries(endpoint, top, files; newest)
+    return withlocal() do registry
+        _answers(registry) ||
+            throw(ReadWriteException("the local registry at $(registry.url) does not answer - start it with `fair\"registry start\"`"))
+        registries = [:local => registry]
+        isnothing(endpoint) || push!(registries, :remote => endpoint)
+        return _pipelineentries(registries, top, files; newest)
+    end
 end
 
 # The registry a paper's files are identified in: the remote that `remote`
@@ -592,50 +597,62 @@ function _answers(registry::RegistryEndpoint)
 end
 
 # Each file a paper uses from its pipeline folder, `files`, as paths from the
-# top level `top`, identified in `registry` by its bytes, as `(entries,
+# top level `top`, identified by its bytes in `registries`, each the local
+# registry, `:local`, or the remote, `:remote`, taken together, as `(entries,
 # unregistered, problems)`. `entries` holds one entry for each data product
 # the files are, sorted by namespace and name, as `(namespace, name, version,
 # files, current)`: the version the highest with the files' bytes, or with
 # `newest` the data product's newest, `current` saying whether the files have
 # its bytes. `unregistered` holds the files no data product has the bytes of,
 # and `problems` what is wrong with others: bytes of several data products,
-# two versions of one, and with `newest` a newest version of another file type
-function _pipelineentries(registry::RegistryEndpoint, top::AbstractString,
-                          files::AbstractVector{String}; newest::Bool = false)
+# two versions of one, with `newest` a newest version of another file type,
+# and a version the remote does not hold, with how to push it. `holds` says
+# whether a registry holds a version; the tests replace it
+function _pipelineentries(registries::AbstractVector{<:Pair{Symbol,
+                                                            RegistryEndpoint}},
+                          top::AbstractString, files::AbstractVector{String};
+                          newest::Bool = false,
+                          holds::Function = _holdsversion)
     unregistered = String[]
     problems = String[]
     byproduct = Dict{Tuple{String, String},
-                     Vector{Pair{String, DataProductRecord}}}()
+                     Vector{Pair{String, NamedTuple}}}()
     for file in files
-        records = _productrecords(registry, joinpath(top, file))
-        if isempty(records)
+        held = _heldrecords(registries, joinpath(top, file))
+        if isempty(held)
             push!(unregistered, file)
             continue
         end
+        records = last.(held)
         names = unique((record.namespace, record.name) for record in records)
         if length(names) > 1
             push!(problems,
                   "$file has the bytes of several data products, $(join((_dataproductname(n...) for n in names), ", ")), so which it is cannot be told")
             continue
         end
-        record = argmax(record -> record.version, records)
-        push!(get!(byproduct, only(names),
-                   Pair{String, DataProductRecord}[]), file => record)
+        latest = argmax(pair -> last(pair).newest, held)
+        push!(get!(byproduct, only(names), Pair{String, NamedTuple}[]),
+              file =>
+                  (version = maximum(record.version for record in records),
+                   newest = last(latest).newest,
+                   newestfrom = _registryof(registries, first(latest))))
     end
+    remote = _registryof(registries, :remote)
     entries = @NamedTuple{namespace::String, name::String,
                           version::VersionNumber, files::Vector{String},
                           current::Bool}[]
     for ((namespace, name), found) in sort!(collect(byproduct), by = first)
-        versions = unique(record.version for record in last.(found))
+        versions = unique(held.version for held in last.(found))
         if length(versions) > 1
             push!(problems,
                   "$(join(first.(found), " and ")) are versions $(join(versions, ", ")) of $(_dataproductname(namespace, name)), where a paper uses one version of a data product")
             continue
         end
-        record = last(first(found))
-        version = newest ? record.newest : record.version
-        if version != record.version
-            extension = _productextension(registry, namespace, name, version)
+        latest = argmax(held -> held.newest, last.(found))
+        version = newest ? latest.newest : only(versions)
+        if version != only(versions)
+            extension = _productextension(latest.newestfrom, namespace, name,
+                                          version)
             others = [file
                       for file in first.(found)
                       if lowercase(splitext(file)[2]) !=
@@ -646,12 +663,24 @@ function _pipelineentries(registry::RegistryEndpoint, top::AbstractString,
                 continue
             end
         end
+        if !isnothing(remote) && !holds(remote, namespace, name, version)
+            push!(problems,
+                  "the remote registry at $(remote.url) does not hold $(_dataproductname(namespace, name, version)), for $(join(first.(found), " and ")) - push it with $(_pushadvice(_registryof(registries, :local), namespace, name, version)), or pass `remote = nothing` to take the local registry alone")
+            continue
+        end
         push!(entries,
               (namespace = namespace, name = name, version = version,
-               files = first.(found), current = version == record.version))
+               files = first.(found), current = version == only(versions)))
     end
     return (entries = entries, unregistered = unregistered,
             problems = problems)
+end
+
+# Whether a registry holds a version of a data product
+function _holdsversion(registry::RegistryEndpoint, namespace::AbstractString,
+                       name::AbstractString, version::VersionNumber)
+    return !isnothing(_versioneddataproduct(registry, namespace, name,
+                                            string(version)))
 end
 
 # The data products a registry has registered with the bytes of the file at
@@ -660,6 +689,59 @@ function _productrecords(registry::RegistryEndpoint, path::AbstractString)
     return [record
             for object in _registeredobjects(registry, _getfilehash(path))
             for record in object.data_products]
+end
+
+# ... and those each of `registries` has, each with the part it plays
+function _heldrecords(registries::AbstractVector{<:Pair{Symbol,
+                                                        RegistryEndpoint}},
+                      path::AbstractString)
+    return [part => record
+            for (part, registry) in registries
+            for record in _productrecords(registry, path)]
+end
+
+# The registry of `registries` playing the part `part`, `:local` or `:remote`,
+# or `nothing` where none does
+function _registryof(registries::AbstractVector{<:Pair{Symbol,
+                                                       RegistryEndpoint}},
+                     part::Symbol)
+    found = findfirst(pair -> first(pair) == part, registries)
+    return isnothing(found) ? nothing : last(registries[found])
+end
+
+# How to push a version of a data product to the remote: the run that made it,
+# as the local registry `registry` has it, added and pushed from its
+# repository's project; else the data product itself, which no run made
+function _pushadvice(registry::Union{Nothing, RegistryEndpoint},
+                     namespace::AbstractString, name::AbstractString,
+                     version::VersionNumber)
+    label = _dataproductname(namespace, name, version)
+    run = isnothing(registry) ? nothing :
+          _makingrun(registry, namespace, name, version)
+    isnothing(run) && return "`fair add $label`, then `fair push`"
+    return "`fair add $(run.uuid)`, then `fair push`, in the project of $(run.repository), whose run made it"
+end
+
+# The run that made a version of a data product, as `(uuid, repository)`, the
+# repository's URL as the registry holds it; `nothing` where no run did, as
+# for one `fair pull` or `link_register!` registered
+function _makingrun(registry::RegistryEndpoint, namespace::AbstractString,
+                    name::AbstractString, version::VersionNumber)
+    product = _versioneddataproduct(registry, namespace, name,
+                                    string(version))
+    isnothing(product) && return nothing
+    runs = unique(url
+                  for component in _getentries(registry, "object_component",
+                                               Dict("object" =>
+                                                        _extractid(product["object"])))
+                  for url in component["outputs_of"])
+    isempty(runs) && return nothing
+    run = _getentry(registry, URIs.URI(first(runs)))
+    object = _getentry(registry, URIs.URI(run["code_repo"]))
+    location = _getentry(registry, URIs.URI(object["storage_location"]))
+    root = _getentry(registry, URIs.URI(location["storage_root"]))["root"]
+    return (uuid = String(run["uuid"]),
+            repository = string(rstrip(root, '/'), "/", location["path"]))
 end
 
 # The extension of the file a version of a data product is: its object's file
@@ -776,15 +858,25 @@ function _checkpaper(paper::LaTeXPaper,
         registry = nothing
     end
     localwhy = "the local registry cannot be reached"
-    identifying, why = registry, localwhy
+    registries = Pair{Symbol, RegistryEndpoint}[]
+    isnothing(registry) || push!(registries, :local => registry)
+    remotewhy = nothing
     if !isnothing(remote)
-        identifying = _checkremote!(setup, top, remote, initialised)
-        why = "the remote registry is not configured"
-        if !isnothing(identifying) && !_answers(identifying)
-            why = "the remote registry at $(identifying.url) does not answer"
-            identifying = nothing
+        endpoint = _checkremote!(setup, top, remote, initialised)
+        remotewhy = "the remote registry is not configured"
+        if !isnothing(endpoint) && !_answers(endpoint)
+            remotewhy = "the remote registry at $(endpoint.url) does not answer"
+            endpoint = nothing
+        end
+        if !isnothing(endpoint)
+            push!(registries, :remote => endpoint)
+            remotewhy = nothing
         end
     end
+    why = join(filter(!isnothing,
+                      [isnothing(registry) ? localwhy : nothing, remotewhy]),
+               ", and ")
+    asked = last.(registries)
 
     # What the paper says of itself and what its metadata says
     front = try
@@ -837,51 +929,47 @@ function _checkpaper(paper::LaTeXPaper,
     _checkuncommitted!(actions, paper, top, meta, uses)
     _checkpdfbeside!(notes, paper, top)
 
-    # What the registries know of them
+    # What the registries know of them, taken together
     if !isnothing(uses)
-        if isnothing(identifying)
+        if isempty(registries)
             push!(unchecked,
                   "the files from the pipeline - what each is registered as, newer versions, issues and what lies behind them - the config's read: block, and which files in and out of the pipeline folder are registered: $why")
         else
-            holding = isnothing(remote) ? nothing : registry
-            unregistered = String[]
-            for file in uses.pipeline
-                _ifanswered(unchecked,
-                            "what $file is registered as, newer versions, its issues and what lies behind it" *
-                            (isnothing(holding) ? "" :
-                             ", and whether the local registry holds it"),
-                            identifying, holding) do
-                    return _checkpipelinefile!(actions, notes, unregistered,
-                                               identifying, holding, paper,
-                                               top, file)
-                end
-            end
-            isempty(unregistered) ||
-                push!(actions, _unregisteredsaid(unregistered))
+            isnothing(registry) || isnothing(remote) ||
+                isnothing(remotewhy) ||
+                push!(unchecked,
+                      "whether the remote holds the files from the pipeline: $remotewhy")
             if !isnothing(remote) && isnothing(registry)
                 push!(unchecked,
                       "whether the local registry holds the files from the pipeline: $localwhy")
             end
-            _ifanswered(unchecked, "the config's read: block", identifying) do
-                return _checkconfig!(actions, identifying, paper, top,
+            unregistered = String[]
+            for file in uses.pipeline
+                _checkpipelinefile!(actions, notes, unchecked, unregistered,
+                                    registries, paper, top, file)
+            end
+            isempty(unregistered) ||
+                push!(actions, _unregisteredsaid(unregistered))
+            _ifanswered(unchecked, "the config's read: block", asked...) do
+                return _checkconfig!(actions, registries, paper, top,
                                      uses.pipeline)
             end
             _ifanswered(unchecked,
                         "which files in and out of the pipeline folder are registered",
-                        identifying) do
-                return _checkplacement!(actions, identifying, paper, top, uses)
+                        asked...) do
+                return _checkplacement!(actions, registries, paper, top, uses)
             end
         end
     end
     if !isnothing(meta) && !isempty(meta.authors)
-        if isnothing(identifying)
+        if isempty(registries)
             push!(unchecked,
                   "how the authors differ from those of the PDF's version registered last: $why")
         else
             _ifanswered(unchecked,
                         "how the authors differ from those of the PDF's version registered last",
-                        identifying) do
-                return _checkpreviousauthors!(notes, identifying, paper, meta)
+                        asked...) do
+                return _checkpreviousauthors!(notes, registries, paper, meta)
             end
         end
     end
@@ -1075,75 +1163,156 @@ function _checkuncommitted!(actions::Vector{String}, paper::LaTeXPaper,
     return nothing
 end
 
-# Add to `actions` and `notes` what `identifying` knows of a file the paper
-# uses from the pipeline, `file` from the top level `top`: what it is
+# Add to `actions` and `notes` what `registries` know together of a file the
+# paper uses from the pipeline, `file` from the top level `top`: what it is
 # registered as, whether a newer version exists, the issues on it and behind
-# it, and the inputs behind it superseded since; and where `holding`, the
-# local registry, is given, whether that holds it. A file registered as no data
-# product is added to `unregistered`, to be said with the others
+# it, and the inputs behind it superseded since, each held by one registry
+# alone said so; and a version one registry lacks, with how to bring it there.
+# A registry that answers with an error is added to `unchecked`, and the
+# others taken; a file registered as no data product is added to
+# `unregistered`, to be said with the others. `identify` identifies a file in
+# a registry; the tests replace it
 function _checkpipelinefile!(actions::Vector{String}, notes::Vector{String},
+                             unchecked::Vector{String},
                              unregistered::Vector{String},
-                             identifying::RegistryEndpoint,
-                             holding::Union{Nothing, RegistryEndpoint},
+                             registries::AbstractVector{<:Pair{Symbol,
+                                                               RegistryEndpoint}},
                              paper::LaTeXPaper, top::AbstractString,
-                             file::AbstractString)
-    found = _identifyfile(identifying, joinpath(top, file), superseded = true)
-    records = [record
-               for object in found.objects for record in object.data_products]
-    if isempty(records)
+                             file::AbstractString;
+                             identify::Function = _identifyfile)
+    found = Pair{Symbol, FileIdentification}[]
+    for (part, registry) in registries
+        _ifanswered(unchecked,
+                    "what $(_registrysaid(part, registry)) knows of $file",
+                    registry) do
+            return push!(found,
+                         part => identify(registry, joinpath(top, file),
+                                  superseded = true))
+        end
+    end
+    isempty(found) && return nothing
+    asked = first.(found)
+    combined = _combinedidentification(found, file)
+    if isempty(combined.versions)
         push!(unregistered, file)
         return nothing
     end
-    names = unique((record.namespace, record.name) for record in records)
+    names = unique((namespace, name)
+                   for (namespace, name, _) in keys(combined.versions))
     if length(names) > 1
         push!(actions,
-              "$file has the bytes of several data products, $(join((_dataproductname(n...) for n in names), ", ")), so which it is cannot be told")
+              "$file has the bytes of several data products, $(join((_dataproductname(n...) for n in sort(names)), ", ")), so which it is cannot be told")
         return nothing
     end
-    record = argmax(record -> record.version, records)
-    label = _dataproductname(record.namespace, record.name, record.version)
-    if record.version < record.newest
-        extension = _productextension(identifying, record.namespace,
-                                      record.name, record.newest)
+    namespace, name = only(names)
+    version = maximum(version for (_, _, version) in keys(combined.versions))
+    label = _dataproductname(namespace, name, version)
+    newest, newestheld = combined.newest[(namespace, name)]
+    if version < newest
+        extension = _productextension(_registryof(registries,
+                                                  first(newestheld)),
+                                      namespace, name, newest)
         same = lowercase(splitext(file)[2]) == "." * lowercase(extension)
         push!(actions,
-              "$file is $label, and v$(record.newest) is newer - " *
+              "$file is $label, and v$newest is newer$(_heldalone(newestheld, asked)) - " *
               (same ? "`update_paper(newest = true)` brings it in" :
                "it is a $extension file, so replace this one by hand"))
     else
         push!(notes, "$file is $label, its newest version")
     end
-    for object in found.objects, issue in object.issues
-        push!(notes, "$file: $(sprint(show, issue))")
+    for (text, held) in combined.said
+        push!(notes, text * _heldalone(held, asked))
     end
-    for upstream in found.upstream
-        push!(notes,
-              "behind $file: $(sprint(show, upstream)), $(_throughline(upstream.through, upstream.making, upstream.input))")
-    end
-    for outdated in something(found.outdated, OutdatedInput[])
-        push!(notes,
-              "behind $file: $(sprint(show, outdated)), $(_throughline(outdated.through, outdated.making, true))")
-    end
-    if !isnothing(holding)
-        held = any(_productrecords(holding, joinpath(top, file))) do other
-            return (other.namespace, other.name, other.version) ==
-                   (record.namespace, record.name, record.version)
-        end
-        held ||
-            push!(actions,
-                  "the local registry does not hold $file, $label - `fair pull $(_gitpath(paper.config, top))` pulls it")
+    held = combined.versions[(namespace, name, version)]
+    for part in asked
+        part in held && continue
+        push!(actions,
+              part == :local ?
+              "the local registry does not hold $file, $label - `fair pull $(_gitpath(paper.config, top))` pulls it" :
+              "the remote registry at $(_registryof(registries, :remote).url) does not hold $file, $label - push it with $(_pushadvice(_registryof(registries, :local), namespace, name, version))")
     end
     return nothing
 end
 
+# What registries identified a file as together, `found` each with the part it
+# plays, the file being `file` from the top level, as `(versions, newest,
+# said)`: each version of each data product with its bytes, with the parts of
+# the registries holding it; for each data product, the newest version any
+# knows, with the parts of those holding it; and what is said of the issues on
+# the file and behind it and the inputs behind it superseded since, each once,
+# with the parts of the registries holding it, matched by what is said since
+# each registry has URLs of its own. Each identification is a
+# `FileIdentification`, not named here since it is defined in a later file
+function _combinedidentification(found::AbstractVector{<:Pair{Symbol}},
+                                 file::AbstractString)
+    versions = Dict{Tuple{String, String, VersionNumber}, Vector{Symbol}}()
+    newest = Dict{Tuple{String, String}, Tuple{VersionNumber, Vector{Symbol}}}()
+    said = Pair{String, Vector{Symbol}}[]
+    function say!(text, part)
+        at = findfirst(pair -> first(pair) == text, said)
+        if isnothing(at)
+            push!(said, text => [part])
+        elseif !(part in last(said[at]))
+            push!(last(said[at]), part)
+        end
+        return nothing
+    end
+    for (part, identification) in found
+        for object in identification.objects
+            for record in object.data_products
+                held = get!(versions,
+                            (record.namespace, record.name, record.version),
+                            Symbol[])
+                part in held || push!(held, part)
+                key = (record.namespace, record.name)
+                known = get(newest, key, nothing)
+                if isnothing(known) || record.newest > first(known)
+                    newest[key] = (record.newest, [part])
+                elseif record.newest == first(known) &&
+                       !(part in last(known))
+                    push!(last(known), part)
+                end
+            end
+            for issue in object.issues
+                say!("$file: $(sprint(show, issue))", part)
+            end
+        end
+        for upstream in identification.upstream
+            say!("behind $file: $(sprint(show, upstream)), $(_throughline(upstream.through, upstream.making, upstream.input))",
+                 part)
+        end
+        for outdated in something(identification.outdated, OutdatedInput[])
+            say!("behind $file: $(sprint(show, outdated)), $(_throughline(outdated.through, outdated.making, true))",
+                 part)
+        end
+    end
+    return (versions = versions, newest = newest, said = said)
+end
+
+# What is said of something only some of the registries asked hold: which
+# holds it alone, or nothing where every one does
+function _heldalone(held::AbstractVector{Symbol}, asked::AbstractVector{Symbol})
+    all(part -> part in held, asked) && return ""
+    return only(held) == :local ? " (in the local registry alone)" :
+           " (in the remote alone)"
+end
+
+# A registry as a report names it, by the part it plays
+function _registrysaid(part::Symbol, registry::RegistryEndpoint)
+    return part == :local ? "the local registry" :
+           "the remote registry at $(registry.url)"
+end
+
 # Add to `actions` where the paper's config is not what `update_paper` would
 # write from its template and the files it uses from the pipeline, `files`,
-# as `identifying` identifies them, where that can be told
-function _checkconfig!(actions::Vector{String}, identifying::RegistryEndpoint,
+# as `registries` identify them together, where that can be told
+function _checkconfig!(actions::Vector{String},
+                       registries::AbstractVector{<:Pair{Symbol,
+                                                         RegistryEndpoint}},
                        paper::LaTeXPaper, top::AbstractString,
                        files::AbstractVector{String})
     (isfile(paper.config) && isfile(paper.template)) || return nothing
-    found = _pipelineentries(identifying, top, files)
+    found = _pipelineentries(registries, top, files)
     isempty(found.unregistered) && isempty(found.problems) || return nothing
     expected = try
         _paperconfigtext(paper, _templatetext(paper), found.entries)
@@ -1159,15 +1328,17 @@ function _checkconfig!(actions::Vector{String}, identifying::RegistryEndpoint,
 end
 
 # Add to `actions` the files that are likely in the wrong place: those the
-# paper uses from elsewhere in the repository that `identifying` has
+# paper uses from elsewhere in the repository that any of `registries` has
 # registered, which the build would take as the paper's own, and those in the
-# pipeline folder that it has not, which the paper does not use
+# pipeline folder that none has, which the paper does not use
 function _checkplacement!(actions::Vector{String},
-                          identifying::RegistryEndpoint, paper::LaTeXPaper,
-                          top::AbstractString, uses::NamedTuple)
+                          registries::AbstractVector{<:Pair{Symbol,
+                                                            RegistryEndpoint}},
+                          paper::LaTeXPaper, top::AbstractString,
+                          uses::NamedTuple)
     folder = _gitpath(paper.pipeline, top)
     for file in uses.own
-        records = _productrecords(identifying, joinpath(top, file))
+        records = last.(_heldrecords(registries, joinpath(top, file)))
         isempty(records) && continue
         labels = unique(_dataproductname(r.namespace, r.name, r.version)
                         for r in records)
@@ -1178,7 +1349,7 @@ function _checkplacement!(actions::Vector{String},
     unused = [file
               for file in _pipelinefolderfiles(top, paper.pipeline)
               if !(file in used) &&
-        isempty(_productrecords(identifying, joinpath(top, file)))]
+        isempty(_heldrecords(registries, joinpath(top, file)))]
     isempty(unused) ||
         push!(actions,
               "files in the pipeline folder are registered as no data product and the paper does not use them: $(join(unused, ", ")) - the folder is for files from the pipeline, so move them out, into `include/` for any the paper is to use")
@@ -1201,15 +1372,22 @@ function _pipelinefolderfiles(top::AbstractString, folder::AbstractString)
 end
 
 # Add to `notes` how the authors of the paper's metadata `meta` differ from
-# those of the PDF's version `identifying` registered last, the data product
-# named by the template
+# those of the PDF's version registered last in any of `registries`, the data
+# product named by the template
 function _checkpreviousauthors!(notes::Vector{String},
-                                identifying::RegistryEndpoint,
+                                registries::AbstractVector{<:Pair{Symbol,
+                                                                  RegistryEndpoint}},
                                 paper::LaTeXPaper, meta::RepositoryMetadata)
     pdf = _templatepdf(paper)
     isnothing(pdf) && return nothing
-    latest = _latestdataproduct(identifying, pdf.namespace, pdf.name)
-    isnothing(latest) && return nothing
+    held = [(registry, latest)
+            for (_, registry) in registries
+            for latest in (_latestdataproduct(registry, pdf.namespace,
+                pdf.name),)
+            if !isnothing(latest)]
+    isempty(held) && return nothing
+    identifying, latest = argmax(pair -> VersionNumber(last(pair)["version"]),
+                                 held)
     object = _getentry(identifying, URIs.URI(latest["object"]))
     names = [_getentry(identifying, URIs.URI(url))["name"]
              for url in object["authors"]]
