@@ -347,10 +347,16 @@ end
         @test any(startswith("$newer (in the local registry alone) - "),
                   checked(held, altered(held, records = older)).actions)
         # A version one lacks, with how to bring it there: from the remote by
-        # a pull, and to it by the run that made it
+        # a pull, and to it by the run that made it, in its repository - as
+        # the registry first held that at the commit, so on a second run of
+        # the suite from one commit the first's
         @test "the local registry does not hold $file, $label - `fair pull article.yaml` pulls it" in
               checked(nothing_held(held), held).actions
-        @test "the remote registry at $(remote.url) does not hold $file, $label - push it with `fair add $made`, then `fair push`, in the project of $repository, whose run made it" in
+        maker = DataPipeline._makingrun(registry, namespace, name, v"0.0.1")
+        @test maker.uuid == made
+        @test startswith(maker.repository,
+                         "https://example.org/papers/together-")
+        @test "the remote registry at $(remote.url) does not hold $file, $label - push it with `fair add $made`, then `fair push`, in the project of $(maker.repository), whose run made it" in
               checked(held, nothing_held(held)).actions
         # Neither: registered as no data product
         @test checked(nothing_held(held), nothing_held(held)).unregistered ==
@@ -388,7 +394,7 @@ end
                                                                      remote)
         @test isempty(lacking.entries)
         @test only(lacking.problems) ==
-              "the remote registry at $(remote.url) does not hold $label, for $file - push it with `fair add $made`, then `fair push`, in the project of $repository, whose run made it, or pass `remote = nothing` to take the local registry alone"
+              "the remote registry at $(remote.url) does not hold $label, for $file - push it with `fair add $made`, then `fair push`, in the project of $(maker.repository), whose run made it, or pass `remote = nothing` to take the local registry alone"
         @test only(DataPipeline._pipelineentries([:local => registry], top,
                                                  [file],
                                                  holds = (args...) -> false).entries).version ==
