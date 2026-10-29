@@ -139,7 +139,10 @@ read:
 
 The files it changed are then committed, config and all, so that each commit
 of the paper says which version of each file it used. Both functions identify
-the files in the project's remote registry, `origin`, which co-authors share;
+the files in the local registry and the project's remote registry, `origin`,
+which co-authors share, taken together: the newest version and every issue
+either knows. A version the remote lacks is pushed by the run that made it,
+`fair add` and `fair push`, and `update_paper` refuses to pin one until it is;
 `remote = nothing` uses the local registry alone. `fair pull paper.yaml`
 brings the versions the config names into a local registry that lacks them, as
 on a new machine.
