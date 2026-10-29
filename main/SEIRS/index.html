@@ -231,7 +231,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [1fa38f19] + Format v1.3.7
   [28b8d3ca] + GR v0.73.27
   [f67ccb44] + HDF5 v0.17.4
-  [cd3eb016] + HTTP v2.13.1
+  [cd3eb016] + HTTP v2.13.2
 ⌅ [842dd82b] + InlineStrings v1.4.6
   [41ab1584] + InvertedIndices v1.3.1
   [92d709cd] + IrrationalConstants v0.2.7
@@ -263,7 +263,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [189a3867] + Reexport v1.2.2
   [05181044] + RelocatableFolders v1.0.1
   [ae029012] + Requires v1.3.1
-  [802f3686] + Reseau v1.6.3
+  [802f3686] + Reseau v1.6.4
   [6c6a2e73] + Scratch v1.3.0
   [91c51154] + SentinelArrays v1.4.11
   [992d4aef] + Showoff v1.1.1
@@ -279,7 +279,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [62fd8b95] + TensorCore v0.1.1
   [1c621080] + TestItems v1.1.0
   [3bb67fe8] + TranscodingStreams v0.11.3
-  [5c2747f8] + URIs v1.7.2
+  [5c2747f8] + URIs v1.7.3
   [1cfade01] + UnicodeFun v0.4.1
   [41fe7b60] + Unzip v0.2.0
   [ddb6d928] + YAML v0.4.17
@@ -314,7 +314,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [b5ada748] + MPIABI_jll v1.0.1+0
   [7cb0a576] + MPICH_jll v5.0.3+0
   [f1f71cc9] + MPItrampoline_jll v5.5.7+0
-  [9237b28f] + MicrosoftMPI_jll v10.1.4+3
+  [9237b28f] + MicrosoftMPI_jll v10.1.5+0
   [e7412a2a] + Ogg_jll v1.3.6+0
   [fe0851c0] + OpenMPI_jll v5.0.14+0
   [91d4177d] + Opus_jll v1.6.1+0
@@ -434,31 +434,30 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
 Precompiling packages...
    1.0 s  ✓ DocStringExtensions
    0.4 s  ✓ LogExpFunctions
-   2.3 s  ✓ StatsBase
-  52.7 s  ✓ Plots
-  4 dependencies successfully precompiled in 57 seconds. 224 already precompiled.
-processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_00_10_44_161388/config.yaml
+   2.2 s  ✓ StatsBase
+  51.2 s  ✓ Plots
+  4 dependencies successfully precompiled in 55 seconds. 224 already precompiled.
+processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_21_21_50_387001/config.yaml
 pipeline initialised.
 data product found: SEIRS_model/parameters
 finished - code run locally registered as: http://127.0.0.1:8000/api/code_run/1/</code></pre><h2 id="Rehearsing-it"><a class="docs-heading-anchor" href="#Rehearsing-it">Rehearsing it</a><a id="Rehearsing-it-1"></a><a class="docs-heading-anchor-permalink" href="#Rehearsing-it" title="Permalink"></a></h2><p>Before a run is recorded, the script can be rehearsed: run through the pipeline from the same config, reading the registered parameter table and writing its outputs, with nothing registered. From the root of the clone, in Julia:</p><pre><code class="language-julia hljs">using DataPipeline
 DataPipeline.rehearse(&quot;examples/fdp/SEIRSconfig.yaml&quot;, local_only = true)
-include(&quot;examples/fdp/seirs_sim.jl&quot;)</code></pre><p><code>rehearse</code> has <code>fair</code> prepare the job as a run would, and the script, unchanged, opens a rehearsal in its <code>DataPipeline.initialise</code> and ends by collecting its two outputs in a folder, whose path <code>DataPipeline.finalise</code> prints and returns. Run after the recorded run above, it finds the results table registered already with the same bytes, and says so. The block below does this under the same condition as the two above.</p><pre><code class="language-julia hljs">run_example &amp;&amp; cd(pkgdir(DataPipeline)) do
+include(&quot;examples/fdp/seirs_sim.jl&quot;)</code></pre><p><code>rehearse</code> has <code>fair</code> prepare the job as a run would, and the script, unchanged, opens a rehearsal in its <code>DataPipeline.initialise</code> and ends by collecting its two outputs in a folder, whose path <code>DataPipeline.finalise</code> prints and returns. Run after the recorded run above, it finds the results table identical to the version registered, and says so. The block below does this under the same condition as the two above.</p><pre><code class="language-julia hljs">run_example &amp;&amp; cd(pkgdir(DataPipeline)) do
     DataPipeline.rehearse(&quot;examples/fdp/SEIRSconfig.yaml&quot;, local_only = true)
     include(joinpath(example, &quot;seirs_sim.jl&quot;))
-end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rehearsing the run prepared in /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_00_12_22_643598
-run the script, or its lines, in this session: DataPipeline.finalise collects its outputs in /tmp/fdp-rehearsal-nxxXqO, and DataPipeline.discard throws them away
-processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_00_12_22_643598/config.yaml
-rehearsal: nothing is registered, and the outputs go to /tmp/fdp-rehearsal-nxxXqO
-would keep the code repository&#39;s object at 15a3f723a569fde70b050109f1618d5276f31007, http://127.0.0.1:8000/api/object/4/
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rehearsing the run prepared in /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_21_23_27_505066
+run the script, or its lines, in this session: DataPipeline.finalise collects its outputs in /tmp/fdp-rehearsal-5LlXOC, and DataPipeline.discard throws them away
+processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_21_23_27_505066/config.yaml
+rehearsal: nothing is registered, and the outputs go to /tmp/fdp-rehearsal-5LlXOC
+would keep the code repository&#39;s object at e650792b157d9b0f3e384b6b99d3aaef7e8edee6, http://127.0.0.1:8000/api/object/4/
   with the licence https://spdx.org/licenses/LGPL-3.0-or-later
   with the keywords FAIR data, data management, julia, reproducibility, workflows
 data product found: SEIRS_model/parameters
-data product unchanged: SEIRS_model/results/model_output/julia (0.0.1): a recorded run would not register it again
+data product identical to v0.0.1: testing:SEIRS_model/results/model_output/julia@v0.0.2
 rehearsal finished - nothing registered
   inputs:
     PSU:SEIRS_model/parameters (1.0.0) /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/PSU/SEIRS_model/parameters/1.0.0.csv
   outputs:
-    testing:SEIRS_model/results/figure/julia (0.0.2) /tmp/fdp-rehearsal-nxxXqO/testing/SEIRS_model/results/figure/julia/0.0.2.pdf
-  unchanged, registered already:
-    testing:SEIRS_model/results/model_output/julia (0.0.2) /tmp/fdp-rehearsal-nxxXqO/testing/SEIRS_model/results/model_output/julia/0.0.2.csv
-  outputs folder: /tmp/fdp-rehearsal-nxxXqO</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../paper/">« Building a paper</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 29 October 2026 00:12">Thursday 29 October 2026</span>. Using Julia version 1.13.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+    testing:SEIRS_model/results/figure/julia (0.0.2) /tmp/fdp-rehearsal-5LlXOC/testing/SEIRS_model/results/figure/julia/0.0.2.pdf
+    testing:SEIRS_model/results/model_output/julia (0.0.2) /tmp/fdp-rehearsal-5LlXOC/testing/SEIRS_model/results/model_output/julia/0.0.2.csv, identical to v0.0.1
+  outputs folder: /tmp/fdp-rehearsal-5LlXOC</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../paper/">« Building a paper</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 29 October 2026 21:23">Thursday 29 October 2026</span>. Using Julia version 1.13.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
