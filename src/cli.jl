@@ -264,28 +264,50 @@ const RUNNING_FAIR_LOCK = ReentrantLock()
 # it is waited for, or Julia's exit, ends it and every process it started, such
 # as the job of a `fair run`; and return the process. Elsewhere than on Windows
 # it runs as the leader of a process group of its own, so that the group can be
-# ended, and a terminal's Ctrl-C reaches it only through this process
+# ended, and a terminal's Ctrl-C reaches it only through this process.
+# `started` is called once it has started, before it is recorded; the tests
+# pause there.
 function _runfair(command::Cmd; stdout::IO = Base.stdout,
-                  stderr::IO = Base.stderr)
+                  stderr::IO = Base.stderr, started::Function = () -> nothing)
     Sys.iswindows() || (command = Cmd(command; detach = true))
-    # Without `wait`, `run` gives a process no input or output of its own
-    process = run(pipeline(command; stdin = Base.stdin, stdout, stderr),
-                  wait = false)
     _endatexit()
-    lock(RUNNING_FAIR_LOCK) do
-        return push!(RUNNING_FAIR, process)
-    end
+    process = Ref{Union{Nothing, Base.Process}}(nothing)
     try
-        wait(process)
+        # An interrupt while `fair` starts is held until it is recorded, and
+        # then ends it as one during the wait does. A Julia that exits on an
+        # interrupt exits at once, its exit ending what is recorded by then
+        Base.disable_sigint() do
+            # Without `wait`, `run` gives a process no input or output of its
+            # own
+            process[] = run(pipeline(command; stdin = Base.stdin, stdout,
+                                     stderr),
+                            wait = false)
+            started()
+            lock(RUNNING_FAIR_LOCK) do
+                return push!(RUNNING_FAIR, process[])
+            end
+        end
+        wait(process[])
     catch
-        _endfair(process)
+        isnothing(process[]) || _endfair(process[])
         rethrow()
     finally
-        lock(RUNNING_FAIR_LOCK) do
-            return delete!(RUNNING_FAIR, process)
+        isnothing(process[]) || lock(RUNNING_FAIR_LOCK) do
+            return delete!(RUNNING_FAIR, process[])
         end
     end
-    return process
+    return process[]
+end
+
+# A pause, and a command run, that a task whose scope is cancelled still makes:
+# from Julia 1.14 an interrupt cancels the scope, and every blocking call in it
+# throws until the scope is left, so cleanup after one opts out
+@static if isdefined(Base, :CancellationRequest)
+    _cleanupsleep(seconds::Real) = sleep(seconds; cancel = nothing)
+    _cleanuprun(command::Base.AbstractCmd) = run(command; cancel = nothing)
+else
+    _cleanupsleep(seconds::Real) = sleep(seconds)
+    _cleanuprun(command::Base.AbstractCmd) = run(command)
 end
 
 # End a `fair` process `_runfair` started and every process it started: its
@@ -294,15 +316,19 @@ end
 function _endfair(process::Base.Process)
     process_exited(process) && return nothing
     if Sys.iswindows()
-        run(pipeline(ignorestatus(`taskkill /T /F /PID $(getpid(process))`),
-                     stdout = devnull, stderr = devnull))
+        _cleanuprun(pipeline(ignorestatus(`taskkill /T /F /PID $(getpid(process))`),
+                             stdout = devnull, stderr = devnull))
         return nothing
     end
     group = -getpid(process)
     signal(number) = ccall(:kill, Cint, (Cint, Cint), group, number)
     signal(Base.SIGTERM)
     # A signal of 0 asks only whether any of the group is left
-    timedwait(() -> signal(0) != 0, 5.0) === :ok || signal(Base.SIGKILL)
+    for _ in 1:50
+        signal(0) == 0 || return nothing
+        _cleanupsleep(0.1)
+    end
+    signal(Base.SIGKILL)
     return nothing
 end
 
@@ -355,7 +381,7 @@ function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
     reply = try
         JSON.parse(opened.printed)
     catch err
-        err isa InterruptException && rethrow()
+        _interrupted(err) && rethrow()
         nothing
     end
     (reply isa AbstractDict &&

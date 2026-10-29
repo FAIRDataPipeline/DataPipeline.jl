@@ -44,6 +44,13 @@ say more or otherwise is told; that file being unreadable is an error.
 A code repository with uncommitted changes, which `fair run --dirty` records as
 a `<commit>-dirty` commit, gets a warning and an issue saying that the code
 that ran cannot be recovered from its commit.
+
+The clone `run_metadata.local_repo` is looked at as the run opens, and again as
+[`finalise`](@ref) ends it. A commit other than the run's checked out as it
+opens, another checked out as it ends, or a tracked file whose state or bytes
+differ between the two - untracked and ignored files apart, and changes the
+script made before the run opened allowed - gets a warning, and `finalise`
+raises one issue on the run's outputs saying so.
 """
 function initialise(config_file::Union{Nothing, String} = nothing,
                     submission_script::Union{Nothing, String} = nothing;
@@ -93,13 +100,15 @@ end
 _runhold(::RecordedRun) = _holdregistry()
 _runhold(::Rehearsal) = nothing
 
-# Open a recorded code run: register the data store, the config, the script
-# and the repository, raise the issue on a repository with uncommitted
-# changes, and post the code run
+# Open a recorded code run: look at the checkout, register the data store,
+# the config, the script and the repository, raise the issue on a repository
+# with uncommitted changes, and post the code run
 function _openrun(mode::RecordedRun, config::Dict, config_file::String,
                   submission_script::String, registry::RegistryEndpoint)
     run_metadata = config["run_metadata"]
     datastore = run_metadata["write_data_store"]
+    checkout = _watchcheckout(run_metadata)
+    _saycheckout(mode, checkout)
 
     datastore_url = _postentry(registry, "storage_root",
                                Dict("root" => datastore,
@@ -120,7 +129,15 @@ function _openrun(mode::RecordedRun, config::Dict, config_file::String,
     return _newhandle(mode, config, config_file, registry,
                       (config = config_url, script = script_url,
                        repository = repo_url, datastore = datastore_url,
-                       code_run = code_run["url"]), code_run["uuid"])
+                       code_run = code_run["url"]), code_run["uuid"], checkout)
+end
+
+# Warn as a run opens that its checkout is not at the run's commit
+_saycheckout(::AbstractRunMode, ::Nothing) = nothing
+function _saycheckout(::RecordedRun, checkout::NamedTuple)
+    isempty(checkout.found) && return nothing
+    @warn "the code repository's checkout is not what the run records ($(only(checkout.found))): an issue will be raised on the run's outputs"
+    return nothing
 end
 
 # Register a new code run started at `run_date`, in UTC, and return its entry:
@@ -142,10 +159,11 @@ end
 # A handle at the start of a run: the mode, the config and where it was read
 # from, the registry, the URLs of what `initialise` registered - `config`,
 # `script`, `repository`, `datastore` and `code_run`, each `nothing` where it
-# registered nothing - and the run's uuid, with nothing read or written yet
+# registered nothing - the run's uuid and its checkout as it opened, with
+# nothing read or written yet
 function _newhandle(mode::AbstractRunMode, config::Dict, config_file::String,
                     registry::RegistryEndpoint, registered::NamedTuple,
-                    uuid::String)
+                    uuid::String, checkout::Union{Nothing, NamedTuple})
     return DataRegistryHandle(mode, config, dirname(abspath(config_file)),
                               registry, registered.config, registered.script,
                               registered.repository, registered.datastore,
@@ -153,7 +171,7 @@ function _newhandle(mode::AbstractRunMode, config::Dict, config_file::String,
                               Dict(), Dict(), Dict(), PendingIssue[],
                               Dict{String, SourceCitation}(),
                               Dict{String, SourceCitation}(),
-                              Dict{String, Vector{String}}())
+                              Dict{String, Vector{String}}(), checkout)
 end
 
 """
@@ -167,16 +185,18 @@ root, the folder under which the output files now sit, by namespace and data
 product. In a [`Rehearsal`](@ref) nothing is registered and the outputs are
 collected in its folder instead, which is returned.
 
-A file whose bytes are those of the highest version of its data product
-already registered is not registered again: no version is made, the file
-written is removed, and it is not an output of the code run. Where a link
-call named its source, the source, authors and licence registered with that
-version must be the same as well. A file written as a version that is
-registered already must be that version's in the same way - a reproduction,
-likewise not registered again - or nothing is registered, and the call is an
-error naming the version.
+Every output is registered as a new version: one written as a version that
+is registered already is an error, raised before anything is registered. An
+output whose file is that of a version registered before - its bytes, and
+where a link call named its source, the same source, authors and licence - is
+said to be identical to it and recorded in the handle's `identical`, its bytes
+stored once; where every output is, the run is said to need no adding and
+pushing. Where the run's checkout of its code repository was not what the run
+records, as [`initialise`](@ref) describes, one issue saying so is raised on
+the outputs.
 """
 function finalise(handle::DataRegistryHandle{RecordedRun})
+    moves = _checkoutmoves(handle.checkout)
     _checksources(handle)
     _checkversions(handle)
     previous = _previousversions(handle)
@@ -186,11 +206,6 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
                                           by = string)
         _registerdataproduct(handle, data_product, component)
     end
-    # What was registered already is no output of this code run
-    for (key, metadata) in collect(handle.outputs)
-        metadata["unchanged"] || continue
-        handle.unchanged[key] = pop!(handle.outputs, key)
-    end
     _supersedeoutputs!(handle, previous)
     outputs = String[handle.outputs[key]["component_url"]
                      for key in sort(collect(keys(handle.outputs)),
@@ -198,6 +213,7 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     inputs = String[handle.inputs[key]["component_url"]
                     for key in sort(collect(keys(handle.inputs)), by = string)]
     _registerissues(handle)
+    _flagmovedcheckout(handle, moves, outputs)
     url = _patchcoderun(handle, inputs, outputs)
 
     open(joinpath(handle.config_dir, "coderuns.txt"), "a") do io
@@ -205,6 +221,8 @@ function finalise(handle::DataRegistryHandle{RecordedRun})
     end
     _copyregistered(handle)
     println("finished - code run locally registered as: ", url, "\n")
+    _allidentical(handle) &&
+        @info "every output of this code run is identical to a version registered before it, so the run need not be added and pushed (`fair add`, `fair push`)"
     _ended(handle)
     session = SESSION[]
     !isnothing(session) && session.handle === handle && _releasehold!()
@@ -221,19 +239,21 @@ file, such as a deposit, which a `register:` entry with `no_file: true` or
 [`link_register!`](@ref) with no `path` registers, is recorded as an input in
 the same way, and `nothing` is returned.
 
-The file is in the data store, named by its hash. For code that needs its
-input under a name or in a place of its own, `path` asks for the file there,
-and is what is then returned:
-- with nothing at `path`, the file is put there, any missing directories
-  being made: as a hard link to the data store's file where one can be made,
-  so that no bytes are copied, else as a copy;
-- a file already there with the same contents is left exactly as it is,
-  whether it is the data store's file under a second name or a copy of it;
+The file is the data store's own, named by its hash, so it must not be
+written to; reading it copies nothing. For code that needs its input under a
+name or in a place of its own, `path` asks for a file of its own there, and
+is what is then returned:
+- with nothing at `path`, a copy is put there, any missing directories being
+  made - on macOS a clone where the file system makes one, which shares the
+  data store's disk space until either file is written;
+- a file already there with the same contents is left as it is, but for the
+  data store's file under another name or a link to it, which is replaced by
+  a copy;
 - a file there with other contents is an error, and nothing is overwritten,
   unless `force` is `true`, when it is replaced by the registered file. A
   directory there is always an error.
-A file that is a hard link is the data store's own, so it must not be written
-to. `force` does nothing without `path`. A data product with no file takes no
+The file at `path` may then be written to without changing the data store's.
+`force` does nothing without `path`. A data product with no file takes no
 `path`.
 
 Given a pattern instead - a name with one or more `*`, each matching one
@@ -242,8 +262,8 @@ segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
 every `read:` data product that matches, each recorded as an input (the
 directory itself is not), a data product with no file being recorded and
 given none. Each is a symbolic link to the data store's file where one can be
-made, else a hard link, else a copy, as on a Windows machine that allows no
-symbolic links. Where the working config keeps the pattern's own entry, as a
+made, so it must not be written to, else a copy, as on a Windows machine that
+allows no symbolic links. Where the working config keeps the pattern's own entry, as a
 CLI may, a pattern that matches nothing gives an empty directory; where it
 does not, that is an error. Each is named after its data product with `/`
 replaced by `_`, plus the file's extension; the directory is named by the
@@ -290,10 +310,14 @@ function _linkread!(handle::DataRegistryHandle, data_product::String,
         throw(ReadWriteException("the file of '$data_product' is not in the data store: $stored"))
     if isdir(path)
         throw(ReadWriteException("cannot put '$data_product' at $path, which is a directory"))
+    elseif isfile(path) && samefile(path, stored)
+        # The data store's file itself, else that file under another name or
+        # a link to it, replaced by a file of its own, so that nothing
+        # written at `path` reaches the store
+        !islink(path) && realpath(path) == realpath(stored) && return path
+        rm(path)
     elseif ispath(path) || islink(path)
-        isfile(path) &&
-            (samefile(path, stored) || _getfilehash(path) == input["hash"]) &&
-            return path
+        isfile(path) && _getfilehash(path) == input["hash"] && return path
         if !force
             msg = string(path, " exists and is not ", input["use_dp"],
                          " (namespace ", input["use_namespace"], ", version ",
@@ -434,24 +458,20 @@ end
 Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
 hash and registers it, replacing `\${{RUN_ID}}` in the registered name with
-the code run's uuid.
+the code run's uuid. A file written there is never copied.
 
 `path` names a file that exists already, to be registered as the data product
-in place of one the caller writes. It is put in the data store - as a hard
-link where one can be made, so that no bytes are copied, else as a copy - and
-its path there is returned; the file at `path` is left as it was. Its
-extension must be the entry's file type. A hard link is the same file under a
-second name, so the file must not be written to afterwards.
+in place of one the caller writes. A copy of it is put in the data store - on
+macOS a clone where the file system makes one, which shares the file's disk
+space until either is written - and its path there is returned; the file at
+`path` is left as it was, and may be written to afterwards without changing
+the registered file. Its extension must be the entry's file type.
 
-A file whose bytes are those of the highest version of the data product
-already registered is not registered again: no version is made and it is not
-an output of the code run. Where the call names a source, the source, authors
-and licence registered with that version must be the same as well. The
-version the `write:` entry names may be one registered already, when the file
-must be that version's in the same way - a reproduction, likewise not
-registered again - or it is an error. With a `path` this is found as the call
-is made, and the path returned is that of the registered file; a file that is
-written afterwards is found so by `finalise`, before it registers anything.
+Each run registers its output as a new version, so the version the `write:`
+entry names must not be registered already, or the call is an error. A file
+whose bytes are those of a version registered before - and where the call
+names a source, with the same source, authors and licence - is registered as
+the new version all the same, and `finalise` says that it is identical.
 
 A file that comes from somewhere else is registered with its source. The
 source is named by its `doi`, or by `bibtex`, the key of a citation that
@@ -504,9 +524,9 @@ everything made from that: once the new version is registered at
 [`finalise`](@ref), an issue reading `Superseded by namespace:name@vX.Y.Z` is
 raised on the highest version before it, at severity 0, the lowest, so that
 [`identify`](@ref) of anything made from the old version reports it. Where
-there is nothing to supersede - the file is registered already, unchanged,
-the name has no version before, or the version written is not above the
-highest - nothing is raised, and an info message says so.
+there is nothing to supersede - the file is identical to that version, the
+name has no version before, or the version written is not above the highest -
+nothing is raised, and an info message says so.
 
 See also: [`canwrite`](@ref)
 """
@@ -558,7 +578,7 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
                      supersede::Bool)
     path = String(path)
     isfile(path) || throw(ReadWriteException("no file to register at $path"))
-    wmd, name = _writemetadata(handle, data_product)
+    wmd = _writemetadata(handle, data_product).entry
     if _extension(path) != wmd["file_type"]
         msg = string("'", data_product, "' is written as a ", wmd["file_type"],
                      " file in 'write', which ", path,
@@ -586,22 +606,6 @@ function _linkwrite!(handle::DataRegistryHandle, data_product::String,
     end
 
     _checkonefile(handle, source, hash, data_product)
-    namespace = _writenamespace(handle, wmd)
-    version = String(get(wmd, "use", Dict())["version"])
-    unchanged = _heldfile(handle.registry, namespace, name, version, hash,
-                          source)
-    if !isnothing(unchanged)
-        println("data product unchanged: ", name, " (", unchanged.version, ")")
-        supersede &&
-            @info "nothing to supersede: the file written as $(_dataproductname(namespace, name, version)) is registered already, unchanged"
-        whole = _wholeobjectcomponent(handle.registry, unchanged.object)
-        found = Dict("path" => unchanged.path,
-                     "object_url" => unchanged.object,
-                     "component_url" => whole)
-        handle.unchanged[(data_product, nothing)] = found
-        return unchanged.path
-    end
-
     metadata = _resolvewrite(handle, data_product, nothing, wmd["file_type"],
                              nothing)
     _placefile(path, metadata["path"])
@@ -648,8 +652,9 @@ With no `path` it is a data product with no file - the deposit that a
 source's files belong to, which a run that fetches them reads, so that each
 file it registers as an output is derived from it - and nothing is returned.
 With a `path` it is that file, put in the data store as [`link_write!`](@ref)
-puts one, as a hard link where one can be made and else a copy, and its path
-there is returned.
+puts one, a copy - on macOS a clone where the file system makes one - and its
+path there is returned; the file at `path` may be written to afterwards
+without changing the registered file.
 
 The namespace is by default the run's default input namespace. The version
 is the data product's in the pipeline - the source's own is
@@ -716,22 +721,20 @@ or `link_read!`, resolved as the run resolves it: the `write:` entry naming it,
 or the one pattern covering it, under the name its `use:` block gives and in
 its namespace, else the run's default output namespace; else the `read:`
 entry naming it, or the kept entry whose pattern covers it. Its version is the
-entry's where that version is registered, else the highest, as `link_write!`
-compares an output at [`finalise`](@ref). A label no entry covers, or several
-patterns cover, is a [`ConfigFileException`](@ref), and a component of one an
-`ArgumentError`.
+entry's where that version is registered, else the highest. A label no entry
+covers, or several patterns cover, is a [`ConfigFileException`](@ref), and a
+component of one an `ArgumentError`.
 
 With no source keyword, whether anything is registered under the name, or at
 the version a name asks for. With the keywords `link_register!` or `link_write!`
-would be given, but no file, whether registering that file would register
-nothing new: whether the version asked about records the same source -
-its identifier, title and release version, from the citation that `doi` or
-`bibtex` names and from `title` and `release_version` - the same authors, and
-the same licence, `licence` or `license`. `primary`, `description`,
-`release_date` and `original_store` are not compared, the registry keeping the
-last three as a first registration said them, so may be left out, though what
-is given is checked as the link calls check it; nor are the file's bytes
-compared. An author the registry has not got is not
+would be given, but no file, whether the version asked about records the
+same source - its identifier, title and release version, from the citation
+that `doi` or `bibtex` names and from `title` and `release_version` - the
+same authors, and the same licence, `licence` or `license`. `primary`,
+`description`, `release_date` and `original_store` are not compared, the
+registry keeping the last three as a first registration said them, so may be
+left out, though what is given is checked as the link calls check it; nor are
+the file's bytes compared. An author the registry has not got is not
 registered, and makes the answer false, as registering would add one. A `doi`
 with no citation is looked up at `doi.org` as the link calls look it up.
 
@@ -777,7 +780,7 @@ end
 
 # The registry name `isregistered` asks about, as `(namespace, name, version,
 # fallback)`: a version a name asks for must be registered, where one a config
-# entry gives falls back to the highest, as `link_write!` compares an output
+# entry gives falls back to the highest
 function _askedname(handle::DataRegistryHandle, data_product::String)
     occursin('*', data_product) &&
         throw(ArgumentError("'$data_product' is a pattern: a data product is looked up by a name of its own"))
@@ -815,7 +818,7 @@ end
 Write `data` as `component` of an HDF5 `write:` data product of the working
 config, recording it as an output, and return `(data_product, component)`.
 The file records no times, so that the same arrays give the same bytes and
-are found to be registered already. `supersede` is as for
+are found identical to a version registered before. `supersede` is as for
 [`link_write!`](@ref): the data product's new version supersedes the one
 before it.
 

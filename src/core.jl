@@ -469,14 +469,16 @@ run's [`AbstractRunMode`](@ref), which decides what the run registers.
 - `inputs`, `outputs`: metadata of what has been read and written so far,
   keyed by `(data_product, component)`, with `component` `nothing` for a whole
   file
-- `unchanged`: what was written and found to be registered already, so that
-  no version was made of it and it is no output of the code run; keyed as
-  `outputs` is
+- `identical`: the outputs whose file is that of a version registered before
+  the run - its bytes, source, authors and licence - each with the highest
+  such version, keyed as `outputs` is; filled by `finalise`
 - `issues`: issues raised so far, registered at `finalise`
 - `citations`: the citations read by [`register_citations!`](@ref), by key
 - `doi_lookups`: the citations looked up from a DOI so far, by the DOI's URL
 - `authors`: the identifiers that [`register_authors!`](@ref) has been given
   for each author's name
+- `checkout`: the run's clone of its code repository as `initialise` found it,
+  to compare with it at `finalise`, or `nothing` where there is none to look at
 """
 struct DataRegistryHandle{M <: AbstractRunMode}
     mode::M
@@ -491,11 +493,12 @@ struct DataRegistryHandle{M <: AbstractRunMode}
     code_run_uuid::String
     inputs::Dict
     outputs::Dict
-    unchanged::Dict
+    identical::Dict
     issues::Vector{PendingIssue}
     citations::Dict{String, SourceCitation}
     doi_lookups::Dict{String, SourceCitation}
     authors::Dict{String, Vector{String}}
+    checkout::Union{Nothing, NamedTuple}
 end
 
 function Base.show(io::IO, handle::DataRegistryHandle)
@@ -508,17 +511,29 @@ end
 function Base.show(io::IO, ::MIME"text/plain", handle::DataRegistryHandle)
     _showrun(io, handle)
     for (label, table) in (("inputs", handle.inputs),
-        ("outputs", handle.outputs), ("unchanged", handle.unchanged))
+        ("outputs", handle.outputs))
         println(io, "  ", label, ": ", length(table))
-        for (dp, component) in sort(collect(keys(table)),
-                                    by = key -> string(key))
+        for key in sort(collect(keys(table)), by = string)
+            dp, component = key
             println(io, "    ", dp,
-                    isnothing(component) ? "" : " / " * component)
+                    isnothing(component) ? "" : " / " * component,
+                    haskey(handle.identical, key) ?
+                    " (identical to v$(handle.identical[key]))" : "")
         end
     end
+    _allidentical(handle) &&
+        println(io,
+                "  every output is identical to a version registered before, so the run need not be added and pushed")
     println(io, "  issues: ", length(handle.issues))
     println(io, "  citations: ", length(handle.citations))
     return print(io, "  authors: ", length(handle.authors))
+end
+
+# Whether a run has outputs and every one is identical to a version registered
+# before it, so that the run adds nothing that needs sharing
+function _allidentical(handle::DataRegistryHandle)
+    return !isempty(handle.outputs) &&
+           all(key -> haskey(handle.identical, key), keys(handle.outputs))
 end
 
 # What the compact display names a run by

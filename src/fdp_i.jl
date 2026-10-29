@@ -27,6 +27,17 @@ end
 
 # == Functions ==
 
+# Whether what a `catch` caught is an interrupt, as a Ctrl-C makes, to rethrow
+# rather than handle: an `InterruptException`, or a `Base.CancellationRequest`,
+# which a SIGINT reaching a waiting task is from Julia 1.14. Anything may be
+# thrown, so `err` is any value
+@static if isdefined(Base, :CancellationRequest)
+    _interrupted(err) = err isa InterruptException ||
+                        err isa Base.CancellationRequest
+else
+    _interrupted(err) = err isa InterruptException
+end
+
 # The extension of a file name, the part after its last dot
 _extension(path::AbstractString) = String(match(r"([^.]+)$", basename(path))[1])
 
@@ -503,104 +514,118 @@ function _latestdataproduct(registry::RegistryEndpoint, namespace::String,
 end
 
 """
-    _unchangedfile(registry, namespace, data_product, hash, source)
+    _identicalversion(registry, namespace, data_product, hash, source)
 
-Return the path, the version and the object's URL of the file registered as
-the highest version of a data product, as `(path, version, object)`, if its
-bytes have the given `hash` and what `source` says of it is what is
-registered with it: the same source, authors and licence, a `source` of
-`nothing` being a file compared by its bytes alone. Return `nothing` if either
-differs, if that version has no file, or if the name is not registered.
+Return the highest registered version of a data product whose file is this
+one: bytes with the given `hash`, and what `source` says of it registered with
+it - the same source, authors and licence, a `source` of `nothing` being a
+file compared by its bytes alone. Return `nothing` where no version is.
 """
-function _unchangedfile(registry::RegistryEndpoint, namespace::String,
-                        data_product::String, hash::String,
-                        source::Union{Nothing, SourceRecord, OutputDescription})
-    latest = _latestdataproduct(registry, namespace, data_product)
-    isnothing(latest) && return nothing
-    return _registeredfile(registry, latest, hash, source)
-end
-
-# The path, the version and the object's URL of the file a registered data
-# product holds, as `(path, version, object)`, if it is this file - these
-# bytes, with what `source` says of it registered with it; else `nothing`, as
-# for a data product with no file
-function _registeredfile(registry::RegistryEndpoint, data_product::AbstractDict,
-                         hash::String,
-                         source::Union{Nothing, SourceRecord,
-                                       OutputDescription})
-    object = _getentry(registry, URIs.URI(data_product["object"]))
-    isnothing(object["storage_location"]) && return nothing
-    location = _getstoragelocation(registry, data_product["object"])
-    location.hash == hash || return nothing
-    _recordssource(registry, data_product, object, source) || return nothing
-    return (path = location.path, version = String(data_product["version"]),
-            object = String(data_product["object"]))
-end
-
-# What the registry holds of an output of these bytes written as `version`, as
-# `(path, version, object)`, or `nothing` for an output that is a new version.
-# Where that version exists it must be this file - a version is registered
-# once, so a run may reproduce it and not change it - or this is an error;
-# where it does not, the highest version is the output if it is this file
-function _heldfile(registry::RegistryEndpoint, namespace::String,
-                   data_product::String, version::String, hash::String,
-                   source::Union{Nothing, SourceRecord, OutputDescription})
+function _identicalversion(registry::RegistryEndpoint, namespace::String,
+                           data_product::String, hash::String,
+                           source::Union{Nothing, SourceRecord,
+                                         OutputDescription})
     namespace_id = _getid(registry, "namespace", Dict("name" => namespace))
-    existing = isnothing(namespace_id) ? nothing :
-               _getentry(registry, "data_product",
-                         Dict("name" => data_product, "version" => version,
-                              "namespace" => namespace_id))
-    isnothing(existing) &&
-        return _unchangedfile(registry, namespace, data_product, hash, source)
-    held = _registeredfile(registry, existing, hash, source)
-    isnothing(held) &&
-        throw(ReadWriteException("$(_dataproductname(namespace, data_product, version)) is registered already, as another file or with another source, authors or licence: a run may reproduce a version that exists, byte for byte, and not change it"))
-    return held
-end
-
-# Check, before a code run registers any output, that each written as a
-# version that exists reproduces it, keeping the hash it was checked by
-function _checkversions(handle::DataRegistryHandle)
-    checked = Set{String}()
-    for key in sort(collect(keys(handle.outputs)), by = string)
-        metadata = handle.outputs[key]
-        (key[1] in checked || !isfile(metadata["path"])) && continue
-        push!(checked, key[1])
-        hash = get!(metadata, "hash") do
-            return _getfilehash(metadata["path"])
+    isnothing(namespace_id) && return nothing
+    objects = Dict{String, Any}()
+    for location in _getentries(registry, "storage_location",
+                                Dict("hash" => hash))
+        for object in _getentries(registry, "object",
+                                  Dict("storage_location" =>
+                                           _extractid(location["url"])))
+            objects[object["url"]] = object
         end
-        _heldfile(handle.registry, metadata["use_namespace"],
-                  replace(metadata["use_dp"],
-                          RUN_ID_PLACEHOLDER => handle.code_run_uuid),
-                  String(metadata["use_version"]), hash,
-                  _outputsource(handle, key[1]))
+    end
+    isempty(objects) && return nothing
+    # The registry matches names as globs, so keep the exact name only
+    versions = [entry
+                for entry in _getentries(registry, "data_product",
+                                         Dict("name" => data_product,
+                                              "namespace" => namespace_id))
+                if entry["name"] == data_product &&
+        haskey(objects, entry["object"])]
+    for entry in sort(versions, by = entry -> VersionNumber(entry["version"]),
+                      rev = true)
+        _recordssource(registry, entry, objects[entry["object"]], source) &&
+            return String(entry["version"])
     end
     return nothing
 end
 
-# Make the file at `source` available at `destination`, which must not exist:
-# a hard link where one can be made, so that no bytes are copied, else a copy.
-# A symbolic link is resolved first, so that it is the file that arrives.
-function _placefile(source::AbstractString, destination::AbstractString)
+# Check that a data product is not registered at the version an output is
+# written as: a run registers each output as a version of its own
+function _checknewversion(registry::RegistryEndpoint, namespace::String,
+                          data_product::String, version::String)
+    isnothing(_versioneddataproduct(registry, namespace, data_product,
+                                    version)) ||
+        throw(ReadWriteException("$(_dataproductname(namespace, data_product, version)) is registered already: a run registers each output as a new version, so its `write:` entry must give a version that is not registered"))
+    return nothing
+end
+
+# Check, before a code run registers any output, that no output is written as
+# a version registered since it was first written
+function _checkversions(handle::DataRegistryHandle)
+    checked = Set{String}()
+    for key in sort(collect(keys(handle.outputs)), by = string)
+        key[1] in checked && continue
+        push!(checked, key[1])
+        metadata = handle.outputs[key]
+        _checknewversion(handle.registry, metadata["use_namespace"],
+                         replace(metadata["use_dp"],
+                                 RUN_ID_PLACEHOLDER => handle.code_run_uuid),
+                         String(metadata["use_version"]))
+    end
+    return nothing
+end
+
+# Put a file of its own at `destination`, which must not exist, holding the
+# bytes of the file at `source`. Never a link: the data store's file must not
+# change when a file outside it is written in place. A clone where one can be
+# made, else a copy, made under a temporary name and moved there, so that an
+# interrupted copy leaves nothing at `destination`. A symbolic link is
+# resolved first, so that it is the file that arrives. `clone` makes the clone;
+# the tests replace it with one that fails.
+function _placefile(source::AbstractString, destination::AbstractString;
+                    clone::Function = _clonefile)
     source = realpath(source)
+    clone(source, destination) && return destination
+    partial = tempname(dirname(destination))
     try
-        hardlink(source, destination)
-    catch e
-        isa(e, Base.IOError) || rethrow()
-        cp(source, destination)
+        cp(source, partial)
+        mv(partial, destination)
+    finally
+        rm(partial, force = true)
     end
     return destination
 end
 
-# Whether `destination`, the data store's name for the bytes of `file` by their
-# hash `hash`, holds those bytes already - the same file or a copy - though the
+# Clone the file at `source` to `destination`, which must not exist, and return
+# whether it was cloned: a file of its own, sharing the disk space of `source`
+# until either is written. Only macOS's `clonefile`, on APFS; Julia's `cp`
+# makes no clone there
+@static if Sys.isapple()
+    function _clonefile(source::AbstractString, destination::AbstractString)
+        return ccall(:clonefile, Cint, (Cstring, Cstring, UInt32), source,
+                     destination, 0) == 0
+    end
+else
+    _clonefile(::AbstractString, ::AbstractString) = false
+end
+
+# Whether `destination`, the data store's name for the bytes whose SHA-1 hash
+# is `hash`, holds those bytes already in a file of its own, though the
 # registry has no location for them, as where a run's registration was lost. A
-# file there with other bytes is deleted, with a warning: its name says what it
-# must hold.
-function _storedalready(destination::String, file::AbstractString,
-                        hash::AbstractString)
+# link there - a symbolic link, or a file with other names, through which it
+# could be written - is deleted, and so is a file with other bytes, with a
+# warning: its name says what it must hold.
+function _storedalready(destination::String, hash::AbstractString)
+    linked = islink(destination) ||
+             (isfile(destination) && stat(destination).nlink > 1)
+    if linked
+        rm(destination)
+        return false
+    end
     isfile(destination) || return false
-    samefile(destination, file) && return true
     found = _getfilehash(destination)
     found == hash && return true
     @warn "replacing the file at $destination, whose bytes have the SHA-1 hash $found where its name gives $hash"
@@ -641,12 +666,12 @@ end
 
 Register one output of the handle: substitute the code run's uuid for
 `\${{RUN_ID}}` in its registered name; register its file, object and data
-product, once per data product however many components it has, unless the
-file is that of the highest version registered already, when no version is
-made and the file written is removed; and register the component (the
-`whole_object` component when `component` is `nothing`). Record the
-registered name, the file's path, the object URL, the component URL and
-whether it was unchanged in the handle, and return the component URL.
+product, once per data product however many components it has, saying where
+the file is that of a version registered before, its version then recorded in
+`handle.identical`; and register the component (the `whole_object` component
+when `component` is `nothing`). Record the registered name, the file's path,
+the object URL and the component URL in the handle, and return the component
+URL.
 """
 function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
                               component::Union{Nothing, String})
@@ -660,14 +685,15 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
     filepath = wmd["path"]
 
     # Another component of the same data product may have registered its file
-    # and object already, or found them registered
-    registered = [value
+    # and object already
+    registered = [(key, value)
                   for (key, value) in handle.outputs
                   if key[1] == data_product && haskey(value, "object_url")]
     if !isempty(registered)
-        new_filepath = registered[1]["path"]
-        obj_url = registered[1]["object_url"]
-        unchanged = registered[1]["unchanged"]
+        key, value = registered[1]
+        new_filepath = value["path"]
+        obj_url = value["object_url"]
+        identical = get(handle.identical, key, nothing)
     else
         if !isfile(filepath)
             msg = string("File not found: ", use_data_product,
@@ -679,25 +705,21 @@ function _registerdataproduct(handle::DataRegistryHandle, data_product::String,
             return _getfilehash(filepath)
         end
         source = _outputsource(handle, data_product)
-        held = _heldfile(registry, wmd["use_namespace"], use_data_product,
-                         String(wmd["use_version"]), hash, source)
-        unchanged = !isnothing(held)
-        if unchanged
-            println("data product unchanged: ", use_data_product, " (",
-                    held.version, ")")
-            rm(filepath)
-            new_filepath = held.path
-            obj_url = held.object
-        else
-            stored = _registerfile(handle, wmd, hash, source)
-            new_filepath = stored.path
-            obj_url = stored.object
-        end
+        identical = _identicalversion(registry, wmd["use_namespace"],
+                                      use_data_product, hash, source)
+        isnothing(identical) ||
+            println("data product identical to v", identical, ": ",
+                    _dataproductname(wmd["use_namespace"], use_data_product,
+                                     wmd["use_version"]))
+        stored = _registerfile(handle, wmd, hash, source)
+        new_filepath = stored.path
+        obj_url = stored.object
         _pruneempty(dirname(filepath), datastore)
     end
     wmd["path"] = new_filepath
     wmd["object_url"] = obj_url
-    wmd["unchanged"] = unchanged
+    isnothing(identical) ||
+        (handle.identical[(data_product, component)] = identical)
 
     if isnothing(use_component)
         component_url = _wholeobjectcomponent(registry, obj_url)
@@ -730,7 +752,7 @@ function _registerfile(handle::DataRegistryHandle, wmd::AbstractDict,
         path = joinpath(datastore, wmd["use_namespace"], wmd["use_dp"],
                         "$hash.$(_extension(filepath))")
         mkpath(dirname(path))
-        if _storedalready(path, filepath, hash)
+        if _storedalready(path, hash)
             rm(filepath)
         else
             mv(filepath, path)
@@ -765,7 +787,8 @@ Return the metadata for writing `component` (`nothing` for a whole file) of a
 `write:` data product of the working config, or of one a wildcard entry covers:
 where its file goes (a new temporary file, or the file another component of the
 same data product already started in this code run) and the names it will be
-registered under.
+registered under. A data product registered at the version it is written as
+is an error.
 """
 function _resolvewrite(handle::DataRegistryHandle, data_product::String,
                        component::Union{Nothing, String},
@@ -780,12 +803,15 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     use_version = use["version"]
     public = get(use, "public", handle.config["run_metadata"]["public"])
 
-    # A data product written to earlier in this code run keeps its file. One
-    # written as a version that exists is compared with it at `finalise`, when
-    # its bytes are known
+    # A data product written to earlier in this code run keeps its file; one
+    # written first must be a new version
     paths = unique(value["path"]
                    for (key, value) in handle.outputs if key[1] == data_product)
     if isempty(paths)
+        _checknewversion(handle.registry, use_namespace,
+                         replace(use_data_product,
+                                 RUN_ID_PLACEHOLDER => handle.code_run_uuid),
+                         string(use_version))
         directory = joinpath(data_store, use_namespace, use_data_product)
         mkpath(directory)
         path = joinpath(directory, "dat-$(_randomhash()).$file_type")
@@ -920,7 +946,7 @@ end
 function _issuecomponents(handle::DataRegistryHandle,
                           target::ConfigDataProduct)
     key = (target.data_product, target.component)
-    for table in (handle.inputs, handle.outputs, handle.unchanged)
+    for table in (handle.inputs, handle.outputs)
         haskey(table, key) && return [table[key]["component_url"]]
     end
     # Not read or written in this run: a read entry can still be resolved
@@ -971,8 +997,9 @@ const SUPERSEDED_ISSUE_SEVERITY = 0
 # What `supersede = true` does once a data product's version is settled: queue
 # the issue on the version it supersedes - the highest before, `previous` as
 # the registry holds it or `nothing` - or say that there was nothing to
-# supersede: the file was registered already, unchanged, there was no version
-# before, or the version is not above the highest
+# supersede: the file was registered already, unchanged, as `link_register!`
+# finds one, there was no version before, or the version is not above the
+# highest
 function _supersede!(handle::DataRegistryHandle, namespace::String,
                      name::String, version::String,
                      previous::Union{Nothing, AbstractDict}, unchanged::Bool)
@@ -1014,15 +1041,20 @@ function _previousversions(handle::DataRegistryHandle)
 end
 
 # Once the outputs are settled, each data product written with
-# `supersede = true` supersedes what it supersedes, or says it does not
+# `supersede = true` supersedes what it supersedes, or says it does not, as
+# for an output identical to the version it would supersede
 function _supersedeoutputs!(handle::DataRegistryHandle,
                             previous::Dict{String, NamedTuple})
     for data_product in sort(collect(keys(previous)))
         before = previous[data_product]
-        unchanged = any(key[1] == data_product
-                        for key in keys(handle.unchanged))
+        if !isnothing(before.latest) &&
+           any(key[1] == data_product && version == before.latest["version"]
+               for (key, version) in handle.identical)
+            @info "nothing to supersede: $(_dataproductname(before.namespace, before.name, before.version)) is identical to v$(before.latest["version"])"
+            continue
+        end
         _supersede!(handle, before.namespace, before.name, before.version,
-                    before.latest, unchanged)
+                    before.latest, false)
     end
     return nothing
 end
@@ -1196,6 +1228,114 @@ function _flagdirtyrepository(registry::RegistryEndpoint, repo_url::String,
     _postissue(registry, DEFAULT_ISSUE_SEVERITY, DIRTY_REPOSITORY_ISSUE,
                [_wholeobjectcomponent(registry, repo_url)])
     return nothing
+end
+
+# The issue raised on a run's outputs where its checkout of the code
+# repository was not what the run records, followed by what was found
+const MOVED_CHECKOUT_ISSUE = "The code repository's checkout was not what this code run records, so what the run read from it cannot be recovered from that record"
+
+# How many changed files the issue on a moved checkout names
+const MOVED_CHECKOUT_FILES = 5
+
+# What a checkout of a code repository holds, as `(head, changes)`: the commit
+# checked out, and each tracked file that is not as that commit has it -
+# staged, changed or deleted, untracked and ignored files apart - by its path
+# from the top level, with git's status and the SHA-1 of its bytes, `nothing`
+# for one that is gone. `nothing` for a repository with no commit
+function _checkoutstate(top::AbstractString)
+    return LibGit2.with(LibGit2.GitRepo(top)) do repo
+        LibGit2.isorphan(repo) && return nothing
+        changes = Dict{String, Tuple{UInt32, Union{Nothing, String}}}()
+        options = LibGit2.StatusOptions(flags = Cuint(0))
+        LibGit2.with(LibGit2.GitStatus(repo, status_opts = options)) do status
+            GC.@preserve status begin
+                for i in 1:length(status)
+                    entry = status[i]
+                    delta = unsafe_load(entry.index_to_workdir == C_NULL ?
+                                        entry.head_to_index :
+                                        entry.index_to_workdir)
+                    path = unsafe_string(delta.new_file.path)
+                    file = joinpath(top, path)
+                    changes[path] = (entry.status,
+                                     isfile(file) ? _getfilehash(file) :
+                                     nothing)
+                end
+            end
+        end
+        return (head = string(LibGit2.head_oid(repo)), changes = changes)
+    end
+end
+
+# The run's checkout of its code repository as the run opens, to compare with
+# it as the run ends, as `(top, state, found)`, `found` saying what is wrong
+# with it already: a commit other than the run's checked out. Uncommitted
+# changes are not wrong, since the script may make them before the run opens.
+# `nothing` where the run names no clone to look at
+function _watchcheckout(run_metadata::AbstractDict)
+    folder = get(run_metadata, "local_repo", nothing)
+    top = isnothing(folder) || !isdir(folder) ? nothing : _gittoplevel(folder)
+    isnothing(top) && return nothing
+    state = _checkoutstate(top)
+    isnothing(state) && return nothing
+    commit = replace(run_metadata["latest_commit"], r"-dirty$" => "")
+    found = state.head == commit ? String[] :
+            ["it had $(state.head) checked out as the run opened, not the run's commit, $commit"]
+    return (top = top, state = state, found = found)
+end
+
+# What was wrong with the run's checkout of its code repository as it opened,
+# and what has changed in it since: its checked-out commit, else a tracked
+# file's state or bytes, which are relative to that commit. Empty where nothing
+# was, or there is no checkout
+_checkoutmoves(::Nothing) = String[]
+function _checkoutmoves(watched::NamedTuple)
+    found = copy(watched.found)
+    now = isdir(watched.top) ? _checkoutstate(watched.top) : nothing
+    if isnothing(now)
+        push!(found, "it was gone as the run ended")
+        return found
+    end
+    if now.head != watched.state.head
+        push!(found,
+              "it had $(watched.state.head) checked out as the run opened and $(now.head) as it ended")
+        return found
+    end
+    before = watched.state.changes
+    changed = sort([path
+                    for path in union(keys(before), keys(now.changes))
+                    if get(before, path, nothing) !=
+                       get(now.changes, path, nothing)])
+    if !isempty(changed)
+        named = join(first(changed, MOVED_CHECKOUT_FILES), ", ")
+        more = length(changed) - MOVED_CHECKOUT_FILES
+        more > 0 && (named *= " and $more more")
+        push!(found,
+              "tracked files changed between the run opening and ending: $named")
+    end
+    return found
+end
+
+# Raise the issue on a run's outputs that its checkout was not what it records,
+# with a warning, which is all there is where the run registered no output
+function _flagmovedcheckout(handle::DataRegistryHandle{RecordedRun},
+                            moves::Vector{String}, outputs::Vector{String})
+    isempty(moves) && return nothing
+    said = join(moves, "; ")
+    if isempty(outputs)
+        @warn "the code repository's checkout was not what the run records ($said), and the run registered no output to raise an issue on"
+        return nothing
+    end
+    @warn "the code repository's checkout was not what the run records ($said): raising an issue on the run's outputs"
+    entry = _postissue(handle.registry, DEFAULT_ISSUE_SEVERITY,
+                       _movedcheckoutissue(moves), outputs)
+    println("issue registered as ", entry["url"])
+    return nothing
+end
+
+# The description of the issue on a run whose checkout moved
+function _movedcheckoutissue(moves::Vector{String})
+    return string(MOVED_CHECKOUT_ISSUE, ": ",
+                  join(moves, "; "), ".")
 end
 
 # Get or create the issue with this severity and description on exactly these

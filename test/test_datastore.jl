@@ -88,6 +88,14 @@ Test.@testset "check_store()" begin
     DataPipeline._registerobject(registry, "testing/linked/$uid/linked.txt",
                                  store, "datastore $uid", new_object = true)
     write(elsewhere, "datastore linked, written to $uid\n")
+    # ... and one not written to, which a write through that file would change
+    beside = joinpath(mktempdir(), "shared.txt")
+    write(beside, "datastore shared $uid\n")
+    shared = normpath(joinpath(store, "testing/shared/$uid/shared.txt"))
+    mkpath(dirname(shared))
+    hardlink(beside, shared)
+    DataPipeline._registerobject(registry, "testing/shared/$uid/shared.txt",
+                                 store, "datastore $uid", new_object = true)
     # A location nothing uses, and one that a source uses as where its file
     # was fetched from
     unused, _ = located("datastore unused $uid\n",
@@ -137,7 +145,7 @@ Test.@testset "check_store()" begin
     check = DataPipeline.check_store(registry)
     @test check.hashes && check.quiet
     ours = only(filter(root -> root.folder == store, check.roots))
-    @test ours.root == "file://$store" && ours.exists && ours.locations == 11
+    @test ours.root == "file://$store" && ours.exists && ours.locations == 12
     @test !only(filter(root -> root.folder == gone, check.roots)).exists
     @test paths_in(check.missing, store) == sort([deleted, twice, twice])
     @test paths_in(check.missing, gone) == [lost]
@@ -152,6 +160,10 @@ Test.@testset "check_store()" begin
     @test found.found == sha1of("datastore rewritten again $uid\n")
     @test found.links == 1
     @test only(filter(file -> file.path == linked, check.changed)).links == 2
+    @test paths_in(check.shared, store) == [shared]
+    sharing = only(filter(file -> file.path == shared, check.shared))
+    @test sharing.hash == sha1of("datastore shared $uid\n") &&
+          sharing.links == 2
     @test paths_in(check.unknown, store) == [stray]
     @test paths_in(check.unused, store) == [unused]
     @test paths_in(check.unfinished, store) == [unfinished]
@@ -163,6 +175,7 @@ Test.@testset "check_store()" begin
     # Existence alone, without reading the files
     unhashed = DataPipeline.check_store(registry, hashes = false)
     @test !unhashed.hashes && isempty(unhashed.changed)
+    @test paths_in(unhashed.shared, store) == sort([linked, shared])
     @test paths_in(unhashed.missing, store) == sort([deleted, twice, twice])
     @test occursin(", contents not checked)", sprint(show, unhashed))
     # A handle gives its registry, and with neither the local registry is held
@@ -174,7 +187,11 @@ Test.@testset "check_store()" begin
     @test startswith(sprint(show, check), "StoreCheck(")
     report = sprint(show, MIME"text/plain"(), check)
     in_store(path) = relpath(path, store)
-    @test occursin("\n  $store (11 storage locations)\n", report)
+    @test occursin("\n  $store (12 storage locations)\n", report)
+    @test occursin(r"^Check of .*, \d+ shared, ", report)
+    @test occursin("\n    shared: $(in_store(shared)) - it has 2 hard links, so writing to it through another would change it\n",
+                   report)
+    @test !occursin("shared: $(in_store(linked))", report)
     @test occursin("\n    missing: $(in_store(deleted))\n", report)
     @test occursin("\n    changed: $(in_store(linked)) - sha1 $(first(sha1of("datastore linked, written to $uid\n"), 8)), registered $(first(sha1of("datastore linked $uid\n"), 8)); it has 2 hard links",
                    report)

@@ -154,9 +154,10 @@ the run is from uncommitted changes, `fair run --dirty` - whose title and
 authors are not those of `CITATION.cff`, or which uses a file from the
 pipeline folder that the config does not offer. The pdf is built in a folder
 of the package's own, kept between builds, so that an unchanged paper gives
-the same bytes and registers nothing new; its title, authors, keywords,
-licence and the authors' ORCIDs are written into its document information and,
-but for XeLaTeX, read back. Once the run is registered, the pdf is copied beside
+the same bytes, stored once and found identical to the version before; its
+title, authors, keywords, licence and the authors' ORCIDs are written into its
+document information and, but for XeLaTeX, read back. Once the run is
+registered, the pdf is copied beside
 the `.tex` file, where `latexmk` builds one, so that the file there is the
 registered one; a file git tracks there is left as it is, so ignore it in
 `.gitignore`. [`DataPipeline.rehearse`](@ref) followed by the same calls builds

@@ -90,8 +90,8 @@ an error before anything is registered.
 
 The paper is built with `latexmk`, from the folder holding its `.tex` file,
 into a folder of the package's own kept between builds, so that an unchanged
-paper gives the same bytes and is found unchanged rather than registered
-again. A rehearsal builds in a folder of its own, registers nothing, and warns
+paper gives the same bytes, is stored once and is found identical to the
+version before. A rehearsal builds in a folder of its own, registers nothing, and warns
 of what a recorded run would refuse rather than stopping. A change of authors
 from the version registered before is said.
 
@@ -173,10 +173,7 @@ function _copybeside!(handle::DataRegistryHandle{RecordedRun}, entry::String,
         @warn "git tracks $(_gitpath(beside, top)), so the registered PDF is not copied there: untrack and ignore it to have the copy"
         return nothing
     end
-    key = (entry, nothing)
-    written = haskey(handle.outputs, key) ? handle.outputs[key] :
-              handle.unchanged[key]
-    written["copy_to"] = beside
+    handle.outputs[(entry, nothing)]["copy_to"] = beside
     return nothing
 end
 
@@ -185,8 +182,7 @@ end
 # file in place, which through a link would change the registered file. The
 # run is registered by then, so a copy that fails is a warning
 function _copyregistered(handle::DataRegistryHandle)
-    for written in Iterators.flatten((values(handle.outputs),
-                                      values(handle.unchanged)))
+    for written in values(handle.outputs)
         target = get(written, "copy_to", nothing)
         isnothing(target) && continue
         try

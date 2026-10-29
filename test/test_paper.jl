@@ -392,14 +392,16 @@ end
             @test !samefile(beside, stored)
 
             # Built again, unchanged: the same bytes, authors and licence, so
-            # nothing registered, and the registered PDF copied beside it again
+            # a version identical to the first, its file the one stored, and
+            # the registered PDF copied beside it again
             write(beside, "A PDF built elsewhere.\n")
             config = offering("again", sha, "0.0.2")
             handle = DataPipeline.initialise(config, config)
             build_paper!(handle, joinpath(top, "paper.tex"))
-            @test haskey(handle.unchanged, ("paper", nothing))
             DataPipeline.finalise(handle)
-            @test versions() == ["0.0.1"]
+            @test handle.identical == Dict(("paper", nothing) => "0.0.1")
+            @test versions() == ["0.0.1", "0.0.2"]
+            @test handle.outputs[("paper", nothing)]["path"] == stored
             @test read(beside) == read(stored)
 
             # What is refused, before anything is registered
@@ -409,8 +411,8 @@ end
                 msg = message_of(ReadWriteException) do
                     return build_paper!(handle, joinpath(top, "paper.tex"))
                 end
-                @test isempty(handle.outputs) && isempty(handle.unchanged)
-                @test versions() == ["0.0.1"]
+                @test isempty(handle.outputs)
+                @test versions() == ["0.0.1", "0.0.2"]
                 DataPipeline._resetsession!()
                 msg
             end
@@ -472,7 +474,7 @@ end
                        build_paper!(rehearsal, joinpath(top, "paper.tex")))
             DataPipeline.finalise(rehearsal)
             @test isfile(joinpath(outputs, namespace, pdf, "0.0.3.pdf"))
-            @test versions() == ["0.0.1"]
+            @test versions() == ["0.0.1", "0.0.2"]
             @test read(beside, String) == "Not the rehearsal's.\n"
 
             # A run from uncommitted changes, as `fair run --dirty` records
@@ -488,7 +490,7 @@ end
                        match_mode=:any,
                        build_paper!(handle, joinpath(top, "paper.tex")))
             DataPipeline.finalise(handle)
-            @test versions() == ["0.0.1", "0.0.3"]
+            @test versions() == ["0.0.1", "0.0.2", "0.0.3"]
             @test read(beside, String) == "Not the rehearsal's.\n"
             close(repo)
         end

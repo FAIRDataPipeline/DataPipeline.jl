@@ -35,6 +35,15 @@ function job_folder(name::AbstractString)
     return dirname(path)
 end
 
+# What `f` prints
+function printed_by(f::Function)
+    return mktemp() do path, io
+        redirect_stdout(f, io)
+        flush(io)
+        return read(path, String)
+    end
+end
+
 # How many rows the registry holds in each table a rehearsal must leave alone
 tables = ("code_run", "data_product", "object", "storage_location",
           "object_component", "external_object", "author", "issue",
@@ -138,9 +147,9 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     @test isnothing(handle.inputs[(external, nothing)]["component_url"])
     @test counts() == before
 
-    # finalise collects the outputs by namespace, name and version, the
-    # unchanged one too, with the working config beside them, registers
-    # nothing, and ends the session's rehearsal
+    # finalise collects the outputs by namespace, name and version, one
+    # identical to a version registered too, with the working config beside
+    # them, registers nothing, and ends the session's rehearsal
     @test DataPipeline.finalise(handle) == outputs
     placed = joinpath(outputs, namespace, whole, "0.0.1.txt")
     @test read(placed, String) == "a rehearsed file $uid\n"
@@ -148,8 +157,8 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     @test isfile(joinpath(outputs, namespace, estimate, "0.0.1.toml"))
     @test isfile(joinpath(outputs, "PSU", "SEIRS_model", "parameters",
                           "1.0.1.csv"))
-    @test haskey(handle.unchanged, (again, nothing))
-    @test !haskey(handle.outputs, (again, nothing))
+    @test handle.identical == Dict((again, nothing) => "1.0.0")
+    @test haskey(handle.outputs, (again, nothing))
     @test isfile(joinpath(outputs, "config.yaml"))
     @test !isfile(path)
     @test !isfile(copied)
@@ -166,7 +175,7 @@ Test.@testset "rehearse() and a rehearsal's finalise" begin
     @test occursin("rehearse again", err.value.msg)
 end
 
-Test.@testset "a rehearsal writing a version that exists" begin
+Test.@testset "a rehearsal writing a version that exists, or identical files" begin
     versioned = "rehearse/versions/$uid"
     placed = "rehearse/placed/$uid"
     # Two versions of a name, recorded
@@ -180,44 +189,86 @@ Test.@testset "a rehearsal writing a version that exists" begin
         write(link_write!(recorded, versioned), "$text $uid\n")
         DataPipeline.finalise(recorded)
     end
-    # A rehearsal that writes the first version again, with a new file whose
-    # label sorts before it, which finalise places first
-    function rehearsing(name)
+    # A rehearsal that writes the name as `version`, beside a new name
+    function rehearsing(name, version)
         job = job_folder(name)
         working = joinpath(job, "config.yaml")
-        DataPipeline._addwrite(working, "reproduced", "the first version",
+        DataPipeline._addwrite(working, "versioned", "a version",
                                file_type = "txt", use_data_product = versioned,
-                               use_version = "0.0.1")
+                               use_version = version)
         DataPipeline._addwrite(working, "placed", "a new file",
                                file_type = "txt", use_data_product = placed,
                                use_version = "0.0.1")
         DataPipeline._replrehearse(job, outputs = mktempdir())
-        handle = DataPipeline.initialise()
-        write(link_write!(handle, "placed"), "placed $name $uid\n")
-        return handle
+        return DataPipeline.initialise()
     end
     before = counts()
 
-    # The same bytes are a reproduction, though not of the highest version,
-    # placed as that version
-    handle = rehearsing("reproduced")
-    write(link_write!(handle, "reproduced"), "first $uid\n")
-    DataPipeline.finalise(handle)
-    @test haskey(handle.unchanged, ("reproduced", nothing))
-    @test read(joinpath(handle.mode.outputs, namespace, versioned, "0.0.1.txt"),
+    # A version that exists is refused at the call, leaving the rehearsal to
+    # be discarded
+    handle = rehearsing("versions-existing", "0.0.1")
+    err = @test_throws ReadWriteException link_write!(handle, "versioned")
+    @test startswith(err.value.msg,
+                     "$namespace:$versioned@v0.0.1 is registered already")
+    @test isempty(handle.outputs)
+    DataPipeline.discard(handle)
+
+    # The bytes of a version, though not the highest, are identical to it,
+    # said as the output is placed and beside it, at the version written
+    handle = rehearsing("versions-identical", "0.0.3")
+    write(link_write!(handle, "versioned"), "first $uid\n")
+    write(link_write!(handle, "placed"), "placed $uid\n")
+    said = printed_by(() -> DataPipeline.finalise(handle))
+    @test occursin("data product identical to v0.0.1: $namespace:$versioned@v0.0.3",
+                   said)
+    @test occursin("0.0.3.txt, identical to v0.0.1", said)
+    @test handle.identical == Dict(("versioned", nothing) => "0.0.1")
+    @test read(joinpath(handle.mode.outputs, namespace, versioned, "0.0.3.txt"),
                String) == "first $uid\n"
     @test isfile(joinpath(handle.mode.outputs, namespace, placed, "0.0.1.txt"))
 
-    # Other bytes are refused at finalise, before anything is placed, leaving
-    # the rehearsal to be discarded
-    handle = rehearsing("changed")
-    write(link_write!(handle, "reproduced"), "second $uid\n")
-    err = @test_throws ReadWriteException DataPipeline.finalise(handle)
-    @test startswith(err.value.msg,
-                     "$namespace:$versioned@v0.0.1 is registered already")
-    @test isempty(readdir(handle.mode.outputs))
-    @test !current().ended
-    DataPipeline.discard(handle)
+    # Where every output is identical, a recorded run is said to need no
+    # adding and pushing
+    handle = rehearsing("versions-all", "0.0.3")
+    write(link_write!(handle, "versioned"), "second $uid\n")
+    @test_logs (:info, r"every output of this rehearsal is identical") match_mode=:any DataPipeline.finalise(handle)
+    @test handle.identical == Dict(("versioned", nothing) => "0.0.2")
+    @test counts() == before
+end
+
+Test.@testset "a rehearsal whose checkout moves" begin
+    # A clone of its own, its file naming the run, from which a rehearsal
+    # writes one output while the file is changed
+    dir = mktempdir()
+    git = DataPipeline.LibGit2
+    repo = git.init(dir)
+    write(joinpath(dir, "tracked.txt"), "tracked $uid\n")
+    git.add!(repo, "tracked.txt")
+    signature = git.Signature("Test", "test@example.com")
+    sha = string(git.commit(repo, "tracked", author = signature,
+                            committer = signature))
+    close(repo)
+    working = DataPipeline._createconfig(joinpath("coderun", datetime,
+                                                  "rehearse-checkout",
+                                                  "config.yaml"),
+                                         latest_commit = sha, local_repo = dir,
+                                         remote_repo = "https://github.com/FAIRDataPipeline/rehearse-checkout-$uid.git")
+    whole = "rehearse/checkout/$uid"
+    DataPipeline._addwrite(working, whole, "a file written as it moves",
+                           file_type = "txt", use_version = "0.0.1")
+    before = counts()
+    DataPipeline._replrehearse(dirname(working), outputs = mktempdir())
+    handle = DataPipeline.initialise()
+    write(link_write!(handle, whole), "a checkout moving $uid\n")
+    write(joinpath(dir, "tracked.txt"), "changed $uid\n")
+
+    # Warned of and printed as what a recorded run would raise, and nothing
+    # registered
+    said = @test_logs (:warn,
+                       r"tracked files changed between the run opening and ending: tracked\.txt\): a recorded run would raise an issue on its outputs") match_mode=:any printed_by(() -> DataPipeline.finalise(handle))
+    @test occursin("on its outputs: " *
+                   DataPipeline._movedcheckoutissue(["tracked files changed between the run opening and ending: tracked.txt"]),
+                   said)
     @test counts() == before
 end
 
@@ -344,9 +395,8 @@ Test.@testset "a rehearsal of a run with no description" begin
 end
 
 Test.@testset "a file given by path, rehearsed twice into one folder" begin
-    # Each rehearsal hard-links the file into the data store where it can, and
-    # moves that to the outputs folder, so that the second's output is the
-    # very file the first left there
+    # Each rehearsal copies the file into the data store and moves the copy to
+    # the outputs folder, the second's replacing the first's
     job = job_folder("twice")
     working = joinpath(job, "config.yaml")
     whole = "rehearse/twice/$uid"
@@ -362,6 +412,7 @@ Test.@testset "a file given by path, rehearsed twice into one folder" begin
         @test DataPipeline.finalise(handle) == outputs
         @test !isfile(staged)
         @test read(rehearsed, String) == "rehearsed twice $uid\n"
+        @test !samefile(rehearsed, file)
     end
 end
 
@@ -520,15 +571,6 @@ end
 # ... and what one before 0.11.0 says to the session commands: a usage error
 no_sessions = "[ \"\$1 \$2\" = \"registry session\" ] && " *
               "{ echo \"Error: No such command 'session'.\" >&2; exit 2; }\n"
-
-# What `f` prints
-function printed_by(f::Function)
-    return mktemp() do path, io
-        redirect_stdout(f, io)
-        flush(io)
-        return read(path, String)
-    end
-end
 
 Test.@testset "rehearse() in a block" begin
     # Made first: making a job folder forgets the session's run

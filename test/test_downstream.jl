@@ -35,12 +35,17 @@ function file_of(text::AbstractString)
 end
 
 # A code run that writes each of these names as text at a version and reads
-# each of `reads` at the version given, from a commit and a remote
+# each of `reads` at the version given, from a commit and a remote; from a
+# commit other than the checkout's, with no clone, so that its checkout is not
+# found to be at another commit, which would raise an issue on its outputs
 function run_with(writes::Pair{String, String}...;
                   reads::Vector{Pair{String, String}} = Pair{String, String}[],
                   from::String = commit, remote::String = remote_repo)
+    clone = from == commit ? launch.config["run_metadata"]["local_repo"] :
+            outside
     config = DataPipeline._createconfig(cpath, latest_commit = from,
-                                        remote_repo = remote)
+                                        remote_repo = remote,
+                                        local_repo = clone)
     for (name, version) in writes
         DataPipeline._addwrite(config, name, "downstream description",
                                file_type = "txt", use_version = version)

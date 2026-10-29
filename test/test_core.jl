@@ -54,6 +54,18 @@ Test.@testset "a registry that does not answer" begin
     @test occursin("`fair registry start`", err.value.msg)
 end
 
+Test.@testset "what counts as an interrupt" begin
+    # A Ctrl-C's exception, which a `catch` handling everything else rethrows,
+    # and not anything else that may be thrown
+    @test DataPipeline._interrupted(InterruptException())
+    @test !DataPipeline._interrupted(ErrorException("not an interrupt"))
+    @test !DataPipeline._interrupted("not even an exception")
+    # From Julia 1.14 a SIGINT reaching a waiting task is a cancellation request
+    if isdefined(Base, :CancellationRequest)
+        @test DataPipeline._interrupted(Base.CancellationRequest(0x01))
+    end
+end
+
 Test.@testset "a registry that sends nothing" begin
     # One that takes the connection and sends nothing is given up on, once,
     # after the time allowed with nothing to read, whatever the method, as not
