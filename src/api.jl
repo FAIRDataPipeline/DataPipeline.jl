@@ -458,7 +458,9 @@ end
 Return a path to write a `write:` data product of the working config to, in
 the data store, recording it as an output. `finalise` names the file by its
 hash and registers it, replacing `\${{RUN_ID}}` in the registered name with
-the code run's uuid. A file written there is never copied.
+the code run's uuid. A file written there is never copied. It is registered
+public, or not, as the entry's `public` says, else the run's
+`run_metadata.public`.
 
 `path` names a file that exists already, to be registered as the data product
 in place of one the caller writes. A copy of it is put in the data store - on
@@ -654,7 +656,8 @@ file it registers as an output is derived from it - and nothing is returned.
 With a `path` it is that file, put in the data store as [`link_write!`](@ref)
 puts one, a copy - on macOS a clone where the file system makes one - and its
 path there is returned; the file at `path` may be written to afterwards
-without changing the registered file.
+without changing the registered file. It is registered public, or not, as the
+run's `run_metadata.public` says.
 
 The namespace is by default the run's default input namespace. The version
 is the data product's in the pipeline - the source's own is

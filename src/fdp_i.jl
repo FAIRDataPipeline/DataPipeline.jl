@@ -801,7 +801,7 @@ function _resolvewrite(handle::DataRegistryHandle, data_product::String,
     use_component = get(use, "component", component)
     isnothing(use_component) || _checkcomponent(use_component)
     use_version = use["version"]
-    public = get(use, "public", handle.config["run_metadata"]["public"])
+    public = get(wmd, "public", handle.config["run_metadata"]["public"])
 
     # A data product written to earlier in this code run keeps its file; one
     # written first must be a new version
