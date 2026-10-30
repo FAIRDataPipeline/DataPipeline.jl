@@ -979,6 +979,23 @@ function _issuecomponents(registry::RegistryEndpoint,
     return [_componenturl(registry, dp_entry["object"], target.component)]
 end
 
+function _issuecomponents(handle::DataRegistryHandle, target::_FileTarget)
+    return _issuecomponents(handle.registry, target)
+end
+# The whole component of every object the registry holds a file's bytes at, of
+# which there must be some
+function _issuecomponents(registry::RegistryEndpoint, target::_FileTarget)
+    objects = [object["url"]
+               for location in _getentries(registry, "storage_location",
+                                           Dict("hash" => target.hash))
+               for object in _getentries(registry, "object",
+                                         Dict("storage_location" =>
+                                                  _extractid(location["url"])))]
+    isempty(objects) &&
+        throw(ReadWriteException("the registry holds no record of a file with the bytes of $(target.path), so there is nothing to raise the issue on"))
+    return [_wholeobjectcomponent(registry, object) for object in objects]
+end
+
 # The whole components of the objects standing for the registered commits a
 # selection chooses, of which there must be some
 function _repositorycomponents(registry::RegistryEndpoint,
@@ -1388,14 +1405,16 @@ function _registerissues(handle::DataRegistryHandle)
 end
 
 # Post a queued issue on the components its targets resolve to, and on the
-# other versions holding the same bytes if it asks, warning of them if not
+# other versions holding the same bytes if it asks, warning of those it is not
+# on already if not
 function _postpendingissue(registry::RegistryEndpoint, issue::PendingIssue,
                            components::Vector{String})
     components = copy(components)
     for component in copy(components)
         for (label, other) in _samebytesversions(registry, component)
+            other in components && continue
             if issue.all_versions
-                other in components || push!(components, other)
+                push!(components, other)
             else
                 @warn "$label has the same bytes as the data product the issue is on: raise the issue on every such version too with `all_versions = true`"
             end

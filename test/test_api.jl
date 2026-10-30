@@ -607,6 +607,99 @@ Test.@testset "raise_issue!() on bytes other versions share" begin
           Set([whole(second_y), whole(first_y)])
 end
 
+# A drive letter's colon is tested only on Windows, where the file's own path
+# has one
+Test.@testset "raise_issue!() on a file" begin
+    registry = handle.registry
+    name = "data_product/on_a_file/$uid"
+    bytes = "an issue on a file $uid\n"
+    # The file's bytes registered as two versions of one data product and as
+    # another data product, each with a component of its own
+    function writing(written, use_version)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, written, "on a file description",
+                               file_type = "txt", use_version = use_version)
+        run = DataPipeline.initialise(config, config)
+        write(link_write!(run, written), bytes)
+        DataPipeline.finalise(run)
+        return run.outputs[(written, nothing)]["component_url"]
+    end
+    components = Set([writing(name, "0.0.1"), writing(name, "0.0.2"),
+                         writing("$name/other", "0.0.1")])
+    file = joinpath(mktempdir(), "on a file.txt")
+    write(file, bytes)
+    on(issue) = Set(DataPipeline._getentry(registry,
+                                           URIs.URI(issue))["component_issues"])
+
+    # A path that exists is a file, told before a colon, which a Windows path
+    # holds; shown by its path
+    @test DataPipeline._astarget(file) isa DataPipeline._FileTarget
+    @test sprint(show, DataPipeline._astarget(file)) == "the file at $file"
+    @test DataPipeline._astarget("testing:$name@v0.0.1") isa
+          DataPipeline.ExistingDataProduct
+    @test DataPipeline._astarget("$name/absent") isa
+          DataPipeline.ConfigDataProduct
+
+    # Outside a run: registered at once on every object with the file's
+    # bytes, and of none of them warned
+    @test on(@test_logs(raise_issue!(registry, file, "outside a run $uid"))) ==
+          components
+
+    # In a run: queued, the bytes taken at the call, and registered at
+    # finalise on the same objects and on the run's own output with them
+    config = DataPipeline._createconfig(cpath)
+    DataPipeline._addwrite(config, name, "on a file description",
+                           file_type = "txt", use_version = "0.0.3")
+    run = DataPipeline.initialise(config, config)
+    write(link_write!(run, name), bytes)
+    raise_issue!(run, file, "in a run $uid")
+    @test only(only(run.issues).targets).hash ==
+          DataPipeline._getfilehash(file)
+    write(file, "changed after the call $uid\n")
+    @test_logs (:info, r"every output of this code run is identical") DataPipeline.finalise(run)
+    issue = DataPipeline._getentry(registry, "issue",
+                                   Dict("description" => "in a run $uid"))
+    @test Set(issue["component_issues"]) ==
+          union(components, [run.outputs[(name, nothing)]["component_url"]])
+    write(file, bytes)
+
+    # Refused: `all_versions` with a file, and a file the registry holds no
+    # record of, outside a run and at the call in one; and a path that is also
+    # a data product's name in the working config
+    err = @test_throws ArgumentError raise_issue!(registry, file,
+                                                  "every version $uid",
+                                                  all_versions = true)
+    @test occursin("takes no `all_versions = true`", err.value.msg)
+    unknown = joinpath(mktempdir(), "unknown.txt")
+    write(unknown, "never registered $uid\n")
+    err = @test_throws DataPipeline.ReadWriteException raise_issue!(registry,
+                                                                    unknown,
+                                                                    "unknown $uid")
+    @test occursin("holds no record of a file with the bytes of $unknown",
+                   err.value.msg)
+    cd(mktempdir()) do
+        mkpath(dirname(name))
+        write(name, bytes)
+        config = DataPipeline._createconfig(cpath)
+        DataPipeline._addwrite(config, name, "on a file description",
+                               file_type = "txt", use_version = "0.0.4")
+        run = DataPipeline.initialise(config, config)
+        err = @test_throws ArgumentError raise_issue!(run, name, "both $uid")
+        @test occursin("'$name' is both a file and the name of a data product",
+                       err.value.msg)
+        @test_throws DataPipeline.ReadWriteException raise_issue!(run, unknown,
+                                                                  "unknown $uid")
+        @test isempty(run.issues)
+        DataPipeline.finalise(run)
+        # A file named with a colon is a file, where one can be
+        if !Sys.iswindows()
+            write("testing:$uid@v0.0.1", bytes)
+            @test DataPipeline._astarget("testing:$uid@v0.0.1") isa
+                  DataPipeline._FileTarget
+        end
+    end
+end
+
 Test.@testset "raise_issue!()" begin
     written = "data_product/link_write/$uid"
     estimates = "data_product/write_estimate/$uid"

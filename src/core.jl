@@ -301,8 +301,23 @@ struct ExistingDataProduct <: AbstractIssueTarget
     end
 end
 
-# What `raise_issue!` takes as a target: a target, or a data product's name
-# or a commit selection, which stand for one
+# A target for `raise_issue!` given as the path of a file that exists, `given`
+# as written: every object the registry holds its bytes at, by their SHA-1,
+# taken when the issue is raised
+struct _FileTarget <: AbstractIssueTarget
+    given::String
+    path::String
+    hash::String
+
+    function _FileTarget(given::AbstractString)
+        return new(String(given), abspath(given), _getfilehash(given))
+    end
+end
+
+Base.show(io::IO, target::_FileTarget) = print(io, "the file at ", target.path)
+
+# What `raise_issue!` takes as a target: a target, or a data product's name,
+# a file's path or a commit selection, which stand for one
 const _IssueTargetArgument = Union{AbstractIssueTarget, AbstractString,
                                    AbstractCommitSelection}
 

@@ -924,6 +924,8 @@ end
                  all_versions = false)
     raise_issue!(target, description; remote = nothing,
                  severity = $DEFAULT_ISSUE_SEVERITY, all_versions = false)
+    raise_issue!(path, description; remote = nothing,
+                 severity = $DEFAULT_ISSUE_SEVERITY)
     raise_issue!(registry, target, description;
                  severity = $DEFAULT_ISSUE_SEVERITY, all_versions = false)
 
@@ -931,12 +933,18 @@ Raise an issue with one thing, or with several at once as one registry issue.
 A target is an [`AbstractIssueTarget`](@ref) - [`WorkingConfig`](@ref),
 [`SubmissionScript`](@ref), [`CodeRepository`](@ref),
 [`ConfigDataProduct`](@ref) or [`ExistingDataProduct`](@ref) - or a `String`:
-a data product of this run by its config name, as
-[`ConfigDataProduct`](@ref) names one, or a registered data product as
-`namespace:name@version` (`namespace:name` for its newest version), as
-[`ExistingDataProduct`](@ref) names one; or an
+the path of a file that exists, as [`identify`](@ref) takes one; a data
+product of this run by its config name, as [`ConfigDataProduct`](@ref) names
+one; or a registered data product as `namespace:name@version` (`namespace:name`
+for its newest version), as [`ExistingDataProduct`](@ref) names one; or an
 [`AbstractCommitSelection`](@ref), which stands for the
 [`CodeRepository`](@ref) of the commits it selects.
+
+An issue on a file is on every object the registry holds its bytes at - every
+version of every data product with them - as they are when the issue is
+registered, the file's bytes being taken when it is raised. The registry must
+hold the file already, and a path that is also the name of a data product in
+the working config is an `ArgumentError`, being both.
 `severity` is an integer, larger for worse, by default the registry's own
 default. Issues are queued in the handle
 and registered by [`finalise`](@ref), so an output can be named before it
@@ -946,15 +954,17 @@ A data product's bytes may be registered as other versions of the same data
 product too, which the issue would then not reach. `finalise` looks for them,
 and warns of any; with `all_versions = true` it raises the issue on every
 such version as well, as one issue over their components. There is no
-prompt, since a script may run where no one can answer.
+prompt, since a script may run where no one can answer. An issue on a file is
+on every such version already, so takes no `all_versions = true`.
 
 Outside a run - given a registry, or none for the CLI's local registry or its
 remote registry named `remote` - the issue is registered at once, and its URL
 returned, which [`downstream`](@ref) takes as `issue`. Only a target that names
-what it is on without a run can be raised so: an
+what it is on without a run can be raised so: a file, an
 [`ExistingDataProduct`](@ref), or a string of its form, and commits - an
 [`AbstractCommitSelection`](@ref), or a `CodeRepository` given one; any other
-is an `ArgumentError`. So
+is an `ArgumentError`. So `raise_issue!("results/table.csv", "Wrong units")`
+raises an issue on every version registered with that file's bytes. So
 `raise_issue!(AncestorCommits(of = "v1.2", including = false), "Fixed in v1.2")`
 raises an issue on the code that came before `v1.2`. Registering needs the registry's token, which
 [`RegistryEndpoint`](@ref) reads from the CLI's configuration. While the
@@ -964,11 +974,12 @@ nothing is registered, and `nothing` is returned.
 # Arguments
 - `handle::DataRegistryHandle`: the code run the issue is raised in.
 - `registry::RegistryEndpoint`: the registry to raise it in, outside a run.
-- `target`, `targets`: what the issue is on, as above.
+- `target`, `targets`, `path`: what the issue is on, as above.
 - `description::String`: the issue.
 - `severity::Integer`: larger for worse.
 - `all_versions::Bool`: whether to raise it on the other versions of a data
-  product holding the same bytes too.
+  product holding the same bytes too; not with a file, whose issue is on them
+  already.
 - `remote`: with no registry given, the remote registry of that name in the
   current project's CLI configuration, else the CLI's local registry.
 """
@@ -977,6 +988,7 @@ function raise_issue!(handle::DataRegistryHandle, targets::AbstractVector,
                       severity::Integer = DEFAULT_ISSUE_SEVERITY,
                       all_versions::Bool = false)
     resolved = AbstractIssueTarget[_astarget(target) for target in targets]
+    _checkallversions(resolved, all_versions)
     for target in resolved
         _checktarget(handle, target)
     end
@@ -995,6 +1007,7 @@ function raise_issue!(registry::RegistryEndpoint, targets::AbstractVector,
                       severity::Integer = DEFAULT_ISSUE_SEVERITY,
                       all_versions::Bool = false)
     resolved = AbstractIssueTarget[_astarget(target) for target in targets]
+    _checkallversions(resolved, all_versions)
     for target in resolved
         _checkoutsiderun(target)
     end
@@ -1031,14 +1044,25 @@ function raise_issue!(target::_IssueTargetArgument, description::String;
     end
 end
 
-# A bare string names a data product: of this run by its config name, or a
-# registered one as `namespace:name@version`, which no config name looks like;
-# a commit selection names the commits of a code repository
+# A bare string names a file where one exists, told first since a Windows path
+# holds a colon; else a data product: of this run by its config name, or a
+# registered one as `namespace:name@version`, which no config name looks like.
+# A commit selection names the commits of a code repository
 _astarget(target::AbstractIssueTarget) = target
 _astarget(commits::AbstractCommitSelection) = CodeRepository(commits)
-function _astarget(data_product::AbstractString)
-    return occursin(':', data_product) ? ExistingDataProduct(data_product) :
-           ConfigDataProduct(data_product)
+function _astarget(named::AbstractString)
+    isfile(named) && return _FileTarget(named)
+    return occursin(':', named) ? ExistingDataProduct(named) :
+           ConfigDataProduct(named)
+end
+
+# Refuse `all_versions = true` for an issue on a file, which is on every
+# version holding its bytes already
+function _checkallversions(targets::AbstractVector{AbstractIssueTarget},
+                           all_versions::Bool)
+    all_versions && any(target -> target isa _FileTarget, targets) &&
+        throw(ArgumentError("an issue on a file is on every version holding its bytes already, so takes no `all_versions = true`"))
+    return nothing
 end
 
 # A data product named by its config name must be in the working config, and
@@ -1052,11 +1076,23 @@ function _checktarget(handle::DataRegistryHandle, target::ConfigDataProduct)
     end
     return throw(ConfigFileException("'$(target.data_product)' not found in config file"))
 end
+# A file must be one the registry holds, and its path no data product's name in
+# the working config, which the path would then stand for as well
+function _checktarget(handle::DataRegistryHandle, target::_FileTarget)
+    for section in ("read", "write")
+        any(entry["data_product"] == target.given
+            for entry in get(handle.config, section, [])) &&
+            throw(ArgumentError("'$(target.given)' is both a file and the name of a data product in the working config: name the data product as ConfigDataProduct(\"$(target.given)\"), or the file by another path to it"))
+    end
+    _issuecomponents(handle.registry, target)
+    return nothing
+end
 _checktarget(::DataRegistryHandle, ::AbstractIssueTarget) = nothing
 
 # Throw unless a target names what it is on without a run, as an issue raised
 # outside one needs
 _checkoutsiderun(::ExistingDataProduct) = nothing
+_checkoutsiderun(::_FileTarget) = nothing
 function _checkoutsiderun(target::CodeRepository)
     isnothing(target.commits) &&
         throw(ArgumentError("CodeRepository() is the commit of a code run: outside a run, select commits, such as AncestorCommits()"))
