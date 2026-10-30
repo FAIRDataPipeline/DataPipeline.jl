@@ -254,6 +254,170 @@ end
         close(repo)
     end
 
+    # Not tested: two registries that are not one, so a lookup's URLs that
+    # differ between them, and which registry the config, placement and
+    # previous-authors checks take an answer from where the two differ; what
+    # each knows of a file is told apart here by changing one identification
+    @testset "the local registry and the remote taken together" begin
+        # A file from the pipeline, registered by a run with an issue on it,
+        # and a newer version with other bytes
+        top = mktempdir()
+        write(joinpath(top, "article.tex"), "\\documentclass{article}\n")
+        paper = DataPipeline.LaTeXPaper(joinpath(top, "article.tex"))
+        file = "pipeline/table.txt"
+        mkpath(joinpath(top, "pipeline"))
+        write(joinpath(top, file), "together $uid\n")
+        name = "papers/together/$uid"
+        repository = "https://example.org/papers/together-$uid.git"
+        made = nothing
+        for (version, text) in (("0.0.1", "together $uid\n"),
+            ("0.0.2", "together, newer $uid\n"))
+            config = DataPipeline._createconfig(cpath("together-$version"),
+                                                remote_repo = repository)
+            DataPipeline._addwrite(config, name, "a table for the paper",
+                                   file_type = "txt", use_version = version)
+            handle = DataPipeline.initialise(config, config)
+            given = joinpath(mktempdir(), "table.txt")
+            write(given, text)
+            link_write!(handle, name, path = given)
+            version == "0.0.1" && raise_issue!(handle, name, "on it $uid")
+            DataPipeline.finalise(handle)
+            version == "0.0.1" && (made = handle.code_run_uuid)
+        end
+        label = "$namespace:$name@v0.0.1"
+        held = DataPipeline._identifyfile(registry, joinpath(top, file),
+                                          superseded = true)
+        # The remote: the same registry by another name, told apart by it
+        remote = DataPipeline.RegistryEndpoint(replace(registry.url,
+                                                       "127.0.0.1" => "localhost"))
+        registries = [:local => registry, :remote => remote]
+        # An identification with its data products, or their issues, changed
+        function altered(id; records = identity, issues = identity)
+            objects = [DataPipeline.RegisteredObject(object.description,
+                                                     object.url, object.root,
+                                                     object.local_root,
+                                                     object.stored_path,
+                                                     records(object.data_products),
+                                                     issues(object.issues))
+                       for object in id.objects]
+            return DataPipeline.FileIdentification(id.path, id.hash, objects,
+                                                   id.provenance, id.upstream,
+                                                   id.outdated)
+        end
+        older(records) = [DataPipeline.DataProductRecord(record.namespace,
+                                                         record.name,
+                                                         record.version,
+                                                         record.version,
+                                                         record.url,
+                                                         record.external_object,
+                                                         record.source)
+                          for record in records]
+        nothing_held(id) = altered(id,
+                                   records = _ -> DataPipeline.DataProductRecord[])
+        # What `check_paper` says of the file, each registry identifying it as
+        # given
+        function checked(local_id, remote_id)
+            said = (actions = String[], notes = String[], unchecked = String[],
+                    unregistered = String[])
+            identify(asked, path; superseded) = asked === remote ? remote_id :
+                                                local_id
+            DataPipeline._checkpipelinefile!(said.actions, said.notes,
+                                             said.unchecked, said.unregistered,
+                                             registries, paper, top, file;
+                                             identify)
+            return said
+        end
+        newer = "$file is $label, and v0.0.2 is newer"
+        issue = "$file: issue (severity 1) on whole file: on it $uid"
+
+        # Both holding all of it: said once, and of neither alone
+        both = checked(held, held)
+        @test any(startswith("$newer - `update_paper(newest = true)`"),
+                  both.actions)
+        @test count(==(issue), both.notes) == 1
+        @test !any(contains("alone"), vcat(both.actions, both.notes))
+        @test !any(contains("does not hold"), both.actions)
+        # An issue, or the newer version, that one holds alone is said so
+        @test issue * " (in the local registry alone)" in
+              checked(held, altered(held, issues = _ -> [])).notes
+        @test issue * " (in the remote alone)" in
+              checked(altered(held, issues = _ -> []), held).notes
+        @test any(startswith("$newer (in the remote alone) - "),
+                  checked(altered(held, records = older), held).actions)
+        @test any(startswith("$newer (in the local registry alone) - "),
+                  checked(held, altered(held, records = older)).actions)
+        # A version one lacks, with how to bring it there: from the remote by
+        # a pull, and to it by the run that made it, in its repository - as
+        # the registry first held that at the commit, so on a second run of
+        # the suite from one commit the first's
+        @test "the local registry does not hold $file, $label - `fair pull article.yaml` pulls it" in
+              checked(nothing_held(held), held).actions
+        maker = DataPipeline._makingrun(registry, namespace, name, v"0.0.1")
+        @test maker.uuid == made
+        @test startswith(maker.repository,
+                         "https://example.org/papers/together-")
+        @test "the remote registry at $(remote.url) does not hold $file, $label - push it with `fair add $made`, then `fair push`, in the project of $(maker.repository), whose run made it" in
+              checked(held, nothing_held(held)).actions
+        # Neither: registered as no data product
+        @test checked(nothing_held(held), nothing_held(held)).unregistered ==
+              [file]
+        # One that answers with an error is not checked, and the other taken
+        refused = DataPipeline.HTTP.StatusError(500,
+                                                DataPipeline.HTTP.Response(500))
+        said = (actions = String[], notes = String[], unchecked = String[],
+                unregistered = String[])
+        DataPipeline._checkpipelinefile!(said.actions, said.notes,
+                                         said.unchecked, said.unregistered,
+                                         registries, paper, top, file;
+                                         identify = (asked, path;
+                                                     superseded) -> asked ===
+                                                                    remote ?
+                                                                    throw(refused) :
+                                                                    held)
+        @test only(said.unchecked) ==
+              "what the remote registry at $(remote.url) knows of $file: the registry at $(remote.url) answered with HTTP status 500"
+        @test count(==(issue), said.notes) == 1
+        @test !any(contains("does not hold"), said.actions)
+
+        # What a config would pin: the version the file is, where the remote
+        # holds it; else refused, with how to push it, unless the local
+        # registry is taken alone
+        pinned = DataPipeline._pipelineentries(registries, top, [file])
+        @test only(pinned.entries).version == v"0.0.1" &&
+              only(pinned.entries).current
+        @test only(DataPipeline._pipelineentries(registries, top, [file],
+                                                 newest = true).entries).version ==
+              v"0.0.2"
+        lacking = DataPipeline._pipelineentries(registries, top, [file],
+                                                holds = (asked,
+                                                         args...) -> asked !==
+                                                                     remote)
+        @test isempty(lacking.entries)
+        @test only(lacking.problems) ==
+              "the remote registry at $(remote.url) does not hold $label, for $file - push it with `fair add $made`, then `fair push`, in the project of $(maker.repository), whose run made it, or pass `remote = nothing` to take the local registry alone"
+        @test only(DataPipeline._pipelineentries([:local => registry], top,
+                                                 [file],
+                                                 holds = (args...) -> false).entries).version ==
+              v"0.0.1"
+
+        # A data product no run made is pushed by itself
+        object = DataPipeline._createentry(registry, "object",
+                                           Dict("description" => "unmade",
+                                                "authors" => []))
+        DataPipeline._createentry(registry, "data_product",
+                                  Dict("name" => "$name/unmade",
+                                       "version" => "0.0.1",
+                                       "object" => object["url"],
+                                       "namespace" =>
+                                           DataPipeline._geturl(registry,
+                                                                "namespace",
+                                                                Dict("name" =>
+                                                                         namespace))))
+        @test DataPipeline._pushadvice(registry, namespace, "$name/unmade",
+                                       v"0.0.1") ==
+              "`fair add $namespace:$name/unmade@v0.0.1`, then `fair push`"
+    end
+
     if !can_build("pdflatex")
         @info "latexmk or pdflatex not found: not building a paper in a run"
     else
@@ -820,7 +984,12 @@ end
                 said = filter(contains("answered with HTTP status 500"),
                               check.unchecked)
                 @test !isempty(check.uses.pipeline)
-                @test count(contains(" is registered as"), said) ==
+                @test count(contains("what the remote registry at http://127.0.0.1:$port/api/ knows of "),
+                            said) == length(check.uses.pipeline)
+                # ... each file's lookup in it, the local registry's being
+                # taken
+                @test count(contains(" its newest version"), check.notes) +
+                      count(contains(" is newer"), check.actions) ==
                       length(check.uses.pipeline)
                 @test any(contains("the config's read: block"), said)
                 @test any(contains("which files in and out of the pipeline folder"),
@@ -828,6 +997,13 @@ end
                 @test any(contains("how the authors differ"), said)
                 @test all(contains("127.0.0.1:$port"), said)
                 @test !isnothing(check.metadata)
+                # ... and `update_paper`, which needs it, fails, the config
+                # left as it was
+                before = read(paper.config, String)
+                @test_throws DataPipeline.HTTP.StatusError DataPipeline.update_paper(registry,
+                                                                                     paper,
+                                                                                     remote = failing)
+                @test read(paper.config, String) == before
             finally
                 close(server)
             end

@@ -259,17 +259,23 @@ raise_issue!(handle, "SEIRS_model/parameters", "Rates are per day, not per week"
 raise_issue!(handle, DataPipeline.CodeRepository(), "Fixed in the next commit")
 ```
 
-Outside a run, an issue on something registered already - a data product, or
-commits of a code repository - is registered at once. A selection of commits
-stands for the code at each of them, so a problem fixed in a release is raised
-on everything before it in one call (see [Releases of the
-code](@ref)):
+Outside a run, an issue on something registered already - a data product, a
+file, or commits of a code repository - is registered at once. A file is
+taken by its bytes, as `identify` takes it, so the issue is on every version
+of every data product registered with them. A selection of commits stands for
+the code at each of them, so a problem fixed in a release is raised on
+everything before it in one call (see [Releases of the code](@ref)):
 
 ```julia
 raise_issue!("PSU:SEIRS_model/parameters@v1.0.0", "Rates are per day, not per week")
+raise_issue!("data/parameters.csv", "Rates are per day, not per week")
 raise_issue!(DataPipeline.AncestorCommits(of = "v1.2.0", including = false),
              "Bug X, fixed in v1.2.0")
 ```
+
+An issue is raised in the local registry, or with `remote = "origin"` in the
+project's remote; `fair push` (in `fair-cli` 0.11.0) carries none, so one
+raised locally stays there.
 
 ```@docs
 raise_issue!

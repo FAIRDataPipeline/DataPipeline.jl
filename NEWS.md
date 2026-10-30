@@ -1,5 +1,17 @@
 # NEWS
 
+- v0.59.1
+  - `DataPipeline.check_paper`, `update_paper` and `setup_paper` identify the
+    paper's files in the local registry and the remote together: the newest
+    version and every issue either holds, what one holds alone said so, and a
+    version the remote lacks given the `fair add` and `fair push` that send it.
+  - `raise_issue!` takes the path of a file, as `identify` does: the issue is on
+    every object registered with its bytes, every version of every data product,
+    in a run or outside one.
+  - An output registration as public (or not) is no longer ignored,
+    so an output marked `public: false` in a public run is registered
+    private, and `fair push` will not upload its file.
+
 - v0.59.0
   - Breaking changes:
     - Every output of a run is registered as a new version, its bytes stored

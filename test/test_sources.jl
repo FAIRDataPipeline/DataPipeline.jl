@@ -1001,6 +1001,45 @@ Test.@testset "link_register!() with a file" begin
     @test registered_versions(fetched) == ["0.0.1", "0.0.2", "0.0.3", "0.0.4"]
 end
 
+Test.@testset "a file is public as its write entry, else the run, says" begin
+    # The CLI writes `public` on a `write:` entry, giving one without it the
+    # run's, and `fair push` uploads the file of a public storage location
+    # alone. Each run here has an exact entry and a pattern saying the
+    # opposite of the run, an exact entry saying nothing, and a file
+    # `link_register!` registers, which has no entry. What it cannot show:
+    # what `fair push` does with either
+    function public_of(name)
+        object = object_of(registered(name, "0.0.1"))
+        return entry(object["storage_location"])["public"]
+    end
+    for run_public in (true, false)
+        base = "sources/public/$uid/$run_public"
+        config = DataPipeline._createconfig(cpath, public = run_public)
+        DataPipeline._addwrite(config, "$base/stated", "description",
+                               file_type = "txt", use_version = "0.0.1",
+                               public = !run_public)
+        DataPipeline._addwrite(config, "$base/patterned/*", "description",
+                               file_type = "txt", use_version = "0.0.1",
+                               public = !run_public)
+        DataPipeline._addwrite(config, "$base/defaulted", "description",
+                               file_type = "txt", use_version = "0.0.1")
+        handle = DataPipeline.initialise(config, config)
+        register_citations!(handle, citations)
+        for name in ("$base/stated", "$base/patterned/one", "$base/defaulted")
+            write(link_write!(handle, name), "$name $uid\n")
+        end
+        link_register!(handle, "$base/registered",
+                       path = file_of("$base/registered $uid\n"),
+                       bibtex = "deposit", primary = true,
+                       title = "Public or not, $run_public $uid")
+        DataPipeline.finalise(handle)
+        @test public_of("$base/stated") == !run_public
+        @test public_of("$base/patterned/one") == !run_public
+        @test public_of("$base/defaulted") == run_public
+        @test public_of("$base/registered") == run_public
+    end
+end
+
 Test.@testset "link_register!() of a file the store holds unregistered" begin
     # As where an earlier run's registration was lost: a file under the hash
     # in the data store, which the registry has no location for, left there

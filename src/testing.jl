@@ -33,15 +33,16 @@ function _createconfig(path; kwargs...)
 end
 
 """
-    _addwrite(path, data_product, description; version, file_type,
+    _addwrite(path, data_product, description; version, file_type, public,
               use_data_product, use_component, use_version, use_namespace)
 
 Append a `write:` entry to the working config at `path`, with no `description`
-where it is `nothing`, and return `path`.
+where it is `nothing`, and no `public` of its own where that is `nothing`, and
+return `path`.
 """
 function _addwrite(path::String, data_product::String,
                    description::Union{Nothing, String};
-                   version = nothing, file_type = nothing,
+                   version = nothing, file_type = nothing, public = nothing,
                    use_data_product = nothing, use_component = nothing,
                    use_version = nothing, use_namespace = nothing)
     data = YAML.load_file(path)
@@ -51,6 +52,7 @@ function _addwrite(path::String, data_product::String,
     isnothing(description) || (new_write["description"] = description)
     isnothing(version) || (new_write["version"] = version)
     isnothing(file_type) || (new_write["file_type"] = file_type)
+    isnothing(public) || (new_write["public"] = public)
     new_write["use"] = _usesection(use_data_product, use_component,
                                    use_version, use_namespace)
 
