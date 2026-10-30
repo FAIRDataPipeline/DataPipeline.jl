@@ -201,7 +201,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
     Updating `~/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/Project.toml`
   [336ed68f] + CSV v1.2.0
   [a93c6f00] + DataFrames v1.8.2
-  [9ced6f0a] + DataPipeline v0.59.0 `../..`
+  [9ced6f0a] + DataPipeline v0.59.1 `../..`
   [91a5bcdd] + Plots v1.41.7
     Updating `~/work/DataPipeline.jl/DataPipeline.jl/examples/fdp/Manifest.toml`
   [66dad0bd] + AliasTables v1.1.3
@@ -218,7 +218,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [a8cc5b0e] + Crayons v4.2.0
   [9a962f9c] + DataAPI v1.16.0
   [a93c6f00] + DataFrames v1.8.2
-  [9ced6f0a] + DataPipeline v0.59.0 `../..`
+  [9ced6f0a] + DataPipeline v0.59.1 `../..`
   [48204bd6] + DataStrings v1.1.0
   [864edb3b] + DataStructures v0.19.6
   [e2d170a0] + DataValueInterfaces v1.0.0
@@ -231,14 +231,14 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [1fa38f19] + Format v1.3.7
   [28b8d3ca] + GR v0.73.27
   [f67ccb44] + HDF5 v0.17.4
-  [cd3eb016] + HTTP v2.13.2
+  [cd3eb016] + HTTP v2.13.4
 ⌅ [842dd82b] + InlineStrings v1.4.6
   [41ab1584] + InvertedIndices v1.3.1
   [92d709cd] + IrrationalConstants v0.2.7
   [82899510] + IteratorInterfaceExtensions v1.0.0
   [1019f520] + JLFzf v0.1.11
   [692b3bcd] + JLLWrappers v1.8.0
-  [682c06a0] + JSON v1.13.0
+  [682c06a0] + JSON v1.13.1
   [b964fa9f] + LaTeXStrings v1.4.1
   [23fbe1c1] + Latexify v0.16.12
   [2ab3a3ac] + LogExpFunctions v1.0.3
@@ -263,7 +263,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
   [189a3867] + Reexport v1.2.2
   [05181044] + RelocatableFolders v1.0.1
   [ae029012] + Requires v1.3.1
-  [802f3686] + Reseau v1.6.4
+  [802f3686] + Reseau v1.6.6
   [6c6a2e73] + Scratch v1.3.0
   [91c51154] + SentinelArrays v1.4.11
   [992d4aef] + Showoff v1.1.1
@@ -435,9 +435,9 @@ Precompiling packages...
    1.0 s  ✓ DocStringExtensions
    0.4 s  ✓ LogExpFunctions
    2.2 s  ✓ StatsBase
-  50.6 s  ✓ Plots
-  4 dependencies successfully precompiled in 54 seconds. 224 already precompiled.
-processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_21_26_00_467752/config.yaml
+  52.9 s  ✓ Plots
+  4 dependencies successfully precompiled in 57 seconds. 224 already precompiled.
+processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-30_03_54_12_985923/config.yaml
 pipeline initialised.
 data product found: SEIRS_model/parameters
 finished - code run locally registered as: http://127.0.0.1:8000/api/code_run/1/</code></pre><h2 id="Rehearsing-it"><a class="docs-heading-anchor" href="#Rehearsing-it">Rehearsing it</a><a id="Rehearsing-it-1"></a><a class="docs-heading-anchor-permalink" href="#Rehearsing-it" title="Permalink"></a></h2><p>Before a run is recorded, the script can be rehearsed: run through the pipeline from the same config, reading the registered parameter table and writing its outputs, with nothing registered. From the root of the clone, in Julia:</p><pre><code class="language-julia hljs">using DataPipeline
@@ -445,11 +445,11 @@ DataPipeline.rehearse(&quot;examples/fdp/SEIRSconfig.yaml&quot;, local_only = tr
 include(&quot;examples/fdp/seirs_sim.jl&quot;)</code></pre><p><code>rehearse</code> has <code>fair</code> prepare the job as a run would, and the script, unchanged, opens a rehearsal in its <code>DataPipeline.initialise</code> and ends by collecting its two outputs in a folder, whose path <code>DataPipeline.finalise</code> prints and returns. Run after the recorded run above, it finds the results table identical to the version registered, and says so. The block below does this under the same condition as the two above.</p><pre><code class="language-julia hljs">run_example &amp;&amp; cd(pkgdir(DataPipeline)) do
     DataPipeline.rehearse(&quot;examples/fdp/SEIRSconfig.yaml&quot;, local_only = true)
     include(joinpath(example, &quot;seirs_sim.jl&quot;))
-end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rehearsing the run prepared in /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_21_27_36_116823
-run the script, or its lines, in this session: DataPipeline.finalise collects its outputs in /tmp/fdp-rehearsal-Y3och3, and DataPipeline.discard throws them away
-processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-29_21_27_36_116823/config.yaml
-rehearsal: nothing is registered, and the outputs go to /tmp/fdp-rehearsal-Y3och3
-would keep the code repository&#39;s object at ae45a85bf2f21b269d152fb92c285be051831fcc, http://127.0.0.1:8000/api/object/4/
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rehearsing the run prepared in /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-30_03_55_51_672274
+run the script, or its lines, in this session: DataPipeline.finalise collects its outputs in /tmp/fdp-rehearsal-E1sbkG, and DataPipeline.discard throws them away
+processing config file: /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/jobs/2026-10-30_03_55_51_672274/config.yaml
+rehearsal: nothing is registered, and the outputs go to /tmp/fdp-rehearsal-E1sbkG
+would keep the code repository&#39;s object at ee21045641e191c37ef4760629d75f85d4e85db8, http://127.0.0.1:8000/api/object/4/
   with the licence https://spdx.org/licenses/LGPL-3.0-or-later
   with the keywords FAIR data, data management, julia, reproducibility, workflows
 data product found: SEIRS_model/parameters
@@ -458,6 +458,6 @@ rehearsal finished - nothing registered
   inputs:
     PSU:SEIRS_model/parameters (1.0.0) /home/runner/work/DataPipeline.jl/DataPipeline.jl/.fair/data_store/PSU/SEIRS_model/parameters/1.0.0.csv
   outputs:
-    testing:SEIRS_model/results/figure/julia (0.0.2) /tmp/fdp-rehearsal-Y3och3/testing/SEIRS_model/results/figure/julia/0.0.2.pdf
-    testing:SEIRS_model/results/model_output/julia (0.0.2) /tmp/fdp-rehearsal-Y3och3/testing/SEIRS_model/results/model_output/julia/0.0.2.csv, identical to v0.0.1
-  outputs folder: /tmp/fdp-rehearsal-Y3och3</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../paper/">« Building a paper</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 29 October 2026 21:28">Thursday 29 October 2026</span>. Using Julia version 1.13.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+    testing:SEIRS_model/results/figure/julia (0.0.2) /tmp/fdp-rehearsal-E1sbkG/testing/SEIRS_model/results/figure/julia/0.0.2.pdf
+    testing:SEIRS_model/results/model_output/julia (0.0.2) /tmp/fdp-rehearsal-E1sbkG/testing/SEIRS_model/results/model_output/julia/0.0.2.csv, identical to v0.0.1
+  outputs folder: /tmp/fdp-rehearsal-E1sbkG</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../paper/">« Building a paper</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 30 October 2026 03:56">Friday 30 October 2026</span>. Using Julia version 1.13.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
