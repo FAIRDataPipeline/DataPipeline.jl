@@ -883,10 +883,11 @@ end
     _globregex(pattern)
 
 Return the anchored regular expression for a data product name pattern, in
-which each `*` matches one segment of the name and every other character is
-literal. A segment is one or more characters other than `/` and the four the
-registry refuses in a name, `[`, `]`, `?` and `*`, so that no registered name
-is passed over and a pattern never matches itself.
+which each `*` matches one or more characters within one segment of the name,
+the whole segment or part of it, and every other character is literal. The
+characters a `*` matches are any but `/` and the four the registry refuses in
+a name, `[`, `]`, `?` and `*`, so that no registered name is passed over and a
+pattern never matches itself.
 """
 function _globregex(pattern::AbstractString)
     occursin('*', pattern) ||

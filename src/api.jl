@@ -256,9 +256,10 @@ The file at `path` may then be written to without changing the data store's.
 `force` does nothing without `path`. A data product with no file takes no
 `path`.
 
-Given a pattern instead - a name with one or more `*`, each matching one
-segment of a name, so that `era5/t2m/*` matches `era5/t2m/1940-1949` but not
-`era5/t2m/a/b` - return the path of a temporary directory holding the file of
+Given a pattern instead - a name with one or more `*`, each matching one or
+more characters within one segment of a name, never a `/`, so that
+`era5/t2m/*` matches `era5/t2m/1940-1949` but not `era5/t2m/a/b`, and
+`era5/*/1940-*` matches `era5/tp/1940-1949` - return the path of a temporary directory holding the file of
 every `read:` data product that matches, each recorded as an input (the
 directory itself is not), a data product with no file being recorded and
 given none. Each is a symbolic link to the data store's file where one can be
@@ -339,8 +340,8 @@ end
 Return the paths of the files behind every `read:` data product of the working
 config whose name matches `pattern`, in name order, recording each as an
 input of the code run. A pattern is a name with one or more `*`, each
-matching one segment of a name, and one that matches nothing gives no paths
-or an error, as for [`link_read!`](@ref). A data product with no file is
+matching one or more characters within one segment of a name. One that
+matches nothing gives no paths or an error, as for [`link_read!`](@ref). A data product with no file is
 recorded and gives no path.
 """
 function link_read_files!(handle::DataRegistryHandle, pattern::String)
@@ -515,7 +516,8 @@ otherwise by `finalise` before it registers anything. Such a file needs a
 `title` of its own, or the `release_version` it was taken from.
 
 `data_product` may also be a name that a wildcard `write:` entry stands for -
-one whose name holds `*`s, each matching one segment - in which case that
+one whose name holds `*`s, each matching one or more characters within one
+segment - in which case that
 entry's file type, description and `use:` block are used and the name is
 registered as given. A name matching the patterns of several entries is an
 error, since nothing distinguishes them: the file type comes from the entry

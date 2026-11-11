@@ -263,7 +263,7 @@ end
 
 Test.@testset "_globregex()" begin
     g = DataPipeline._globregex
-    # One * is one segment of a name: no /, and not empty
+    # A * stays within one segment of a name: no /, and not empty
     @test occursin(g("era5/t2m/*"), "era5/t2m/1940-1949")
     @test !occursin(g("era5/t2m/*"), "era5/t2m/a/b")
     @test !occursin(g("era5/t2m/*"), "era5/t2m/")
@@ -275,6 +275,20 @@ Test.@testset "_globregex()" begin
     @test !occursin(g("era5/*/1940-*"), "era5/tp/1950-1959")
     @test occursin(g("*"), "single")
     @test !occursin(g("*"), "two/segments")
+    # A * may be part of a segment: at its end, at its start, or between
+    @test occursin(g("CaseStudy/*/Burnin/Diversity_*"),
+                   "CaseStudy/50km/Burnin/Diversity_01")
+    @test !occursin(g("CaseStudy/*/Burnin/Diversity_*"),
+                    "CaseStudy/50km/Burnin/Totals_01")
+    @test !occursin(g("CaseStudy/*/Burnin/Diversity_*"),
+                    "CaseStudy/50km/Burnin/Diversity_01/x")
+    @test occursin(g("CaseStudy/*/Hold/State_*"),
+                   "CaseStudy/50km/Hold/State_01")
+    @test occursin(g("results/*_01"), "results/Diversity_01")
+    @test !occursin(g("results/*_01"), "results/Diversity_02")
+    @test !occursin(g("results/*_01"), "results/_01")
+    @test occursin(g("results/run_*_final"), "results/run_7_final")
+    @test !occursin(g("results/run_*_final"), "results/run_7/8_final")
     # Everything else is literal, regex metacharacters included
     @test occursin(g("chelsa/bio1.2/*"), "chelsa/bio1.2/x")
     @test !occursin(g("chelsa/bio1.2/*"), "chelsa/bio1x2/x")

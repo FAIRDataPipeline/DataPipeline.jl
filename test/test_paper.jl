@@ -375,7 +375,22 @@ end
                                                                     throw(refused) :
                                                                     held)
         @test only(said.unchecked) ==
-              "what the remote registry at $(remote.url) knows of $file: the registry at $(remote.url) answered with HTTP status 500"
+              "what the remote registry at $(remote.url) knows of $file: the remote registry at $(remote.url) answered with HTTP status 500"
+        # What a refusal says: for a 403, what the registry refused, and what
+        # to do
+        @test DataPipeline._refusalsaid(:remote, remote, 500) ==
+              "answered with HTTP status 500"
+        stale = DataPipeline.RegistryEndpoint("https://registry.example.org/api/",
+                                              token = "stale")
+        @test DataPipeline._refusalsaid(:remote,
+                                        DataPipeline.RegistryEndpoint(stale.url),
+                                        403) ==
+              "answered with HTTP status 403, refusing to be read without a token"
+        @test DataPipeline._refusalsaid(:local, stale, 403) ==
+              "answered with HTTP status 403, refusing the token it was asked with, which may be out of date"
+        hint = DataPipeline._refusalsaid(:remote, stale, 403)
+        @test contains(hint, "give `remote` as the remote's name")
+        @test contains(hint, "log in at https://registry.example.org/ and")
         @test count(==(issue), said.notes) == 1
         @test !any(contains("does not hold"), said.actions)
 
@@ -973,9 +988,10 @@ end
             # of the report is made
             port, listener = Sockets.listenany(Sockets.ip"127.0.0.1", 8100)
             close(listener)
+            refusing = Ref(500)
             server = DataPipeline.HTTP.serve!("127.0.0.1", port) do request
                 return DataPipeline.HTTP.Response(request.target == "/api/" ?
-                                                  200 : 500, "{}")
+                                                  200 : refusing[], "{}")
             end
             try
                 failing = DataPipeline.RegistryEndpoint("http://127.0.0.1:$port/api/")
@@ -997,6 +1013,31 @@ end
                 @test any(contains("how the authors differ"), said)
                 @test all(contains("127.0.0.1:$port"), said)
                 @test !isnothing(check.metadata)
+                # ... each naming the remote alone, and the three checks that
+                # take both registries made with the local registry alone, so
+                # that the report is the one a check of it alone makes
+                @test !any(contains(registry.url), said)
+                @test count(contains("made with the local registry alone"),
+                            said) == 3
+                alone = DataPipeline.check_paper(registry, paper,
+                                                 remote = nothing)
+                @test check.actions == alone.actions
+                @test check.notes == alone.notes
+                # A remote asked with a token it refuses is told it needs
+                # none, or a new one
+                refusing[] = 403
+                stale = DataPipeline.RegistryEndpoint(failing.url,
+                                                      token = "stale-$uid")
+                said = filter(contains("answered with HTTP status 403"),
+                              DataPipeline.check_paper(registry, paper,
+                                                       remote = stale).unchecked)
+                @test count(contains("made with the local registry alone"),
+                            said) == 3
+                @test all(contains("refusing the token it was asked with"),
+                          said)
+                @test all(contains("log in at http://127.0.0.1:$port/ and generate a new token"),
+                          said)
+                refusing[] = 500
                 # ... and `update_paper`, which needs it, fails, the config
                 # left as it was
                 before = read(paper.config, String)

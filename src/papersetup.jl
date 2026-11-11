@@ -876,7 +876,6 @@ function _checkpaper(paper::LaTeXPaper,
     why = join(filter(!isnothing,
                       [isnothing(registry) ? localwhy : nothing, remotewhy]),
                ", and ")
-    asked = last.(registries)
 
     # What the paper says of itself and what its metadata says
     front = try
@@ -950,14 +949,14 @@ function _checkpaper(paper::LaTeXPaper,
             end
             isempty(unregistered) ||
                 push!(actions, _unregisteredsaid(unregistered))
-            _ifanswered(unchecked, "the config's read: block", asked...) do
-                return _checkconfig!(actions, registries, paper, top,
-                                     uses.pipeline)
+            _ifanswered(actions, unchecked, "the config's read: block",
+                        registries) do found, asked
+                return _checkconfig!(found, asked, paper, top, uses.pipeline)
             end
-            _ifanswered(unchecked,
+            _ifanswered(actions, unchecked,
                         "which files in and out of the pipeline folder are registered",
-                        asked...) do
-                return _checkplacement!(actions, registries, paper, top, uses)
+                        registries) do found, asked
+                return _checkplacement!(found, asked, paper, top, uses)
             end
         end
     end
@@ -966,31 +965,116 @@ function _checkpaper(paper::LaTeXPaper,
             push!(unchecked,
                   "how the authors differ from those of the PDF's version registered last: $why")
         else
-            _ifanswered(unchecked,
+            _ifanswered(notes, unchecked,
                         "how the authors differ from those of the PDF's version registered last",
-                        asked...) do
-                return _checkpreviousauthors!(notes, registries, paper, meta)
+                        registries) do found, asked
+                return _checkpreviousauthors!(found, asked, paper, meta)
             end
         end
     end
     return PaperCheck(paper, setup, uses, metadata, actions, notes, unchecked)
 end
 
-# Run `check`, which asks the registries `asked`, and where one answers with an
-# error status add to `unchecked` what it would have checked, `what`, rather
-# than throw, so that the rest of the report is made
-function _ifanswered(check::Function, unchecked::Vector{String},
-                     what::AbstractString,
-                     asked::Union{Nothing, RegistryEndpoint}...)
-    try
-        check()
-    catch err
-        err isa HTTP.StatusError || rethrow()
-        addresses = join((registry.url
-                          for registry in asked if !isnothing(registry)),
-                         " or ")
+# Run `check(found, asked)`, which adds what it finds to `found` from the
+# registries `asked`, first all of `registries`, and add what it found to
+# `into`. Where a registry answers with an error status the check is made
+# again without it, and `unchecked` says what it would have checked, `what`, of
+# that registry, so that the rest of the report is made. Each attempt finds
+# into a vector of its own, kept only where it completes, so that nothing is
+# said twice
+function _ifanswered(check::Function, into::AbstractVector,
+                     unchecked::Vector{String}, what::AbstractString,
+                     registries::AbstractVector{<:Pair{Symbol,
+                                                       RegistryEndpoint}})
+    remaining = collect(registries)
+    refused = Tuple{Symbol, RegistryEndpoint, Int}[]
+    completed = false
+    while !isempty(remaining)
+        found = empty(into)
+        refusal = try
+            check(found, remaining)
+            nothing
+        catch err
+            err isa HTTP.StatusError || rethrow()
+            err
+        end
+        if isnothing(refusal)
+            append!(into, found)
+            completed = true
+            break
+        end
+        index = length(remaining) == 1 ? 1 :
+                findfirst(asked -> _answeredfrom(refusal, last(asked)),
+                          remaining)
+        if isnothing(index)
+            # The refusal names no registry asked: each is named
+            addresses = join((registry.url for (_, registry) in remaining),
+                             " or ")
+            push!(unchecked,
+                  "$what: the registry at $addresses answered with HTTP status $(refusal.status)")
+            break
+        end
+        part, registry = popat!(remaining, index)
+        push!(refused, (part, registry, refusal.status))
+    end
+    alone = join((part == :local ? "the local registry" : "the remote registry"
+                  for (part, _) in remaining), " and ")
+    for (part, registry, status) in refused
+        said = _refusalsaid(part, registry, status)
         push!(unchecked,
-              "$what: the registry at $addresses answered with HTTP status $(err.status)")
+              completed ?
+              "$what, in $(_registryat(part, registry)), which $said - made with $alone alone" :
+              "$what: $(_registryat(part, registry)) $said")
+    end
+    return nothing
+end
+
+# A registry as a report names it: which, and its address
+function _registryat(part::Symbol, registry::RegistryEndpoint)
+    return string(part == :local ? "the local registry" : "the remote registry",
+                  " at ", registry.url)
+end
+
+# What a report says of a registry's refusal, after its name: its status, and
+# for a 403 what it refused and what to do. A paper's checks only read, which
+# needs no token, so a remote given by name is asked with none
+function _refusalsaid(part::Symbol, registry::RegistryEndpoint,
+                      status::Integer)
+    said = "answered with HTTP status $status"
+    status == 403 || return said
+    isnothing(registry.token) &&
+        return "$said, refusing to be read without a token"
+    part == :remote ||
+        return "$said, refusing the token it was asked with, which may be out of date"
+    front = replace(registry.url, r"api/$" => "")
+    return "$said, refusing the token it was asked with, which may be out of date: reading needs none, so give `remote` as the remote's name, which reads with no token, or log in at $front and generate a new token from its \"Links\" menu"
+end
+
+# Whether an error status came from `registry`: the address the request went
+# to has its host, its port, a port left out being the scheme's own, and its
+# path as its start
+function _answeredfrom(refusal::HTTP.StatusError, registry::RegistryEndpoint)
+    address = _refusedaddress(refusal)
+    isnothing(address) && return false
+    place(uri) = (lowercase(uri.host),
+                  isempty(uri.port) ? (uri.scheme == "https" ? "443" : "80") :
+                  uri.port)
+    expected = URIs.URI(registry.url)
+    return place(address) == place(expected) &&
+           startswith(address.path, expected.path)
+end
+
+# The address a request answered with an error status went to, or `nothing`
+# where the error does not say: HTTP.jl 2 keeps it as the response's
+# `request_url`, HTTP.jl 1 as the response's request's `url`
+function _refusedaddress(refusal::HTTP.StatusError)
+    response = refusal.response
+    if hasproperty(response, :request_url)
+        isnothing(response.request_url) || return URIs.URI(response.request_url)
+    end
+    request = hasproperty(response, :request) ? response.request : nothing
+    if !isnothing(request) && hasproperty(request, :url)
+        return URIs.URI(request.url)
     end
     return nothing
 end
@@ -1182,10 +1266,10 @@ function _checkpipelinefile!(actions::Vector{String}, notes::Vector{String},
                              identify::Function = _identifyfile)
     found = Pair{Symbol, FileIdentification}[]
     for (part, registry) in registries
-        _ifanswered(unchecked,
+        _ifanswered(found, unchecked,
                     "what $(_registrysaid(part, registry)) knows of $file",
-                    registry) do
-            return push!(found,
+                    [part => registry]) do known, _
+            return push!(known,
                          part => identify(registry, joinpath(top, file),
                                   superseded = true))
         end

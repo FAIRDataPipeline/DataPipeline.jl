@@ -4,6 +4,11 @@
   - `DataPipeline.install_cli(branch = "Dev")`, and `install_cli!`, install the
     package's copy of `fair` from a branch of the CLI's repository, to try work
     not yet released. A later call without `branch` puts the release back.
+  - `check_paper` names the registry that refused a check, not every registry
+    asked. A check that asks both is then made with the other alone. A 403 says
+    what the registry refused, and how to read without a token or renew one.
+  - The documentation says that a wildcard's `*` matches part of a segment of a
+    name as well as a whole one, as it always has.
 
 - v0.59.1
   - `DataPipeline.check_paper`, `update_paper` and `setup_paper` identify the
