@@ -1,5 +1,10 @@
 # NEWS
 
+- v0.59.2
+  - `DataPipeline.install_cli(branch = "Dev")`, and `install_cli!`, install the
+    package's copy of `fair` from a branch of the CLI's repository, to try work
+    not yet released. A later call without `branch` puts the release back.
+
 - v0.59.1
   - `DataPipeline.check_paper`, `update_paper` and `setup_paper` identify the
     paper's files in the local registry and the remote together: the newest

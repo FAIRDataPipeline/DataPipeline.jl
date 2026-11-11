@@ -79,6 +79,40 @@ Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
     @test occursin("0.10.2", DataPipeline._cliversion())
     @test DataPipeline.install_cli() == executable
     @test DataPipeline._cliversion() == version
+    @test isnothing(DataPipeline._cliinstalled().url)
+
+    # A branch: refused with a version, and refused where the repository has
+    # none of that name, before anything is installed
+    @test_throws ArgumentError DataPipeline.install_cli(version = "0.11.0",
+                                                        branch = "Dev")
+    err = @test_throws ArgumentError DataPipeline.install_cli(branch = "no-such-branch-$uid")
+    @test occursin("no-such-branch-$uid", err.value.msg)
+    @test occursin("Dev", err.value.msg)
+    @test isnothing(DataPipeline._cliinstalled().url)
+    # A branch installed is at its newest commit, and a second call finds it
+    # up to date. A branch claiming the release's version, as `Dev` does
+    # between releases, is the case pip unforced gets wrong: it would keep the
+    # release here, and the branch after. Only where asked for, so that CI
+    # tests the released CLI and never waits on a branch
+    branch = get(ENV, "FDP_TEST_CLI_BRANCH", "")
+    if isempty(branch)
+        @info "a branch of the CLI is installed only with FDP_TEST_CLI_BRANCH naming one, such as Dev"
+    else
+        head = DataPipeline._branchhead(branch)
+        try
+            @test DataPipeline.install_cli(branch = branch) == executable
+            installed = DataPipeline._cliinstalled()
+            @test installed.branch == branch
+            @test installed.commit == head
+            @test occursin("FAIRDataPipeline/FAIR-CLI", installed.url)
+            @test DataPipeline.install_cli(branch = branch) == executable
+            @test DataPipeline._cliinstalled() == installed
+        finally
+            @test DataPipeline.install_cli() == executable
+        end
+        @test isnothing(DataPipeline._cliinstalled().url)
+        @test DataPipeline._cliversion() == version
+    end
     # Not tested: a change of Python, which fetches another interpreter, and
     # an environment whose interpreter no longer runs, which is rebuilt
 end
@@ -192,6 +226,22 @@ Test.@testset "registry_session() and the registry outside a run" begin
         finally
             DataPipeline.set_cli!(nothing)
         end
+        # A branch installed without them is refused too, saying how to put
+        # the release back. A fair with them is not refused, and one failing
+        # otherwise is refused for that failure
+        err = @test_throws ReadWriteException DataPipeline._checkinstalledbranch(old,
+                                                                                 "old-branch")
+        @test occursin("branch old-branch", err.value.msg)
+        @test occursin("has no session commands", err.value.msg)
+        @test occursin("install_cli()", err.value.msg)
+        @test isnothing(DataPipeline._checkinstalledbranch(sessions, "new"))
+        failing = joinpath(bin, "failing")
+        write(failing, "#!/bin/sh\necho 'broken' >&2\nexit 1\n")
+        chmod(failing, 0o755)
+        err = @test_throws ReadWriteException DataPipeline._checkinstalledbranch(failing,
+                                                                                 "broken-branch")
+        @test occursin("exit status 1", err.value.msg)
+        @test occursin("broken", err.value.msg)
     end
 end
 

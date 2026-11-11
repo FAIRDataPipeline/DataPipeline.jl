@@ -92,8 +92,10 @@ the CLI's virtual environment active; else the copy the package installed.
 A Julia started by an editor has no virtual environment on its path, so the
 package can install a copy of its own, with a Python and a git of its own
 that MicroMamba fetches: `DataPipeline.install_cli!()`, once, which records the
-copy as the `fair` to use, and again to bring it up to date. The whole
-pipeline can then be set up from Julia:
+copy as the `fair` to use, and again to bring it up to date.
+`DataPipeline.install_cli!(branch = "Dev")` installs a branch of the CLI
+instead, to try work not yet released. The whole pipeline can then be set up
+from Julia:
 
 ```julia
 using DataPipeline

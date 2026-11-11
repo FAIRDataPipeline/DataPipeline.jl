@@ -8,6 +8,9 @@
 # own workflows test on, above the floor of 3.10 the CLI and the registry share
 const CLI_PYTHON = "3.12"
 
+# The CLI's repository, whose branches the package's copy may be installed from
+const CLI_REPOSITORY = "https://github.com/FAIRDataPipeline/FAIR-CLI"
+
 """
     fair"arguments"
 
@@ -79,7 +82,7 @@ function set_cli!(::Nothing)
 end
 
 """
-    install_cli(; version = nothing, python = nothing)
+    install_cli(; version = nothing, branch = nothing, python = nothing)
 
 Install the package's own copy of `fair`, or bring it up to date, and return
 the path of its executable. The copy lives in a scratch space of the
@@ -87,9 +90,22 @@ package's, with a Python and a git of its own that MicroMamba fetches from
 conda-forge, so it needs no Python, no git and no virtual environment on the
 machine, and [`rehearse`](@ref) and [`@fair_str`](@ref) use it when no `fair`
 is on the path, running it with its own programs on the path.
-`fair-cli` is installed from PyPI at its newest version, or at `version`; run
-again, the call brings the copy up to date, printing its version before and
-after. The Python is $CLI_PYTHON unless `python` names another minor version;
+
+`fair-cli` is installed from PyPI at its newest version, or at `version`.
+`branch` installs it instead from that branch of the CLI's repository,
+$CLI_REPOSITORY, at the branch's newest commit, to try work not yet released.
+A branch the repository does not have is an error before anything is
+installed. A branch installed without the session commands, which
+DataPipeline needs, is an error once it is installed, and a call without
+`branch` puts the newest release back. `version` and `branch` cannot be given
+together.
+
+Run again, the call brings the copy up to date: to the newest release, or to
+the newest commit of the branch. It prints what the copy held before and
+after: the version, and the branch and commit it came from. A release replaces
+a branch, and a branch a release, whichever version each claims.
+
+The Python is $CLI_PYTHON unless `python` names another minor version;
 a change rebuilds the environment, as does an environment whose Python no
 longer runs. A registry installed through this copy has an environment of its
 own built with the copy's interpreter, so after such a rebuild it must be
@@ -98,7 +114,11 @@ which a CLI may refuse while the registry runs. Needs the network.
 """
 function install_cli(;
                      version::Union{Nothing, VersionNumber, AbstractString} = nothing,
+                     branch::Union{Nothing, AbstractString} = nothing,
                      python::Union{Nothing, AbstractString} = nothing)
+    isnothing(version) || isnothing(branch) ||
+        throw(ArgumentError("install_cli takes a version or a branch, not both"))
+    head = isnothing(branch) ? nothing : _branchhead(branch)
     folder = _clifolder()
     wanted = isnothing(python) ? CLI_PYTHON : String(python)
     present = _clipythonversion(folder)
@@ -118,35 +138,47 @@ function install_cli(;
     # A copy made before git came with it gets it
     isfile(_cligit(folder)) ||
         run(MicroMamba.cmd(`install --yes --quiet --prefix $folder git --channel conda-forge --override-channels`))
-    before = _cliversion()
-    specification = isnothing(version) ? "fair-cli" : "fair-cli==$version"
-    run(`$(_clipython(folder)) -m pip install --quiet --upgrade $specification`)
-    after = _cliversion()
+    before = _cliinstalled()
+    # pip keeps the copy installed wherever its version satisfies the request,
+    # and a branch may claim any version. So a release is forced over a copy
+    # from anywhere but PyPI, and a branch is forced over anything
+    if isnothing(branch)
+        specification = isnothing(version) ? "fair-cli" : "fair-cli==$version"
+        _clipip(folder, specification,
+                force = !isnothing(before) && !isnothing(before.url))
+    elseif isnothing(before) || before.branch != branch ||
+           before.commit != head
+        _clipip(folder, "fair-cli @ git+$CLI_REPOSITORY@$branch", force = true)
+    end
     executable = _installedcli()
     isnothing(executable) &&
         throw(ReadWriteException("pip installed fair-cli, but there is no executable at $(_cliexecutable(folder))"))
+    after = _cliinstalled()
     if isnothing(before)
-        println("installed ", after, " at ", executable)
+        println("installed ", _describecli(after), " at ", executable)
     elseif before == after
-        println(after, " is up to date, at ", executable)
+        println(_describecli(after), " is up to date, at ", executable)
     else
-        println("updated ", before, " to ", after, " at ", executable)
+        println("updated ", _describecli(before), " to ", _describecli(after),
+                " at ", executable)
     end
+    isnothing(branch) || _checkinstalledbranch(executable, branch)
     return executable
 end
 
 """
-    install_cli!(; version = nothing, python = nothing)
+    install_cli!(; version = nothing, branch = nothing, python = nothing)
 
-[`install_cli`](@ref), passing it `version` and `python`, then
+[`install_cli`](@ref), passing it `version`, `branch` and `python`, then
 [`set_cli!`](@ref) on the copy, whether it was installed by this call or
 before: so that the copy is the `fair` this package runs, whatever is on the
 path. Return the executable's path.
 """
 function install_cli!(;
                       version::Union{Nothing, VersionNumber, AbstractString} = nothing,
+                      branch::Union{Nothing, AbstractString} = nothing,
                       python::Union{Nothing, AbstractString} = nothing)
-    return set_cli!(install_cli(; version, python))
+    return set_cli!(install_cli(; version, branch, python))
 end
 
 # The command that runs `fair`: the one given, as a path or a command; else
@@ -210,13 +242,18 @@ end
 # the path, since the CLI wants git there as it starts; any other command as
 # it is
 function _withenvironment(command::Cmd)
-    folder = _clifolder()
-    first(command.exec) == _cliexecutable(folder) || return command
+    first(command.exec) == _cliexecutable(_clifolder()) || return command
+    return _withcopyprograms(command)
+end
+
+# A command given the copy's own programs, git among them, first on its path
+function _withcopyprograms(command::Cmd)
     separator = Sys.iswindows() ? ';' : ':'
     return addenv(command,
-                  "PATH" => string(_clibindirs(folder), separator,
+                  "PATH" => string(_clibindirs(_clifolder()), separator,
                          get(ENV, "PATH", "")))
 end
+
 function _installedcli()
     executable = _cliexecutable(_clifolder())
     return isfile(executable) ? executable : nothing
@@ -240,6 +277,67 @@ function _cliversion()
     executable = _installedcli()
     isnothing(executable) && return nothing
     return strip(read(_withenvironment(`$executable --version`), String))
+end
+
+# Install `specification` with the copy's pip, an upgrade, and with `force`
+# a reinstall of it and its dependencies whatever is installed. pip runs with
+# the copy's programs on its path, so that a branch is cloned with its git
+function _clipip(folder::AbstractString, specification::AbstractString;
+                 force::Bool)
+    options = force ? ["--force-reinstall"] : String[]
+    run(_withcopyprograms(`$(_clipython(folder)) -m pip install --quiet --upgrade $options $specification`))
+    return nothing
+end
+
+# The newest commit of a branch of the CLI's repository, listed with no clone;
+# a branch it does not have is an error naming those it has
+function _branchhead(branch::AbstractString)
+    refs = _remoterefs(CLI_REPOSITORY)
+    head = get(refs, "refs/heads/$branch", nothing)
+    isnothing(head) || return head
+    branches = sort!([chopprefix(name, "refs/heads/")
+                      for name in keys(refs) if startswith(name, "refs/heads/")])
+    return throw(ArgumentError("$CLI_REPOSITORY has no branch $branch: its branches are $(join(branches, ", "))"))
+end
+
+# What the copy holds, or `nothing` with no copy: what `fair --version` says,
+# and where pip installed it from - `url`, `nothing` for PyPI - with the
+# `branch` and `commit` for a branch, as pip records them in the distribution's
+# `direct_url.json`
+function _cliinstalled()
+    version = _cliversion()
+    isnothing(version) && return nothing
+    recorded = read(`$(_clipython(_clifolder())) -I -c "import importlib.metadata as m; print(m.distribution('fair-cli').read_text('direct_url.json') or '')"`,
+                    String)
+    isempty(strip(recorded)) &&
+        return (; version, url = nothing, branch = nothing, commit = nothing)
+    direct = JSON.parse(recorded)
+    vcs = get(direct, "vcs_info", Dict{String, Any}())
+    return (; version, url = String(direct["url"]),
+            branch = get(vcs, "requested_revision", nothing),
+            commit = get(vcs, "commit_id", nothing))
+end
+
+# The copy as `install_cli` reports it: the version, and where it came from
+# where that is not PyPI
+function _describecli(installed::NamedTuple)
+    isnothing(installed.url) && return installed.version
+    isnothing(installed.branch) &&
+        return "$(installed.version) from $(installed.url)"
+    return "$(installed.version) from branch $(installed.branch) at $(first(installed.commit, 7))"
+end
+
+# Refuse a branch just installed unless its `fair` has the session commands,
+# which `fair-cli` has from `CLI_NEEDED`; one without them answers a request
+# for their help with a usage error
+function _checkinstalledbranch(executable::AbstractString,
+                               branch::AbstractString)
+    asked = _capturefair(Cmd([executable]), "registry", "session", "--help")
+    asked.status == 0 && return nothing
+    restore = "`DataPipeline.install_cli()` puts the newest release back"
+    _nosessions(asked) &&
+        throw(ReadWriteException("branch $branch of $CLI_REPOSITORY, now installed at $executable, has no session commands, which DataPipeline needs: fair-cli $CLI_NEEDED or later. $restore"))
+    return throw(ReadWriteException("branch $branch of $CLI_REPOSITORY, now installed at $executable, fails `fair registry session --help` with exit status $(asked.status): $(strip(asked.errors)). $restore"))
 end
 
 # Run `fair` with these arguments, in the folder `dir` if one is given,
@@ -356,6 +454,13 @@ function _oldcli(command::Cmd, what::AbstractString)
     return ReadWriteException("the fair at $(first(command.exec)) has no $what, which DataPipeline needs: fair-cli $CLI_NEEDED or later - `DataPipeline.install_cli!()` installs the package's own copy and records it, or `pip install --upgrade fair-cli` upgrades yours")
 end
 
+# Whether what a `fair` command answered, as `_capturefair` gives it, is the
+# usage error of a `fair` with no session commands
+function _nosessions(answer::NamedTuple)
+    return answer.status == 2 &&
+           occursin("No such command 'session'", answer.errors)
+end
+
 # Hold the local registry while this process uses it: through the session that
 # the run which launched this process names in `FDP_SESSION`, else through a
 # session of the CLI's, owned by this process. With no `fair` to be found,
@@ -373,9 +478,7 @@ function _holdregistry(cli::Union{Nothing, AbstractString, Cmd} = nothing)
     opened = _capturefair(command, "registry", "session", "open", "--pid",
                           string(getpid()), "--json")
     if opened.status != 0
-        opened.status == 2 &&
-            occursin("No such command 'session'", opened.errors) &&
-            throw(_oldcli(command, "session commands"))
+        _nosessions(opened) && throw(_oldcli(command, "session commands"))
         throw(ReadWriteException("`fair registry session open` failed with exit status $(opened.status): $(strip(opened.errors))"))
     end
     reply = try
