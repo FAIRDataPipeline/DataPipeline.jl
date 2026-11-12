@@ -117,6 +117,61 @@ Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
     # an environment whose interpreter no longer runs, which is rebuilt
 end
 
+Test.@testset "cli_installed() and cli_version()" begin
+    # The fair the suite runs under
+    @test DataPipeline.cli_installed()
+    version = DataPipeline.cli_version()
+    @test version isa VersionNumber
+    said = DataPipeline._capturefair(DataPipeline._faircommand(nothing),
+                                     "--version").printed
+    @test occursin(replace(string(version), "-" => ""), said)
+    if Sys.iswindows()
+        @info "the stand-ins for fair are shell scripts: not on Windows"
+    else
+        # A stand-in for a fair, recorded, that says this of its version
+        standin = joinpath(mktempdir(), "fair")
+        function saying(text)
+            write(standin, "#!/bin/sh\n$text\n")
+            return chmod(standin, 0o755)
+        end
+        saying("echo 'fair, version 0.12.0'")
+        DataPipeline.set_cli!(standin)
+        try
+            @test DataPipeline.cli_installed()
+            @test DataPipeline.cli_version() == v"0.12.0"
+            # A release candidate is a pre-release, before its release
+            saying("echo 'fair, version 0.12.0rc1'")
+            @test DataPipeline.cli_version() == v"0.12.0-rc1"
+            @test DataPipeline.cli_version() < v"0.12.0"
+            # A version Julia does not read, and no version at all
+            saying("echo 'fair, version 0.12.0.dev1'")
+            err = @test_throws ReadWriteException DataPipeline.cli_version()
+            @test occursin("0.12.0.dev1", err.value.msg)
+            saying("echo 'something else'")
+            err = @test_throws ReadWriteException DataPipeline.cli_version()
+            @test occursin("something else", err.value.msg)
+            # A fair that is found and does not run
+            saying("echo 'no git $uid' >&2; exit 3")
+            @test DataPipeline.cli_installed()
+            err = @test_throws ReadWriteException DataPipeline.cli_version()
+            @test occursin("exit status 3", err.value.msg)
+            @test occursin("no git $uid", err.value.msg)
+            # A record of a file that is gone is no fair, though one is on
+            # the path, as it is for `fair"..."`
+            rm(standin)
+            @test !isnothing(Sys.which("fair"))
+            @test !DataPipeline.cli_installed()
+            @test isnothing(DataPipeline.cli_version())
+            @test_throws ArgumentError fair"--version"
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+        @test DataPipeline.cli_installed()
+    end
+    # Not tested: no fair at all, with nothing recorded, none on the path and
+    # no copy, since the copy the tests above install is a user's too
+end
+
 Test.@testset "registry_session() and the registry outside a run" begin
     if Sys.iswindows()
         @info "the stand-ins for fair are shell scripts: not on Windows"

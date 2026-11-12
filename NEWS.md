@@ -1,6 +1,8 @@
 # NEWS
 
 - v0.59.3
+  - `DataPipeline.cli_installed()` is whether there is a `fair` for the package
+    to run, and `DataPipeline.cli_version()` its version, as a `VersionNumber`.
   - `DataPipeline.initialise()` no longer throws in a session that has loaded
     TimeZones. A rehearsal now writes the run's date too, so it
     fails where the recorded run would.

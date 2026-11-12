@@ -94,8 +94,11 @@ package can install a copy of its own, with a Python and a git of its own
 that MicroMamba fetches: `DataPipeline.install_cli!()`, once, which records the
 copy as the `fair` to use, and again to bring it up to date.
 `DataPipeline.install_cli!(branch = "Dev")` installs a branch of the CLI
-instead, to try work not yet released. The whole pipeline can then be set up
-from Julia:
+instead, to try work not yet released. `DataPipeline.cli_installed()` is
+whether there is a `fair` to run, and `DataPipeline.cli_version()` its version,
+so a script can install one only where it is needed:
+`DataPipeline.cli_installed() || DataPipeline.install_cli!()`. The whole
+pipeline can then be set up from Julia:
 
 ```julia
 using DataPipeline
@@ -113,6 +116,8 @@ DataPipeline.discard
 DataPipeline.set_cli!
 DataPipeline.install_cli
 DataPipeline.install_cli!
+DataPipeline.cli_installed
+DataPipeline.cli_version
 ```
 
 ## Reading data

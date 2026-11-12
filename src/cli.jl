@@ -181,6 +181,48 @@ function install_cli!(;
     return set_cli!(install_cli(; version, branch, python))
 end
 
+"""
+    cli_installed()
+
+Return whether there is a `fair` for this package to run, as
+[`@fair_str`](@ref) and [`rehearse`](@ref) run it: the one
+[`set_cli!`](@ref) recorded, else the one on the path, else the copy
+[`install_cli`](@ref) made. A record of a file that is no longer there is no
+`fair`, whatever is on the path, since the record comes first: `false`, and
+[`install_cli!`](@ref) or `set_cli!` records one that is. Nothing is run, so
+a `fair` that is found may still fail to run.
+"""
+cli_installed() = !isnothing(_foundcli())
+
+"""
+    cli_version()
+
+Return the version of the `fair` this package runs, a `VersionNumber`, or
+`nothing` where [`cli_installed`](@ref) is `false`. It is what `fair
+--version` says, so the `fair` is run: one that fails, as the CLI does with
+no git on the path, is a [`ReadWriteException`](@ref), and so is a version
+that is not one Julia reads, such as Python's `0.12.0.dev1`. A release
+candidate is read as a pre-release: `0.12.0rc1` is `v"0.12.0-rc1"`, before
+`v"0.12.0"`.
+
+The version does not say where a `fair` came from. A branch of the CLI's
+repository claims the version of the release it is working towards, before
+that release exists and whatever of it the branch has so far.
+"""
+function cli_version()
+    command = _foundcli()
+    isnothing(command) && return nothing
+    executable = first(command.exec)
+    answer = _capturefair(command, "--version")
+    answer.status == 0 ||
+        throw(ReadWriteException("the fair at $executable fails `--version` with exit status $(answer.status) (the CLI needs git on the path): $(strip(answer.errors))"))
+    said = match(r"version (\S+)", answer.printed)
+    version = isnothing(said) ? nothing : tryparse(VersionNumber, said[1])
+    isnothing(version) &&
+        throw(ReadWriteException("the fair at $executable gives no version that Julia reads: `--version` says \"$(strip(answer.printed))\""))
+    return version
+end
+
 # The command that runs `fair`: the one given, as a path or a command; else
 # the one the preference records, else the `fair` on the path, else the copy
 # this package installed
@@ -192,18 +234,27 @@ function _faircommand(cli::AbstractString)
     return Cmd([path])
 end
 function _faircommand(::Nothing)
+    command = _foundcli()
+    isnothing(command) || return command
     preferred = _preferredcli()
-    if !isnothing(preferred)
-        isfile(preferred) ||
-            throw(ArgumentError("the preference names $preferred as fair, where there is no file: set_cli! records another, or nothing"))
-        return Cmd([preferred])
-    end
-    path = Sys.which("fair")
-    isnothing(path) && (path = _installedcli())
-    isnothing(path) || return Cmd([path])
+    isnothing(preferred) ||
+        throw(ArgumentError("the preference names $preferred as fair, where there is no file: set_cli! records another, or nothing"))
     return throw(ArgumentError(string("no `fair` found: none recorded by set_cli!, none on the path, and ",
                                       "none installed by this package - run DataPipeline.install_cli!() to ",
                                       "install one and record it, or set_cli! on one you have")))
+end
+
+# The command that runs the `fair` found with none given, or `nothing`: the
+# one the preference records, and no other where it records one, so `nothing`
+# where that file is gone; else the `fair` on the path; else the copy this
+# package installed
+function _foundcli()
+    preferred = _preferredcli()
+    isnothing(preferred) ||
+        return isfile(preferred) ? Cmd([preferred]) : nothing
+    path = Sys.which("fair")
+    isnothing(path) && (path = _installedcli())
+    return isnothing(path) ? nothing : Cmd([path])
 end
 
 # The `fair` the preference records, or `nothing`
