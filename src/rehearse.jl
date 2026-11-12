@@ -306,10 +306,13 @@ function _outputsfolder(outputs::AbstractString)
 end
 
 # Open a rehearsal: a handle with no registry URLs, its uuid made here so that
-# `${{RUN_ID}}` resolves, and a commit with uncommitted changes warned of
+# `${{RUN_ID}}` resolves, and a commit with uncommitted changes warned of. The
+# run's date is written as a recorded run posts it, so that a rehearsal fails
+# where that would
 function _openrun(mode::Rehearsal, config::Dict, config_file::String,
                   ::String, registry::RegistryEndpoint)
     checkout = _watchcheckout(config["run_metadata"])
+    _rundate(Dates.now(Dates.UTC))
     if !_inblock()
         commit = config["run_metadata"]["latest_commit"]
         endswith(commit, "-dirty") &&

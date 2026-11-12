@@ -1,5 +1,10 @@
 # NEWS
 
+- v0.59.3
+  - `DataPipeline.initialise()` no longer throws in a session that has loaded
+    TimeZones. A rehearsal now writes the run's date too, so it
+    fails where the recorded run would.
+
 - v0.59.2
   - `DataPipeline.install_cli(branch = "Dev")`, and `install_cli!`, install the
     package's copy of `fair` from a branch of the CLI's repository, to try work

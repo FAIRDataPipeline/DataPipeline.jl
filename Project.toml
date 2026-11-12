@@ -43,6 +43,7 @@ Scratch = "1"
 Sockets = "1"
 TOML = "1"
 Test = "1"
+TimeZones = "1"
 URIs = "1"
 UUIDs = "1"
 YAML = "0.4"
@@ -58,6 +59,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ResearchSoftwareMetadata = "58378933-4625-47fa-851e-05ee27d397bd"
 Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
 
 [rsmd]
 keywords = ["julia", "FAIR data", "workflows", "data management", "reproducibility"]
@@ -88,4 +90,4 @@ development_status = "active"
         ror = "00vtgdb53"
 
 [targets]
-test = ["Aqua", "Git", "JuliaFormatter", "Logging", "REPL", "Random", "ResearchSoftwareMetadata", "Sockets", "Test"]
+test = ["Aqua", "Git", "JuliaFormatter", "Logging", "REPL", "Random", "ResearchSoftwareMetadata", "Sockets", "Test", "TimeZones"]

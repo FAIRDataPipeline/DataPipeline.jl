@@ -1565,8 +1565,7 @@ Test.@testset "identify() a git repository" begin
                                               "authors" =>
                                                   [DataPipeline._getauthorurl(registry)]))["url"]
     DataPipeline._postentry(registry, "code_run",
-                            Dict("run_date" => Dates.format(now(UTC),
-                                              "yyyy-mm-ddTHH:MM:SSZ"),
+                            Dict("run_date" => DataPipeline._rundate(now(UTC)),
                                  "description" => "python-style run $uid",
                                  "code_repo" => object_url,
                                  "model_config" => handle.config_obj,

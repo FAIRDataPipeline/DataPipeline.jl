@@ -140,6 +140,14 @@ function _saycheckout(::RecordedRun, checkout::NamedTuple)
     return nothing
 end
 
+# A run's date, in UTC, as the registry is sent it. The `Z` is appended, not
+# part of the format: a package that gives Dates a time-zone field, as
+# TimeZones gives it `Z`, makes a format holding the letter throw for a
+# `DateTime`
+function _rundate(run_date::DateTime)
+    return Dates.format(run_date, "yyyy-mm-ddTHH:MM:SS") * "Z"
+end
+
 # Register a new code run started at `run_date`, in UTC, and return its entry:
 # always a new one, since two runs of one config may start in the same second,
 # and an entry found by these fields would be the other's
@@ -148,8 +156,7 @@ function _newcoderun(registry::RegistryEndpoint, description::AbstractString,
                      script_url::AbstractString;
                      run_date::DateTime = Dates.now(Dates.UTC))
     return _createentry(registry, "code_run",
-                        Dict("run_date" => Dates.format(run_date,
-                                          "yyyy-mm-ddTHH:MM:SSZ"),
+                        Dict("run_date" => _rundate(run_date),
                              "description" => description,
                              "code_repo" => repo_url,
                              "model_config" => config_url,

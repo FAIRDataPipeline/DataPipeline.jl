@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 using Test
+# Loaded for every test file: TimeZones gives Dates a time-zone field, `Z`,
+# and a date format holding that letter then throws for a `DateTime`
+using TimeZones
 
 # Whether the suite is the script of a `fair run`, which hands it a working
 # config and a registry token: every test file but those that need no

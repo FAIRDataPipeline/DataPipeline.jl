@@ -8,7 +8,9 @@ module TestDataPipeline
 
 using DataPipeline
 using Aqua
+using Dates
 using Test
+using TimeZones
 # `Base.Docs.doc(::Binding)`, which the docstring checks call, is a method
 # REPL defines
 import REPL
@@ -133,6 +135,15 @@ end
     Aqua.test_deps_compat(D)
     Aqua.test_piracies(D)
     Aqua.test_persistent_tasks(D)
+end
+
+# With TimeZones loaded a format holding `Z` throws for a `DateTime`. This
+# checks the date a recorded run posts and a rehearsal writes, not that a
+# rehearsal writes it
+@testset "a run's date is written with TimeZones loaded" begin
+    moment = DateTime(2026, 11, 12, 13, 14, 15)
+    @test_throws Exception Dates.format(moment, "yyyy-mm-ddTHH:MM:SSZ")
+    @test D._rundate(moment) == "2026-11-12T13:14:15Z"
 end
 
 @testset "deprecations are labelled by release, newest first" begin
