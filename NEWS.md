@@ -1,5 +1,10 @@
 # NEWS
 
+- v0.59.4
+  - `DataPipeline.install_cli(branch = ...)` and `register_release!` reach a
+    remote repository through the proxy that `https_proxy` or git's
+    configuration names.
+
 - v0.59.3
   - `DataPipeline.cli_installed()` is whether there is a `fair` for the package
     to run, and `DataPipeline.cli_version()` its version, as a `VersionNumber`.

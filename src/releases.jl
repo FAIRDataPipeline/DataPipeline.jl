@@ -173,6 +173,20 @@ function _repositorytags(remote::AbstractString)
                 if startswith(name, "refs/tags/"))
 end
 
+# Connect to a remote to read from it, through the proxy that git's
+# configuration or the environment names for it (`https_proxy`), if either
+# does. `LibGit2.connect` gives libgit2 no proxy options, and libgit2 then
+# connects directly, which a network that reaches outside by a proxy refuses
+function _connecttoread(connection::LibGit2.GitRemote)
+    LibGit2.@check ccall((:git_remote_connect, LibGit2.libgit2), Cint,
+                         (Ptr{Cvoid}, Cint, Ref{LibGit2.RemoteCallbacks},
+                          Ref{LibGit2.ProxyOptions}, Ptr{Cvoid}),
+                         connection, LibGit2.Consts.DIRECTION_FETCH,
+                         LibGit2.RemoteCallbacks(), LibGit2.ProxyOptions(),
+                         C_NULL)
+    return connection
+end
+
 # Every reference a remote advertises, by name, each with the commit it names -
 # for an annotated tag the commit, which the remote gives as `<tag>^{}`, not the
 # tag object. Listed with no clone and offering no credentials, so that nothing
@@ -180,8 +194,7 @@ end
 function _remoterefs(remote::AbstractString)
     heads = try
         LibGit2.with(LibGit2.GitRemoteDetached(_listingurl(remote))) do connection
-            LibGit2.connect(connection, LibGit2.Consts.DIRECTION_FETCH,
-                            LibGit2.RemoteCallbacks())
+            _connecttoread(connection)
             listed = [(head.name, string(head.oid))
                       for head in LibGit2.ls(connection)]
             LibGit2.disconnect(connection)

@@ -146,6 +146,22 @@ end
     @test D._rundate(moment) == "2026-11-12T13:14:15Z"
 end
 
+# A remote is listed through the proxy the environment names: with one at a
+# closed port the listing fails there, where a direct connection would list
+# GitHub or fail to reach it. Nothing is sent. Not checked on Windows, whose
+# libgit2 connects by WinHTTP, nor that a working proxy is used to the end
+@testset "a remote is listed through the environment's proxy" begin
+    proxy = "http://127.0.0.1:9"
+    variables = ["https_proxy" => proxy, "HTTPS_PROXY" => proxy,
+        "no_proxy" => nothing, "NO_PROXY" => nothing]
+    if !Sys.iswindows()
+        err = withenv(variables...) do
+            @test_throws D.ReadWriteException D._remoterefs("https://github.com/FAIRDataPipeline/FAIR-CLI")
+        end
+        @test occursin("127.0.0.1", err.value.msg)
+    end
+end
+
 @testset "deprecations are labelled by release, newest first" begin
     lines = readlines(pkgdir(D, "src", "deprecated.jl"))
     headings = [(i, m.captures[1])
