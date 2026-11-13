@@ -1,6 +1,9 @@
 # NEWS
 
 - v0.59.4
+  - `DataPipeline.code_runs()` lists the local registry's code runs, each
+    with whether it finished, is staged, and is held by the remote `origin`:
+    what `fair list code-runs --json` prints, so it needs `fair-cli` 0.12.0.
   - `DataPipeline.install_cli(branch = ...)` and `register_release!` reach a
     remote repository through the proxy that `https_proxy` or git's
     configuration names.

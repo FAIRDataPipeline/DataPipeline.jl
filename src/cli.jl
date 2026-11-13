@@ -11,6 +11,51 @@ const CLI_PYTHON = "3.12"
 # The CLI's repository, whose branches the package's copy may be installed from
 const CLI_REPOSITORY = "https://github.com/FAIRDataPipeline/FAIR-CLI"
 
+# The first `fair-cli` whose `fair list code-runs` takes `--json`
+const CLI_LISTS_RUNS = v"0.12.0"
+
+"""
+    CodeRunStatus
+
+A code run of the local registry as [`code_runs`](@ref) lists it, with how
+far it has got towards the remote registry `origin`.
+
+- `uuid`: the run's identifier, which `fair add` and `fair rm` take
+- `run_date`: when it ran, in UTC, as the registry records it
+- `description`: what the run says of itself
+- `finished`: whether it records an input or an output, which a run does as
+  it ends: `false` for a run still going, or one that stopped before its end
+- `staged`: whether the project has it staged, for `fair push` to send
+- `on_remote`: how much of it `origin` holds - `"whole"`, `"none"`, or
+  `"part"` for a run that arrived with some of what it read and wrote, as
+  the writer of a pushed data product does - or `nothing` where `origin`
+  could not be asked
+"""
+struct CodeRunStatus
+    uuid::String
+    run_date::DateTime
+    description::String
+    finished::Bool
+    staged::Bool
+    on_remote::Union{Nothing, String}
+end
+
+function Base.show(io::IO, run::CodeRunStatus)
+    return print(io, "run ", first(run.uuid, 8), " (", run.run_date, " UTC, ",
+                 run.finished ? "finished" : "not finished", ", ",
+                 run.staged ? "staged" : "not staged", ", on origin: ",
+                 something(run.on_remote, "unknown"), "): ", run.description)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", run::CodeRunStatus)
+    println(io, "code run ", run.uuid)
+    println(io, "  run: ", run.run_date, " UTC")
+    println(io, "  description: ", run.description)
+    println(io, "  finished: ", run.finished ? "yes" : "no")
+    println(io, "  staged: ", run.staged ? "yes" : "no")
+    return print(io, "  on origin: ", something(run.on_remote, "unknown"))
+end
+
 """
     fair"arguments"
 
@@ -221,6 +266,50 @@ function cli_version()
     isnothing(version) &&
         throw(ReadWriteException("the fair at $executable gives no version that Julia reads: `--version` says \"$(strip(answer.printed))\""))
     return version
+end
+
+"""
+    code_runs()
+
+Return the code runs of the local registry, oldest first, each a
+[`CodeRunStatus`](@ref): whether it finished, whether the project has it
+staged, and how much of it the remote registry `origin` holds. So the runs
+still to be pushed, or one to be removed first, can be picked by what they
+are:
+
+    for run in DataPipeline.code_runs()
+        run.finished || println(run.uuid, "  ", run.description)
+    end
+
+It is what `fair list code-runs --json` prints, run in the current directory,
+which must be in a FAIR project, staging being a project's. Every run of the
+registry is listed, whichever project made it. The `fair` run is found as
+[`rehearse`](@ref) finds it, and anything it writes as errors is printed, as
+it is where `origin` cannot be asked. A `fair` with no such option, which
+came with fair-cli $CLI_LISTS_RUNS, is a [`ReadWriteException`](@ref), and so
+is a listing that fails.
+"""
+function code_runs()
+    command = _faircommand(nothing)
+    asked = "`fair list code-runs --json`"
+    listed = _capturefair(command, "list", "code-runs", "--json")
+    (listed.status == 2 && occursin(r"[Nn]o such option", listed.errors) &&
+     occursin("--json", listed.errors)) &&
+        throw(ReadWriteException("the fair at $(first(command.exec)) has no $asked, which came with fair-cli $CLI_LISTS_RUNS: `DataPipeline.install_cli!()` installs the newest release as the package's own copy and records it, and `install_cli!(branch = ...)` a branch of the CLI's repository"))
+    listed.status == 0 ||
+        throw(ReadWriteException("$asked failed in $(pwd()) with exit status $(listed.status):\n$(listed.errors)"))
+    rows = try
+        JSON.parse(listed.printed)
+    catch err
+        _interrupted(err) && rethrow()
+        nothing
+    end
+    (rows isa AbstractVector && all(row -> row isa AbstractDict, rows)) ||
+        throw(ReadWriteException("$asked in $(pwd()) printed no list of code runs:\n$(listed.printed)$(listed.errors)"))
+    foreach(println, filter(!isempty, strip.(split(listed.errors, '\n'))))
+    return [CodeRunStatus(row["uuid"], DateTime(first(row["run_date"], 19)),
+                          something(row["description"], ""), row["finished"],
+                          row["staged"], row["on_remote"]) for row in rows]
 end
 
 # The command that runs `fair`: the one given, as a path or a command; else

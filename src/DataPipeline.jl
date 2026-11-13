@@ -54,7 +54,7 @@ export @fair_str
 # Supported but qualified: the code run's brackets, whose names any model
 # might use itself, and the types a script names rather than calls
 public initialise, finalise, rehearse, discard, install_cli, install_cli!,
-       set_cli!, cli_installed, cli_version
+       set_cli!, cli_installed, cli_version, code_runs, CodeRunStatus
 public DataRegistryHandle, RecordedRun, Rehearsal
 public RegistryEndpoint, registry_session
 public LaTeXPaper, PdfLaTeXEngine, LuaLaTeXEngine, XeLaTeXEngine

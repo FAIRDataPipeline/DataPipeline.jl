@@ -294,6 +294,37 @@ DataPipeline.ConfigDataProduct
 DataPipeline.ExistingDataProduct
 ```
 
+## Choosing the runs to push
+
+`fair push` sends what the project has staged, and with a data product every
+finished run that read it, staged or not. So a run that should not reach the
+remote registry is removed from the local one before a push: leaving it
+unstaged is not enough. `DataPipeline.code_runs()` lists the local registry's
+runs, each with whether it finished, whether it is staged and how much of it
+the remote `origin` holds, so that a script can pick runs by what they are:
+
+```julia
+using DataPipeline
+runs = DataPipeline.code_runs()
+unwanted = [run.uuid for run in runs if occursin("trial", run.description)]
+isempty(unwanted) || fair"rm $unwanted --yes"
+fair"add --all"
+fair"push"
+```
+
+`fair rm` deletes runs from the local registry, and refuses a run the remote
+holds, or one whose outputs another run read unless that run is named with
+it. What the deleted runs wrote stays registered, names, versions and files.
+`fair add --all` stages the project's finished runs that the remote lacks or
+holds in part. It is refused while anything else holds the local registry,
+so it is called outside a run and outside `DataPipeline.registry_session`.
+The listing, `fair rm` and `fair add --all` came with `fair-cli` 0.12.0.
+
+```@docs
+DataPipeline.code_runs
+DataPipeline.CodeRunStatus
+```
+
 ## Index
 ```@index
 Pages = ["fdp_manual.md"]

@@ -24,6 +24,30 @@ Test.@testset "fair\"...\"" begin
     @test occursin("no such command", err.value.msg)
 end
 
+# Before the copy of fair is installed anew, so that a suite run under a branch
+# of the CLI lists its runs with the branch
+Test.@testset "code_runs() with the fair the suite runs under" begin
+    # The fair the suite runs under, which lists the runs where its help
+    # names the option, and is refused where it does not: its version does
+    # not say, a branch claiming the release it works towards
+    command = DataPipeline._faircommand(nothing)
+    help = DataPipeline._capturefair(command, "list", "code-runs", "--help")
+    if occursin("--json", help.printed)
+        runs = DataPipeline.code_runs()
+        @test runs isa Vector{DataPipeline.CodeRunStatus}
+        # The run of the example, which the pipeline is set up with, finished
+        @test any(run -> run.finished, runs)
+        @test issorted(runs, by = run -> run.run_date)
+        @test allunique(run.uuid for run in runs)
+        @test all(run -> run.on_remote in (nothing, "whole", "part", "none"),
+                  runs)
+    else
+        err = @test_throws ReadWriteException DataPipeline.code_runs()
+        @test occursin("fair-cli 0.12.0", err.value.msg)
+        @test occursin("--json", err.value.msg)
+    end
+end
+
 Test.@testset "install_cli(), set_cli!() and install_cli!()" begin
     # The copy is installed from the network, with its Python, into the
     # package's own scratch space, where a user has it too
@@ -170,6 +194,72 @@ Test.@testset "cli_installed() and cli_version()" begin
     end
     # Not tested: no fair at all, with nothing recorded, none on the path and
     # no copy, since the copy the tests above install is a user's too
+end
+
+Test.@testset "code_runs() of what a fair lists" begin
+    if Sys.iswindows()
+        @info "the stand-ins for fair are shell scripts: not on Windows"
+    else
+        # A stand-in for a fair, recorded, that answers so whatever it is asked
+        standin = joinpath(mktempdir(), "fair")
+        function answering(text)
+            write(standin, "#!/bin/sh\n$text\n")
+            return chmod(standin, 0o755)
+        end
+        listing = joinpath(mktempdir(), "runs.json")
+        write(listing, """
+        [{"uuid": "aaaaaaaa-$uid", "run_date": "2026-11-12T13:14:15.123456Z",
+          "description": "first $uid", "finished": true, "staged": false,
+          "on_remote": "part"},
+         {"uuid": "bbbbbbbb-$uid", "run_date": "2026-11-13T01:02:03Z",
+          "description": null, "finished": false, "staged": true,
+          "on_remote": null}]
+        """)
+        DataPipeline.set_cli!(standin)
+        try
+            answering("cat '$listing'")
+            first_run, second_run = DataPipeline.code_runs()
+            @test first_run.uuid == "aaaaaaaa-$uid"
+            @test first_run.run_date ==
+                  DataPipeline.Dates.DateTime(2026, 11, 12, 13, 14, 15)
+            @test first_run.description == "first $uid"
+            @test first_run.finished && !first_run.staged
+            @test first_run.on_remote == "part"
+            @test second_run.description == ""
+            @test !second_run.finished && second_run.staged
+            @test isnothing(second_run.on_remote)
+            # One line where it may be nested, several alone
+            @test sprint(show, first_run) ==
+                  "run aaaaaaaa (2026-11-12T13:14:15 UTC, finished, not staged, on origin: part): first $uid"
+            @test occursin("on origin: unknown", sprint(show, second_run))
+            plain = sprint(show, MIME"text/plain"(), second_run)
+            @test occursin("code run bbbbbbbb-$uid\n", plain)
+            @test occursin("  finished: no\n  staged: yes\n", plain)
+            # No runs is an empty list
+            answering("echo '[]'")
+            @test isempty(DataPipeline.code_runs())
+            # A fair with no such option, as click refuses one
+            answering("echo 'Error: No such option: --json' >&2; exit 2")
+            err = @test_throws ReadWriteException DataPipeline.code_runs()
+            @test occursin("fair-cli 0.12.0", err.value.msg)
+            @test occursin(standin, err.value.msg)
+            # A listing that fails, and one that is no list of runs
+            answering("echo 'not a project $uid' >&2; exit 1")
+            err = @test_throws ReadWriteException DataPipeline.code_runs()
+            @test occursin("exit status 1", err.value.msg)
+            @test occursin("not a project $uid", err.value.msg)
+            for printed in ("something else $uid", "{\"uuid\": \"$uid\"}",
+                "[\"$uid\"]")
+                answering("echo '$printed'")
+                err = @test_throws ReadWriteException DataPipeline.code_runs()
+                @test occursin(uid, err.value.msg)
+            end
+        finally
+            DataPipeline.set_cli!(nothing)
+        end
+    end
+    # Not tested: what fair writes as errors being printed, and anything
+    # on Windows
 end
 
 Test.@testset "registry_session() and the registry outside a run" begin
