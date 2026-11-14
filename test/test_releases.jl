@@ -287,7 +287,7 @@ if haskey(ENV, "FDP_CONFIG_DIR")
         uid = DataPipeline._randomhash()
         name = "release-fixture-$(first(uid, 12))"
         remote = "https://github.com/FAIRDataPipeline/$name.git"
-        ada = "https://orcid.org/0000-0002-1825-0097"
+        ada = "https://orcid.org/0000-0000-0000-0202"
 
         # A clone with metadata files, its commits naming the run so that
         # they are new to the registry

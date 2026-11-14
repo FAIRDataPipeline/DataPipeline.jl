@@ -1349,7 +1349,7 @@ Test.@testset "initialise() registers the code repository at its commit" begin
     keywords(object) = sort([keyword["keyphrase"]
                              for keyword in entry.(entry(object)["keywords"])])
     runner = entry(DataPipeline._getauthorurl(registry))
-    ada = "https://orcid.org/0000-0002-1825-0097"
+    ada = "https://orcid.org/0000-0000-0000-0101"
     codemeta = """
     {"name": "Fixture", "license": "https://spdx.org/licenses/MIT",
      "keywords": ["fixture", "repository $uid"],

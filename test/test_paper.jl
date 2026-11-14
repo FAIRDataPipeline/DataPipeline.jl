@@ -31,7 +31,7 @@ const PNG = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
 
 # A paper's metadata as `_papermetadata` gives it
 function metadata(; authors = ["Morag Fairlie", "Tobias Quennell"],
-                  identifiers = Dict("Morag Fairlie" => "https://orcid.org/0000-0002-1825-0097"),
+                  identifiers = Dict("Morag Fairlie" => "https://orcid.org/0000-0000-0000-0303"),
                   licence = "CC-BY-4.0", keywords = ["invented"],
                   title = "A made-up paper")
     return DataPipeline.RepositoryMetadata(authors, identifiers, licence,
@@ -86,7 +86,7 @@ end
         @test info == ["Title" => "A made-up paper",
             "Author" => "Morag Fairlie; Tobias Quennell",
             "Keywords" => "invented", "License" => "CC-BY-4.0",
-            "AuthorIdentifiers" => "Morag Fairlie: https://orcid.org/0000-0002-1825-0097"
+            "AuthorIdentifiers" => "Morag Fairlie: https://orcid.org/0000-0000-0000-0303"
         ]
         @test DataPipeline._documentinfo(metadata(identifiers = Dict{String,
                                                                      String}(),
@@ -133,7 +133,7 @@ end
         write(joinpath(dir, "hyper.tex"),
               "\\documentclass{article}\n\\usepackage{hyperref}\n\\hypersetup{pdfauthor={Someone Else},pdfkeywords={theirs}}\n\\title{T}\\author{A}\n\\begin{document}\\maketitle Text.\\end{document}\n")
         meta = metadata(authors = ["Zo\u00eb Fairlie", "Bo & Co_Ltd"],
-                        identifiers = Dict("Zo\u00eb Fairlie" => "https://orcid.org/0000-0002-1825-0097"),
+                        identifiers = Dict("Zo\u00eb Fairlie" => "https://orcid.org/0000-0000-0000-0303"),
                         keywords = ["biodiversit\u00e9", "50% {braces}"],
                         title = "A \$5 title #1")
         engines = ((DataPipeline.PdfLaTeXEngine(), "pdflatex"),
@@ -568,7 +568,7 @@ end
                          authors:
                            - family-names: Fairlie
                              given-names: Morag
-                             orcid: "https://orcid.org/0000-0002-1825-0097"
+                             orcid: "https://orcid.org/0000-0000-0000-0303"
                            - family-names: Quennell
                              given-names: Tobias
                          """)
@@ -651,7 +651,7 @@ end
             object = DataPipeline._getentry(registry,
                                             URIs.URI(product["object"]))
             orcid = DataPipeline._geturl(registry, "author",
-                                         Dict("identifier" => "https://orcid.org/0000-0002-1825-0097"))
+                                         Dict("identifier" => "https://orcid.org/0000-0000-0000-0303"))
             names = [DataPipeline._getentry(registry, URIs.URI(url))["name"]
                      for url in object["authors"]]
             @test orcid in object["authors"] && "Tobias Quennell" in names &&
