@@ -1,6 +1,10 @@
 # NEWS
 
 - v0.59.4
+  - `DataPipeline.update_paper(fromconfig = true)` replaces a file in the
+    pipeline folder that no registry knows with the data product the config
+    names for it, at the version pinned or with `newest = true` the newest.
+    `check_paper` says where it would help.
   - `DataPipeline.code_runs()` lists the local registry's code runs, each
     with whether it finished, is staged, and is held by the remote `origin`:
     what `fair list code-runs --json` prints, so it needs `fair-cli` 0.12.0.

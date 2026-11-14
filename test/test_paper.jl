@@ -415,6 +415,110 @@ end
                                                  holds = (args...) -> false).entries).version ==
               v"0.0.1"
 
+        # A file with the bytes of no data product is the one a config names
+        # for it, where one does: never current, at the version pinned, or
+        # with `newest` the newest
+        changed = "pipeline/changed.txt"
+        write(joinpath(top, changed), "changed by hand $uid\n")
+        both = [file, changed]
+        @test DataPipeline._pipelineentries(registries, top, both).unregistered ==
+              [changed]
+        names(version) = Dict(changed =>
+                                  (namespace = namespace, name = name,
+                                   version = version))
+        taken = DataPipeline._pipelineentries(registries, top, [changed],
+                                              named = names(v"0.0.1"))
+        @test isempty(taken.unregistered) && isempty(taken.problems)
+        @test taken.fromconfig == [changed]
+        @test only(taken.entries) ==
+              (namespace = namespace, name = name, version = v"0.0.1",
+               files = [changed], current = false)
+        newer = DataPipeline._pipelineentries(registries, top, [changed],
+                                              named = names(v"0.0.1"),
+                                              newest = true)
+        @test only(newer.entries).version == v"0.0.2"
+        @test !only(newer.entries).current
+        # Beside a file that is a version, it takes that version, whatever
+        # the config pins
+        beside = DataPipeline._pipelineentries(registries, top, both,
+                                               named = names(v"0.0.2"))
+        @test only(beside.entries) ==
+              (namespace = namespace, name = name, version = v"0.0.1",
+               files = both, current = false)
+        @test beside.fromconfig == [changed]
+        # A file named nothing stays unregistered, and one that is a version
+        # is that, whatever the config names for it
+        @test DataPipeline._pipelineentries(registries, top, [changed],
+                                            named = Dict(file =>
+                                                             names(v"0.0.2")[changed])).unregistered ==
+              [changed]
+        @test only(DataPipeline._pipelineentries(registries, top, [file],
+                                                 named = Dict(file =>
+                                                                  names(v"0.0.2")[changed])).entries).current
+        # Refused: a version pinned that no registry holds, saying the newest;
+        # a data product none holds; and another file type
+        gone = DataPipeline._pipelineentries(registries, top, [changed],
+                                             named = names(v"0.0.7"))
+        @test isempty(gone.entries) && isempty(gone.fromconfig)
+        @test only(gone.problems) ==
+              "no registry asked holds $namespace:$name@v0.0.7, which the config pins for $changed - `newest = true` takes v0.0.2"
+        absent = Dict(changed =>
+                          (namespace = namespace, name = "$name/absent",
+                           version = v"0.0.1"))
+        @test only(DataPipeline._pipelineentries(registries, top, [changed],
+                                                 named = absent).problems) ==
+              "no registry asked holds $namespace:$name/absent@v0.0.1, which the config pins for $changed"
+        @test only(DataPipeline._pipelineentries(registries, top, [changed],
+                                                 named = absent,
+                                                 newest = true).problems) ==
+              "no registry asked holds a version of $namespace:$name/absent, which the config names for $changed"
+        mv(joinpath(top, changed), joinpath(top, "pipeline", "changed.csv"))
+        retyped = Dict("pipeline/changed.csv" => names(v"0.0.1")[changed])
+        @test only(DataPipeline._pipelineentries(registries, top,
+                                                 ["pipeline/changed.csv"],
+                                                 named = retyped).problems) ==
+              "$label is a txt file, so it cannot replace pipeline/changed.csv under the same name - replace it by hand"
+        rm(joinpath(top, "pipeline", "changed.csv"))
+
+        # What a config names for each file: read from the comments above its
+        # entries, and only from a config `update_paper` wrote
+        entries = [
+            (namespace = namespace, name = name, version = v"0.0.1",
+             files = [file, changed], current = true),
+            (namespace = "other-$uid", name = name, version = v"1.2.3",
+             files = ["pipeline/other.txt"], current = true)]
+        template = "run_metadata:\n  description: named $uid\n"
+        mkpath(dirname(paper.template))
+        write(paper.template, template)
+        write(paper.config,
+              DataPipeline._paperconfigtext(paper, template, entries))
+        read_back = DataPipeline._configproducts(paper)
+        @test read_back ==
+              Dict(file =>
+                       (namespace = namespace, name = name, version = v"0.0.1"),
+                   changed =>
+                       (namespace = namespace, name = name, version = v"0.0.1"),
+                   "pipeline/other.txt" =>
+                       (namespace = "other-$uid", name = name,
+                        version = v"1.2.3"))
+        written = read(paper.config, String)
+        write(paper.config, replace(written, "# Written by" => "# Made by"))
+        @test isempty(DataPipeline._configproducts(paper))
+        # An entry added by hand takes the files above it, and names nothing
+        # without a `use:`; entries laid out otherwise do not pair off
+        write(paper.config,
+              replace(written, "# $changed\n" => "- data_product: extra\n"))
+        @test collect(keys(DataPipeline._configproducts(paper))) ==
+              ["pipeline/other.txt"]
+        cut = last(findlast("\nread:\n", written))
+        block = split(written[(cut + 1):end], '\n', keepempty = false)
+        write(paper.config, written[1:cut] * join("  " .* block, "\n") * "\n")
+        @test length(YAML.load_file(paper.config)["read"]) == 2
+        @test isempty(DataPipeline._configproducts(paper))
+        rm(paper.config)
+        @test isempty(DataPipeline._configproducts(paper))
+        rm(paper.template)
+
         # A data product no run made is pushed by itself
         object = DataPipeline._createentry(registry, "object",
                                            Dict("description" => "unmade",
@@ -952,11 +1056,20 @@ end
                                                                       remote = nothing),
                                       ReadWriteException),
                            "registered as no data product, so the build would refuse them: paper/pipeline/results.tex -")
-            @test any(contains("registered as no data product, so the build would refuse them: paper/pipeline/results.tex -"),
+            # ... which the check says the config names a data product for,
+            # and which is put back as the version pinned where that is asked
+            # for, the config as it was
+            @test any(contains("paper/pipeline/results.tex is registered as no data product, and the config names $(label("results", "0.0.1")) for it - `update_paper(fromconfig = true)` replaces the file with that version"),
                       DataPipeline.check_paper(registry, paper,
                                                remote = nothing).actions)
-            write(joinpath(folder, "pipeline", "results.tex"),
-                  texts["paper/pipeline/results.tex"])
+            restored = DataPipeline.update_paper(registry, paper,
+                                                 remote = nothing,
+                                                 fromconfig = true)
+            @test restored.files ==
+                  ["paper/pipeline/results.tex" => label("results", "0.0.1")]
+            @test read(joinpath(folder, "pipeline", "results.tex"), String) ==
+                  texts["paper/pipeline/results.tex"]
+            @test read(paper.config, String) == before
             register!("results", "Results as a table, run $uid.\n", "0.0.2",
                       file_type = "csv")
             @test contains(message_of(() -> DataPipeline.update_paper(registry,

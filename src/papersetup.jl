@@ -162,7 +162,8 @@ registered last; the files the paper is built from that are not committed;
 whether the config is what `update_paper` would write; the files the paper
 uses from elsewhere in the repository that are registered, and so are
 likely files from the pipeline; and the files in the pipeline folder that are
-not registered, but for the environment there and any file git ignores;
+not registered, but for the environment there and any file git ignores, a
+file the paper uses saying what the config names for it;
 and whether git ignores the PDF beside the `.tex` file, where a recorded build
 copies the registered PDF. A check that needs a registry that cannot be
 reached, or that answers with an error, is said not to have been made, and
@@ -203,8 +204,9 @@ function check_paper(registry::RegistryEndpoint, tex::AbstractString;
 end
 
 """
-    update_paper(paper; newest = false, remote = "origin")
-    update_paper(registry, paper; newest = false, remote = "origin")
+    update_paper(paper; newest = false, fromconfig = false, remote = "origin")
+    update_paper(registry, paper; newest = false, fromconfig = false,
+                 remote = "origin")
 
 Bring the files of the LaTeX paper `paper`, a [`LaTeXPaper`](@ref) or the path
 of its `.tex` file, up to date outside any run: its `CITATION.cff`, brought
@@ -231,6 +233,16 @@ registered as several data products, with `newest` a newer version of another
 file type, and a version the config would pin that the remote does not hold,
 with how to push it, unless `remote` is `nothing`.
 
+With `fromconfig = true` a file that is not registered is not refused where
+the config as it stands names a data product for it, in the comment that
+`update_paper` writes above each entry. The file is taken to be that data
+product and is replaced: by the version the config pins, or with `newest` by
+the newest, pulled and copied in as a newer file is. So a file changed by
+accident is put back, and with `newest` files are fetched where no registry
+holds the versions pinned. What is in the folder is discarded, which is why
+it is asked for: such a file may be somebody's edit. Refused then: a file
+the config names nothing for, and a version that no registry asked holds.
+
 The paper must have been set up by [`setup_paper`](@ref): the template and
 `CITATION.cff` are never created here. `remote` and `registry` are as for
 [`check_paper`](@ref); `fair pull` pulls from the project's `origin`, so
@@ -240,20 +252,24 @@ folder of its own, to find the files it uses. The environment in the
 pipeline folder is left as it is.
 """
 function update_paper(paper::LaTeXPaper; newest::Bool = false,
+                      fromconfig::Bool = false,
                       remote::PaperRemote = "origin")
-    return _updatepaper(paper, registry_session, remote, newest)
+    return _updatepaper(paper, registry_session, remote, newest, fromconfig)
 end
 function update_paper(registry::RegistryEndpoint, paper::LaTeXPaper;
-                      newest::Bool = false, remote::PaperRemote = "origin")
-    return _updatepaper(paper, f -> f(registry), remote, newest)
+                      newest::Bool = false, fromconfig::Bool = false,
+                      remote::PaperRemote = "origin")
+    return _updatepaper(paper, f -> f(registry), remote, newest, fromconfig)
 end
 function update_paper(tex::AbstractString; newest::Bool = false,
+                      fromconfig::Bool = false,
                       remote::PaperRemote = "origin")
-    return update_paper(LaTeXPaper(tex); newest, remote)
+    return update_paper(LaTeXPaper(tex); newest, fromconfig, remote)
 end
 function update_paper(registry::RegistryEndpoint, tex::AbstractString;
-                      newest::Bool = false, remote::PaperRemote = "origin")
-    return update_paper(registry, LaTeXPaper(tex); newest, remote)
+                      newest::Bool = false, fromconfig::Bool = false,
+                      remote::PaperRemote = "origin")
+    return update_paper(registry, LaTeXPaper(tex); newest, fromconfig, remote)
 end
 
 # Set a paper up, as `setup_paper` says, `withlocal(f)` calling `f` with the
@@ -471,7 +487,7 @@ end
 # Update a paper's files, as `update_paper` says, `withlocal(f)` calling `f`
 # with the local registry's endpoint where that is needed
 function _updatepaper(paper::LaTeXPaper, withlocal::Function,
-                      remote::PaperRemote, newest::Bool)
+                      remote::PaperRemote, newest::Bool, fromconfig::Bool)
     (!newest || isnothing(remote) || remote == "origin") ||
         throw(ArgumentError("`fair pull` pulls from the project's remote `origin`, so `newest = true` takes `remote = \"origin\"`, or `nothing` for the local registry alone"))
     top = _papertop(paper)
@@ -480,10 +496,17 @@ function _updatepaper(paper::LaTeXPaper, withlocal::Function,
     front = _frontmatter(_latexsource(paper.tex))
     changes = _updatecitationfile(citation, front)
     uses = _paperuses(paper, top)
-    found = _identifypipeline(top, uses.pipeline, withlocal, remote; newest)
+    named = fromconfig ? _configproducts(paper) :
+            Dict{String, NamedTuple}()
+    found = _identifypipeline(top, uses.pipeline, withlocal, remote; newest,
+                              named)
     refused = _refusals(found)
     isempty(refused) ||
         throw(ReadWriteException("the config is left as it was: $(join(refused, "; "))"))
+    isempty(found.fromconfig) ||
+        @info "taken to be the data products the config names for them, their bytes registered as none: $(join(found.fromconfig, ", "))"
+    (isnothing(remote) && !isempty(found.entries)) &&
+        @info "the versions pinned are held by the local registry alone, no remote having been asked: a paper built from them cannot be traced elsewhere until they are pushed"
     previous = isfile(paper.config) ? read(paper.config, String) : nothing
     config = _writepaperconfig(paper, template, found.entries)
     stale = filter(entry -> !entry.current, found.entries)
@@ -555,10 +578,12 @@ end
 # The files a paper uses from its pipeline folder, `files`, identified as
 # `_pipelineentries` does, in the local registry, which `withlocal(f)` gives
 # `f`, and, unless `remote` is `nothing`, in the remote it names, read from the
-# CLI configuration of the project at or above `top`; each registry must answer
+# CLI configuration of the project at or above `top`; each registry must
+# answer. `named` is passed on
 function _identifypipeline(top::AbstractString, files::AbstractVector{String},
                            withlocal::Function, remote::PaperRemote;
-                           newest::Bool = false)
+                           newest::Bool = false,
+                           named::AbstractDict = Dict{String, NamedTuple}())
     endpoint = _paperremote(remote, top)
     isnothing(endpoint) || _answers(endpoint) ||
         throw(ReadWriteException("the remote registry at $(endpoint.url) does not answer"))
@@ -567,7 +592,7 @@ function _identifypipeline(top::AbstractString, files::AbstractVector{String},
             throw(ReadWriteException("the local registry at $(registry.url) does not answer - start it with `fair\"registry start\"`"))
         registries = [:local => registry]
         isnothing(endpoint) || push!(registries, :remote => endpoint)
-        return _pipelineentries(registries, top, files; newest)
+        return _pipelineentries(registries, top, files; newest, named)
     end
 end
 
@@ -607,20 +632,41 @@ end
 # and `problems` what is wrong with others: bytes of several data products,
 # two versions of one, with `newest` a newest version of another file type,
 # and a version the remote does not hold, with how to push it. `holds` says
-# whether a registry holds a version; the tests replace it
+# whether a registry holds a version; the tests replace it.
+#
+# `named` gives the data product a config names for a file, as
+# `_configproducts` reads it. A file with the bytes of no data product is then
+# the one named for it, never `current`: its entry's version is that of the
+# data product's other files, else the one `named` pins, or with `newest` the
+# newest. Such files are listed in `fromconfig`. No registry holding that
+# version is a problem
 function _pipelineentries(registries::AbstractVector{<:Pair{Symbol,
                                                             RegistryEndpoint}},
                           top::AbstractString, files::AbstractVector{String};
                           newest::Bool = false,
+                          named::AbstractDict = Dict{String, NamedTuple}(),
                           holds::Function = _holdsversion)
     unregistered = String[]
     problems = String[]
+    fromconfig = String[]
     byproduct = Dict{Tuple{String, String},
                      Vector{Pair{String, NamedTuple}}}()
     for file in files
         held = _heldrecords(registries, joinpath(top, file))
         if isempty(held)
-            push!(unregistered, file)
+            product = get(named, file, nothing)
+            if isnothing(product)
+                push!(unregistered, file)
+                continue
+            end
+            latest = _newestheld(registries, product.namespace, product.name)
+            push!(get!(byproduct, (product.namespace, product.name),
+                       Pair{String, NamedTuple}[]),
+                  file =>
+                      (version = nothing, pinned = product.version,
+                       newest = isnothing(latest) ? nothing : latest.version,
+                       newestfrom = isnothing(latest) ? nothing :
+                                    latest.registry))
             continue
         end
         records = last.(held)
@@ -634,7 +680,7 @@ function _pipelineentries(registries::AbstractVector{<:Pair{Symbol,
         push!(get!(byproduct, only(names), Pair{String, NamedTuple}[]),
               file =>
                   (version = maximum(record.version for record in records),
-                   newest = last(latest).newest,
+                   pinned = nothing, newest = last(latest).newest,
                    newestfrom = _registryof(registries, first(latest))))
     end
     remote = _registryof(registries, :remote)
@@ -642,24 +688,50 @@ function _pipelineentries(registries::AbstractVector{<:Pair{Symbol,
                           version::VersionNumber, files::Vector{String},
                           current::Bool}[]
     for ((namespace, name), found) in sort!(collect(byproduct), by = first)
-        versions = unique(held.version for held in last.(found))
+        product = _dataproductname(namespace, name)
+        unknown = [file for (file, held) in found if isnothing(held.version)]
+        versions = unique(held.version
+                          for held in last.(found) if !isnothing(held.version))
         if length(versions) > 1
+            known = [file for (file, held) in found if !isnothing(held.version)]
             push!(problems,
-                  "$(join(first.(found), " and ")) are versions $(join(versions, ", ")) of $(_dataproductname(namespace, name)), where a paper uses one version of a data product")
+                  "$(join(known, " and ")) are versions $(join(versions, ", ")) of $product, where a paper uses one version of a data product")
             continue
         end
-        latest = argmax(held -> held.newest, last.(found))
-        version = newest ? latest.newest : only(versions)
-        if version != only(versions)
-            extension = _productextension(latest.newestfrom, namespace, name,
-                                          version)
+        offered = [held for held in last.(found) if !isnothing(held.newest)]
+        latest = isempty(offered) ? nothing :
+                 argmax(held -> held.newest, offered)
+        if newest && isnothing(latest)
+            push!(problems,
+                  "no registry asked holds a version of $product, which the config names for $(join(unknown, " and "))")
+            continue
+        end
+        version = newest ? latest.newest :
+                  !isempty(versions) ? only(versions) :
+                  first(held.pinned for held in last.(found))
+        stale = [file for (file, held) in found if held.version != version]
+        if !isempty(stale)
+            index = newest ? nothing :
+                    findfirst(asked -> holds(last(asked), namespace, name,
+                                             version), registries)
+            holder = newest ? latest.newestfrom :
+                     isnothing(index) ? nothing : last(registries[index])
+            if isnothing(holder)
+                push!(problems,
+                      "no registry asked holds $(_dataproductname(namespace, name, version)), which the config pins for $(join(unknown, " and "))" *
+                      (isnothing(latest) ? "" :
+                       " - `newest = true` takes v$(latest.newest)"))
+                continue
+            end
+            extension = _productextension(holder, namespace, name, version)
             others = [file
-                      for file in first.(found)
+                      for file in stale
                       if lowercase(splitext(file)[2]) !=
                          "." * lowercase(extension)]
             if !isempty(others)
                 push!(problems,
-                      "the newest version of $(_dataproductname(namespace, name, version)) is a $extension file, so it cannot replace $(join(others, ", ")) under the same name - replace it by hand")
+                      (newest ? "the newest version of " : "") *
+                      "$(_dataproductname(namespace, name, version)) is a $extension file, so it cannot replace $(join(others, ", ")) under the same name - replace it by hand")
                 continue
             end
         end
@@ -668,12 +740,81 @@ function _pipelineentries(registries::AbstractVector{<:Pair{Symbol,
                   "the remote registry at $(remote.url) does not hold $(_dataproductname(namespace, name, version)), for $(join(first.(found), " and ")) - push it with $(_pushadvice(_registryof(registries, :local), namespace, name, version)), or pass `remote = nothing` to take the local registry alone")
             continue
         end
+        append!(fromconfig, unknown)
         push!(entries,
               (namespace = namespace, name = name, version = version,
-               files = first.(found), current = version == only(versions)))
+               files = first.(found), current = isempty(stale)))
     end
     return (entries = entries, unregistered = unregistered,
-            problems = problems)
+            problems = problems, fromconfig = fromconfig)
+end
+
+# The newest version of a data product that any of `registries` holds, as
+# `(version, registry)` with the registry holding it, or `nothing` where none
+# holds one
+function _newestheld(registries::AbstractVector{<:Pair{Symbol,
+                                                       RegistryEndpoint}},
+                     namespace::String, name::String)
+    newest = nothing
+    for (_, registry) in registries
+        latest = _latestdataproduct(registry, namespace, name)
+        isnothing(latest) && continue
+        version = VersionNumber(latest["version"])
+        (isnothing(newest) || version > newest.version) &&
+            (newest = (version = version, registry = registry))
+    end
+    return newest
+end
+
+# The data product a paper's config names for each file from the pipeline, by
+# the file's path as the config gives it: the files in the comment lines above
+# each `read:` entry, as `_paperconfigtext` writes them, with the namespace,
+# name and version the entry pins. Empty for no config, for one `update_paper`
+# did not write, and for one whose comments and entries do not pair off
+function _configproducts(paper::LaTeXPaper)
+    named = Dict{String,
+                 @NamedTuple{namespace::String, name::String,
+                             version::VersionNumber}}()
+    isfile(paper.config) || return named
+    lines = readlines(paper.config)
+    (!isempty(lines) &&
+     startswith(first(lines), "# Written by DataPipeline.update_paper")) ||
+        return named
+    start = findlast(==("read:"), lines)
+    isnothing(start) && return named
+    parsed = try
+        YAML.load_file(paper.config)
+    catch err
+        _interrupted(err) && rethrow()
+        nothing
+    end
+    reads = parsed isa AbstractDict ? get(parsed, "read", nothing) : nothing
+    reads isa AbstractVector || return named
+    groups = Vector{String}[]
+    above = String[]
+    for line in lines[(start + 1):end]
+        if startswith(line, "# ")
+            push!(above, chopprefix(line, "# "))
+        elseif startswith(line, "- ")
+            push!(groups, above)
+            above = String[]
+        end
+    end
+    length(groups) == length(reads) || return named
+    for (files, entry) in zip(groups, reads)
+        use = entry isa AbstractDict ? get(entry, "use", nothing) : nothing
+        use isa AbstractDict || continue
+        name = get(use, "data_product", get(entry, "data_product", nothing))
+        namespace = get(use, "namespace", nothing)
+        version = tryparse(VersionNumber, string(get(use, "version", "")))
+        (name isa AbstractString && namespace isa AbstractString &&
+         !isnothing(version)) || continue
+        for file in files
+            named[file] = (namespace = String(namespace), name = String(name),
+                           version = version)
+        end
+    end
+    return named
 end
 
 # Whether a registry holds a version of a data product
@@ -947,6 +1088,13 @@ function _checkpaper(paper::LaTeXPaper,
                 _checkpipelinefile!(actions, notes, unchecked, unregistered,
                                     registries, paper, top, file)
             end
+            named = _configproducts(paper)
+            for file in filter(in(keys(named)), unregistered)
+                pinned = named[file]
+                push!(actions,
+                      "$file is registered as no data product, and the config names $(_dataproductname(pinned.namespace, pinned.name, pinned.version)) for it - `update_paper(fromconfig = true)` replaces the file with that version, and with `newest = true` with the newest")
+            end
+            filter!(!in(keys(named)), unregistered)
             isempty(unregistered) ||
                 push!(actions, _unregisteredsaid(unregistered))
             _ifanswered(actions, unchecked, "the config's read: block",

@@ -215,9 +215,9 @@ Test.@testset "code_runs() of what a fair lists" begin
           "description": null, "finished": false, "staged": true,
           "on_remote": null}]
         """)
+        answering("cat '$listing'")
         DataPipeline.set_cli!(standin)
         try
-            answering("cat '$listing'")
             first_run, second_run = DataPipeline.code_runs()
             @test first_run.uuid == "aaaaaaaa-$uid"
             @test first_run.run_date ==

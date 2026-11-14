@@ -147,6 +147,14 @@ either knows. A version the remote lacks is pushed by the run that made it,
 brings the versions the config names into a local registry that lacks them, as
 on a new machine.
 
+A file in the pipeline folder whose bytes no registry knows is refused, since
+it may be somebody's edit. Where the file is to be discarded,
+`update_paper(fromconfig = true)` takes it to be the data product that the
+config names in the comment above its entry, and replaces it with the version
+pinned, or with `newest = true` the newest. That puts back a file changed by
+accident, and fetches the files again where the versions pinned were held
+only by a local registry that has since been emptied.
+
 ## The build
 
 `fair run paper.yaml` runs the template's script, in which
